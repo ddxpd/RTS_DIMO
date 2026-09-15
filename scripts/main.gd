@@ -1,6 +1,6 @@
 ﻿extends Node2D
 const Simulation = preload("res://scripts/simulation.gd")
-const Art = preload("res://scripts/pixel_art.gd")
+const Art = preload("res://assets/art/pixel_art.gd")
 const PORT := 24560
 const MAX_CLIENTS := 4
 var sim := Simulation.new()
@@ -866,6 +866,7 @@ func _draw() -> void:
 func _bar(pos: Vector2, width: float, fraction: float, color: Color) -> void:
 	draw_rect(Rect2(pos, Vector2(width, 4)), Color("#182219"))
 	draw_rect(Rect2(pos, Vector2(width * clampf(fraction, 0, 1), 4)), color)
+
 
 
 
