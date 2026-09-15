@@ -110,6 +110,7 @@ func _create_ui() -> void:
 	info_panel.offset_left = -260
 	info_panel.offset_top = 52
 	root.add_child(info_panel)
+	info_panel.visible = false
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 6)
 	column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -147,7 +148,7 @@ func _create_ui() -> void:
 	var bottom := PanelContainer.new()
 	bottom.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	bottom.offset_top = -132
-	bottom.offset_right = -260
+	bottom.offset_right = 0
 	root.add_child(bottom)
 	selection_label = Label.new()
 	selection_label.custom_minimum_size = Vector2(0, 76)
@@ -160,7 +161,7 @@ func _create_ui() -> void:
 	var message_bar := PanelContainer.new()
 	message_bar.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	message_bar.offset_top = -42
-	message_bar.offset_right = -260
+	message_bar.offset_right = 0
 	root.add_child(message_bar)
 	message_bar.add_child(message_label)
 	result_label = Label.new()
