@@ -25,7 +25,8 @@ var menu_visible := true
 var camera: Camera2D
 var tiles: TileMapLayer
 var hud: CanvasLayer
-var top_label: Label`nvar resource_label: Label
+var top_label: Label
+var resource_label: Label
 var info_label: Label
 var queue_label: Label
 var message_label: Label
@@ -98,7 +99,11 @@ func _create_ui() -> void:
 	root.add_child(header)
 	top_label = Label.new()
 	top_label.add_theme_font_size_override("font_size", 18)
-	header.add_child(top_label)`n`tresource_label=Label.new()`n`tresource_label.text="MINERALS"`n`tresource_label.position=Vector2(440,12)`n`troot.add_child(resource_label)
+	header.add_child(top_label)
+`tresource_label=Label.new()
+`tresource_label.text="MINERALS"
+`tresource_label.position=Vector2(440,12)
+`troot.add_child(resource_label)
 	info_panel = PanelContainer.new()
 	info_panel.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
 	info_panel.offset_left = -260
@@ -680,7 +685,8 @@ func _notify(message: String) -> void:
 
 func _refresh_ui() -> void:
 	var role := "BLUE" if local_slot == 1 else ("RED" if local_slot == 2 else "SPECTATOR")
-	top_label.text = "IRON FRONT   /   %s     CREDITS: %d     %02d:%02d" % [role, int(sim.money.get(local_slot, 0)), sim.frame / 1200, (sim.frame / 20) % 60]`n`tresource_label.text = "MINERALS  %d" % int(sim.money.get(local_slot, 0))
+	top_label.text = "IRON FRONT   /   %s     CREDITS: %d     %02d:%02d" % [role, int(sim.money.get(local_slot, 0)), sim.frame / 1200, (sim.frame / 20) % 60]
+`tresource_label.text = "MINERALS  %d" % int(sim.money.get(local_slot, 0))
 	resume_button.disabled = not active
 	message_label.text = feedback if feedback_time > 0 else "Left: select    Right: order    A: attack mode    B: barracks    S: stop    Esc: menu"
 	result_label.text = ""
@@ -792,4 +798,5 @@ func _draw() -> void:
 func _bar(pos: Vector2, width: float, fraction: float, color: Color) -> void:
 	draw_rect(Rect2(pos, Vector2(width, 4)), Color("#182219"))
 	draw_rect(Rect2(pos, Vector2(width * clampf(fraction, 0, 1), 4)), color)
+
 
