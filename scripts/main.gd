@@ -105,9 +105,9 @@ func _create_ui() -> void:
 	top_label = Label.new()
 	top_label.add_theme_font_size_override("font_size", 18)
 	header.add_child(top_label)
-	resource_label=Label.new()
-	resource_label.text="MINERALS"
-	resource_label.position=Vector2(440,12)
+	resource_label = Label.new()
+	resource_label.text = "MINERALS"
+	resource_label.position = Vector2(440, 12)
 	root.add_child(resource_label)
 	info_panel = PanelContainer.new()
 	info_panel.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
@@ -729,11 +729,14 @@ func _refresh_ui() -> void:
 		selection_label.text = "UNIT STATUS   %s   |   HP %d / %d   |   ORDER: %s" % [kind, selected.hp, stats.hp, str(selected.order).to_upper()]
 		action_buttons[0].text = "STOP\n[S]"
 		action_buttons[0].disabled = false
-		action_buttons[1].text = "MOVE\nRight click"; action_buttons[1].disabled = false
+		action_buttons[1].text = "MOVE\nRight click"
+`t`t action_buttons[1].disabled = false
 		if selected.type == "soldier":
-			action_buttons[2].text = "ATTACK\n[A]"; action_buttons[2].disabled = false
+			action_buttons[2].text = "ATTACK\n[A]"
+`t`t action_buttons[2].disabled = false
 		else:
-			action_buttons[2].text = "GATHER\nRight click ore"; action_buttons[2].disabled = false
+			action_buttons[2].text = "GATHER\nRight click ore"
+`t`t action_buttons[2].disabled = false
 	resume_button.disabled = not active
 	message_label.text = feedback if feedback_time > 0 else "Left: select    Right: order    A: attack mode    B: barracks    S: stop    Esc: menu"
 	result_label.text = ""
@@ -863,6 +866,7 @@ func _draw() -> void:
 func _bar(pos: Vector2, width: float, fraction: float, color: Color) -> void:
 	draw_rect(Rect2(pos, Vector2(width, 4)), Color("#182219"))
 	draw_rect(Rect2(pos, Vector2(width * clampf(fraction, 0, 1), 4)), color)
+
 
 
 
