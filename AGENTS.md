@@ -12,3 +12,12 @@
 - MCP development rule: use the project's MCP integration under addons/godot_ai when it is useful for development, testing, or debugging. The user authorizes this MCP usage for this project; do not ask for repeated approval for equivalent use.
 
 - Build and validation rule: after every project modification, unless the user explicitly requests otherwise, generate a fresh Windows EXE and verify the game by running it. Export success alone is insufficient; use the project MCP for gameplay validation when available.
+
+## Coding style
+- Use four-space indentation consistently within new or reformatted GDScript blocks.
+- Put spaces around assignment and comparison operators, and after commas in argument lists.
+- Keep consecutive assignments aligned when that improves readability.
+- Split semicolon-separated statements into separate lines.
+- Leave a blank line between functions and between distinct logical code blocks.
+- Keep one primary operation per line and add concise comments at important control-flow boundaries.
+- Do not force alignment when it makes long expressions harder to read.
