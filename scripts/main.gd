@@ -55,6 +55,7 @@ var rebinding_attack := false
 var attack_keycode: Key = KEY_A
 var attack_rebind_button: Button
 
+# Scene bootstrap: create the simulation, world tiles, camera, HUD, and audio.
 func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	sim.reset(false)
@@ -80,6 +81,7 @@ func _ready() -> void:
 	multiplayer.server_disconnected.connect(_server_left)
 	_refresh_ui()
 
+# Build the HUD in code so the exported scene stays lightweight.
 func _create_ui() -> void:
 	hud = CanvasLayer.new()
 	add_child(hud)
@@ -407,6 +409,7 @@ func _new_match(state: Dictionary) -> void:
 	sim.rebuild_navigation()
 	_reset_view()
 
+# Send a player order locally or to the authoritative host.
 func issue(order: Dictionary) -> void:
 	if not active or local_slot == 0:
 		_notify("Spectators cannot issue orders.")
@@ -464,6 +467,7 @@ func return_to_title() -> void:
 	menu.visible = true
 	_notify("Match closed.")
 
+# Main loop: advance host simulation, refresh HUD, and redraw the battlefield.
 func _process(delta: float) -> void:
 	for click: Dictionary in clicks:
 		click.life -= delta
@@ -514,6 +518,7 @@ func _screen_is_map(pos: Vector2) -> bool:
 	var size := get_viewport_rect().size
 	return pos.x < size.x - 260 and pos.y > 52 and pos.y < size.y - 132
 
+# Translate keyboard and mouse input into selection and simulation orders.
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if rebinding_attack:
@@ -709,6 +714,7 @@ func _notify(message: String) -> void:
 	feedback = message
 	feedback_time = 8.0
 
+# Keep all HUD text and command-card state in one place.
 func _refresh_ui() -> void:
 	var role := "BLUE" if local_slot == 1 else ("RED" if local_slot == 2 else "SPECTATOR")
 	top_label.text = "IRON FRONT   /   %s     CREDITS: %d     %02d:%02d" % [role, int(sim.money.get(local_slot, 0)), sim.frame / 1200, (sim.frame / 20) % 60]
@@ -721,7 +727,8 @@ func _refresh_ui() -> void:
 		var stats: Dictionary = Simulation.UNIT_TYPES[selected.type]
 		var hint := ("A: Attack mode, then left-click a target" if selected.type == "soldier" else "Right-click ore: gather minerals")
 		selection_label.text = "UNIT STATUS   %s   |   HP %d / %d   |   ORDER: %s" % [kind, selected.hp, stats.hp, str(selected.order).to_upper()]
-		action_buttons[0].text = "STOP\n[S]"; action_buttons[0].disabled = false
+		action_buttons[0].text = "STOP\n[S]"
+		action_buttons[0].disabled = false
 		action_buttons[1].text = "MOVE\nRight click"; action_buttons[1].disabled = false
 		if selected.type == "soldier":
 			action_buttons[2].text = "ATTACK\n[A]"; action_buttons[2].disabled = false
@@ -736,11 +743,14 @@ func _refresh_ui() -> void:
 	if sim.buildings.has(selected_building):
 		var b: Dictionary = sim.buildings[selected_building]
 		selection_label.text = "BUILDING   %s   |   HP %d / %d" % [str(b.type).to_upper(), b.hp, Simulation.BUILD_TYPES[b.type].hp]
-		action_buttons[0].text = "STOP\n[S]"; action_buttons[0].disabled = false
+		action_buttons[0].text = "STOP\n[S]"
+		action_buttons[0].disabled = false
 		if b.type == "base":
-			action_buttons[1].text = "HARVESTER\n$200"; action_buttons[1].disabled = false
+			action_buttons[1].text = "HARVESTER\n$200"
+			action_buttons[1].disabled = false
 		else:
-			action_buttons[1].text = "SOLDIER\n$100"; action_buttons[1].disabled = false
+			action_buttons[1].text = "SOLDIER\n$100"
+			action_buttons[1].disabled = false
 		action_buttons[2].text = "BARRACKS\n$250"; action_buttons[2].disabled = false
 		action_buttons[3].text = "BASE\n$500"; action_buttons[3].disabled = false
 		action_buttons[4].text = "CANCEL JOB\nRefund"; action_buttons[4].disabled = false
@@ -769,6 +779,7 @@ func _refresh_ui() -> void:
 		info_label.text = "No selection\nSelect units or a building.\nHarvesters return ore to a base."
 		queue_label.text = "Buildings cost credits.\nPlace near your existing base."
 
+# Render world geometry and entities; UI is rendered by CanvasLayer controls.
 func _draw() -> void:
 	for rock: Rect2 in sim.obstacles:
 		draw_rect(rock, Color("#29352e"))
