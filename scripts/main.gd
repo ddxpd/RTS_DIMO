@@ -1,4 +1,4 @@
-extends Node2D
+﻿extends Node2D
 const Simulation = preload("res://scripts/simulation.gd")
 const Art = preload("res://scripts/pixel_art.gd")
 const PORT := 24560
@@ -25,7 +25,7 @@ var menu_visible := true
 var camera: Camera2D
 var tiles: TileMapLayer
 var hud: CanvasLayer
-var top_label: Label
+var top_label: Label`nvar resource_label: Label
 var info_label: Label
 var queue_label: Label
 var message_label: Label
@@ -98,7 +98,7 @@ func _create_ui() -> void:
 	root.add_child(header)
 	top_label = Label.new()
 	top_label.add_theme_font_size_override("font_size", 18)
-	header.add_child(top_label)
+	header.add_child(top_label)`n`tresource_label=Label.new()`n`tresource_label.text="MINERALS"`n`tresource_label.position=Vector2(440,12)`n`troot.add_child(resource_label)
 	info_panel = PanelContainer.new()
 	info_panel.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
 	info_panel.offset_left = -260
@@ -140,7 +140,7 @@ func _create_ui() -> void:
 	column.add_child(help)
 	var bottom := PanelContainer.new()
 	bottom.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	bottom.offset_top = -38
+	bottom.offset_top = -132
 	bottom.offset_right = -260
 	root.add_child(bottom)
 	message_label = Label.new()
@@ -481,7 +481,7 @@ func _limit_camera() -> void:
 
 func _screen_is_map(pos: Vector2) -> bool:
 	var size := get_viewport_rect().size
-	return pos.x < size.x - 260 and pos.y > 52 and pos.y < size.y - 38
+	return pos.x < size.x - 260 and pos.y > 52 and pos.y < size.y - 132
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -680,13 +680,13 @@ func _notify(message: String) -> void:
 
 func _refresh_ui() -> void:
 	var role := "BLUE" if local_slot == 1 else ("RED" if local_slot == 2 else "SPECTATOR")
-	top_label.text = "IRON FRONT   /   %s     CREDITS: %d     %02d:%02d" % [role, int(sim.money.get(local_slot, 0)), sim.frame / 1200, (sim.frame / 20) % 60]
+	top_label.text = "IRON FRONT   /   %s     CREDITS: %d     %02d:%02d" % [role, int(sim.money.get(local_slot, 0)), sim.frame / 1200, (sim.frame / 20) % 60]`n`tresource_label.text = "MINERALS  %d" % int(sim.money.get(local_slot, 0))
 	resume_button.disabled = not active
 	message_label.text = feedback if feedback_time > 0 else "Left: select    Right: order    A: attack mode    B: barracks    S: stop    Esc: menu"
 	result_label.text = ""
 	if sim.winner > 0:
 		result_label.text = "DRAW" if sim.winner == 3 else ("VICTORY" if sim.winner == local_slot else "DEFEAT")
-		result_label.text += "  —  Esc to restart / return"
+		result_label.text += "  鈥? Esc to restart / return"
 	if sim.buildings.has(selected_building):
 		var b: Dictionary = sim.buildings[selected_building]
 		info_label.text = "%s\nHP %d / %d\n%s" % [str(b.type).to_upper(), b.hp, Simulation.BUILD_TYPES[b.type].hp, "Construction: %.1fs" % (float(b.remaining) / 20) if b.remaining > 0 else "Ready"]
@@ -694,7 +694,7 @@ func _refresh_ui() -> void:
 		for job: Dictionary in b.queue:
 			queue_label.text += "%s  %.1fs\n" % [job.type, float(job.remaining) / 20]
 		if not b.queue.is_empty() and int(b.queue[0].remaining) == 0:
-			queue_label.text += "Exit blocked — clear nearby units"
+			queue_label.text += "Exit blocked 鈥?clear nearby units"
 	elif not selected_units.is_empty():
 		info_label.text = "%d UNIT(S) SELECTED\n" % selected_units.size()
 		var u: Dictionary = sim.units[selected_units[0]]
@@ -792,3 +792,4 @@ func _draw() -> void:
 func _bar(pos: Vector2, width: float, fraction: float, color: Color) -> void:
 	draw_rect(Rect2(pos, Vector2(width, 4)), Color("#182219"))
 	draw_rect(Rect2(pos, Vector2(width * clampf(fraction, 0, 1), 4)), color)
+
