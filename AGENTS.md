@@ -6,3 +6,5 @@
 - Report unfinished features and test limitations explicitly. Exported EXE and its adjacent PCK must be distributed together unless embedded packaging is configured.
 
 - Once the user has explicitly authorized an operation during game development, treat that authorization as persistent for subsequent equivalent work in this project and do not ask for repeated confirmation, unless system security or a materially different irreversible action is involved.
+
+- GitHub upload rule: never push or upload project changes by default. Before any git push or other GitHub upload, ask the user with a clear, prominent confirmation question and wait for explicit approval. Local edits, commits, builds, and exports may proceed under existing authorization.
