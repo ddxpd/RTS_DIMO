@@ -733,10 +733,10 @@ func _refresh_ui() -> void:
 		action_buttons[1].disabled = false
 		if selected.type == "soldier":
 			action_buttons[2].text = "ATTACK\n[A]"
-		action_buttons[2].disabled = false
+			action_buttons[2].disabled = false
 		else:
 			action_buttons[2].text = "GATHER\nRight click ore"
-		action_buttons[2].disabled = false
+			action_buttons[2].disabled = false
 	resume_button.disabled = not active
 	message_label.text = feedback if feedback_time > 0 else "Left: select    Right: order    A: attack mode    B: barracks    S: stop    Esc: menu"
 	result_label.text = ""
