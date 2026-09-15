@@ -730,6 +730,20 @@ func _refresh_ui() -> void:
 	resume_button.disabled = not active
 	message_label.text = feedback if feedback_time > 0 else "Left: select    Right: order    A: attack mode    B: barracks    S: stop    Esc: menu"
 	result_label.text = ""
+	for action_button in action_buttons:
+		action_button.text = "—"
+		action_button.disabled = true
+	if sim.buildings.has(selected_building):
+		var b: Dictionary = sim.buildings[selected_building]
+		selection_label.text = "BUILDING   %s   |   HP %d / %d" % [str(b.type).to_upper(), b.hp, Simulation.BUILD_TYPES[b.type].hp]
+		action_buttons[0].text = "STOP\n[S]"; action_buttons[0].disabled = false
+		if b.type == "base":
+			action_buttons[1].text = "HARVESTER\n$200"; action_buttons[1].disabled = false
+		else:
+			action_buttons[1].text = "SOLDIER\n$100"; action_buttons[1].disabled = false
+		action_buttons[2].text = "BARRACKS\n$250"; action_buttons[2].disabled = false
+		action_buttons[3].text = "BASE\n$500"; action_buttons[3].disabled = false
+		action_buttons[4].text = "CANCEL JOB\nRefund"; action_buttons[4].disabled = false
 	if sim.winner > 0:
 		result_label.text = "DRAW" if sim.winner == 3 else ("VICTORY" if sim.winner == local_slot else "DEFEAT")
 		result_label.text += "  鈥? Esc to restart / return"
