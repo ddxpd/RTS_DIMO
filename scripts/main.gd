@@ -27,6 +27,7 @@ var tiles: TileMapLayer
 var hud: CanvasLayer
 var top_label: Label
 var resource_label: Label
+var selection_label: Label
 var info_label: Label
 var queue_label: Label
 var message_label: Label
@@ -148,9 +149,20 @@ func _create_ui() -> void:
 	bottom.offset_top = -132
 	bottom.offset_right = -260
 	root.add_child(bottom)
+	selection_label = Label.new()
+	selection_label.custom_minimum_size = Vector2(0, 76)
+	selection_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	selection_label.add_theme_font_size_override("font_size", 16)
+	selection_label.text = "UNIT STATUS\nNo unit selected — left-click a unit on the battlefield."
+	bottom.add_child(selection_label)
 	message_label = Label.new()
 	message_label.add_theme_font_size_override("font_size", 13)
-	bottom.add_child(message_label)
+	var message_bar := PanelContainer.new()
+	message_bar.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	message_bar.offset_top = -42
+	message_bar.offset_right = -260
+	root.add_child(message_bar)
+	message_bar.add_child(message_label)
 	result_label = Label.new()
 	result_label.position = Vector2(100, 80)
 	result_label.add_theme_font_size_override("font_size", 30)
@@ -687,6 +699,14 @@ func _refresh_ui() -> void:
 	var role := "BLUE" if local_slot == 1 else ("RED" if local_slot == 2 else "SPECTATOR")
 	top_label.text = "IRON FRONT   /   %s     CREDITS: %d     %02d:%02d" % [role, int(sim.money.get(local_slot, 0)), sim.frame / 1200, (sim.frame / 20) % 60]
 	resource_label.text = "MINERALS  %d" % int(sim.money.get(local_slot, 0))
+	if selected_units.is_empty():
+		selection_label.text = "UNIT STATUS\nNo unit selected — left-click a unit on the battlefield."
+	else:
+		var selected: Dictionary = sim.units[selected_units[0]]
+		var kind := str(selected.type).to_upper()
+		var stats: Dictionary = Simulation.UNIT_TYPES[selected.type]
+		var hint := ("A: Attack mode, then left-click a target" if selected.type == "soldier" else "Right-click ore: gather minerals")
+		selection_label.text = "UNIT STATUS   %s   |   HP %d / %d   |   ORDER: %s\nS: Stop   |   Right-click: move / attack / mine   |   %s" % [kind, selected.hp, stats.hp, str(selected.order).to_upper(), hint]
 	resume_button.disabled = not active
 	message_label.text = feedback if feedback_time > 0 else "Left: select    Right: order    A: attack mode    B: barracks    S: stop    Esc: menu"
 	result_label.text = ""
