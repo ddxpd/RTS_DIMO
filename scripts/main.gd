@@ -757,9 +757,6 @@ func _refresh_ui() -> void:
 	if sim.winner > 0:
 		result_label.text = "DRAW" if sim.winner == 3 else ("VICTORY" if sim.winner == local_slot else "DEFEAT")
 		result_label.text += "  鈥? Esc to restart / return"
-	for button in action_buttons:
-		button.text = "—"
-		button.disabled = true
 	if sim.buildings.has(selected_building):
 		var b: Dictionary = sim.buildings[selected_building]
 		info_label.text = "%s\nHP %d / %d\n%s" % [str(b.type).to_upper(), b.hp, Simulation.BUILD_TYPES[b.type].hp, "Construction: %.1fs" % (float(b.remaining) / 20) if b.remaining > 0 else "Ready"]
