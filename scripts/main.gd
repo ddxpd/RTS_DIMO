@@ -1,6 +1,6 @@
 ﻿extends Node2D
 const Simulation = preload("res://scripts/simulation.gd")
-const Art = preload("res://assets/art/pixel_art.gd")
+const Art = preload("res://assets/art/pixel_art.gd")`nconst CameraController = preload("res://scripts/camera_controller.gd")
 const PORT := 24560
 const MAX_CLIENTS := 4
 var sim := Simulation.new()
@@ -22,7 +22,7 @@ var selection_current := Vector2.ZERO
 var middle_dragging := false
 var build_mode := ""
 var menu_visible := true
-var camera: Camera2D
+var camera: Camera2D`nvar camera_controller: CameraController
 var tiles: TileMapLayer
 var hud: CanvasLayer
 var top_label: Label
@@ -509,7 +509,7 @@ func _clean_selection() -> void:
 	if not sim.buildings.has(selected_building) or sim.buildings[selected_building].owner != local_slot:
 		selected_building = -1
 
-func _limit_camera() -> void:
+func _get_camera_viewport_size() -> Vector2:`n`treturn get_viewport_rect().size`n`nfunc _get_map_screen_rect() -> Rect2:`n`	var size := get_viewport_rect().size`n`	return Rect2(Vector2(0, 52), Vector2(size.x - 260, size.y - 184))`n`nfunc _limit_camera() -> void:
 	var half := get_viewport_rect().size / (2.0 * camera.zoom.x)
 	var max_center := Simulation.WORLD - half
 	camera.position = camera.position.clamp(half.min(Simulation.WORLD / 2), max_center.max(Simulation.WORLD / 2))
@@ -866,6 +866,7 @@ func _draw() -> void:
 func _bar(pos: Vector2, width: float, fraction: float, color: Color) -> void:
 	draw_rect(Rect2(pos, Vector2(width, 4)), Color("#182219"))
 	draw_rect(Rect2(pos, Vector2(width * clampf(fraction, 0, 1), 4)), color)
+
 
 
 
