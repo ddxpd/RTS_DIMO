@@ -37,6 +37,7 @@ func update(delta: float) -> void:
     _limit_camera()
 
 func _limit_camera() -> void:
-    var half := viewport_size_provider.call() / (2.0 * camera.zoom.x)
-    var max_center := world_size - half
+    var half: Vector2 = viewport_size_provider.call() / (2.0 * camera.zoom.x)
+    var max_center: Vector2 = world_size - half
     camera.position = camera.position.clamp(half.min(world_size / 2.0), max_center.max(world_size / 2.0))
+
