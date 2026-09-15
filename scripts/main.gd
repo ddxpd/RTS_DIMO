@@ -28,6 +28,8 @@ var hud: CanvasLayer
 var top_label: Label
 var resource_label: Label
 var selection_label: Label
+var action_grid: GridContainer
+var action_buttons: Array[Button] = []
 var info_label: Label
 var queue_label: Label
 var message_label: Label
@@ -156,6 +158,17 @@ func _create_ui() -> void:
 	selection_label.add_theme_font_size_override("font_size", 16)
 	selection_label.text = "UNIT STATUS\nNo unit selected — left-click a unit on the battlefield."
 	bottom.add_child(selection_label)
+	action_grid = GridContainer.new()
+	action_grid.columns = 4
+	action_grid.custom_minimum_size = Vector2(420, 96)
+	bottom.add_child(action_grid)
+	for i in range(16):
+		var action_button := Button.new()
+		action_button.custom_minimum_size = Vector2(100, 42)
+		action_button.text = "—"
+		action_button.disabled = true
+		action_grid.add_child(action_button)
+		action_buttons.append(action_button)
 	message_label = Label.new()
 	message_label.add_theme_font_size_override("font_size", 13)
 	var message_bar := PanelContainer.new()
@@ -707,13 +720,22 @@ func _refresh_ui() -> void:
 		var kind := str(selected.type).to_upper()
 		var stats: Dictionary = Simulation.UNIT_TYPES[selected.type]
 		var hint := ("A: Attack mode, then left-click a target" if selected.type == "soldier" else "Right-click ore: gather minerals")
-		selection_label.text = "UNIT STATUS   %s   |   HP %d / %d   |   ORDER: %s\nS: Stop   |   Right-click: move / attack / mine   |   %s" % [kind, selected.hp, stats.hp, str(selected.order).to_upper(), hint]
+		selection_label.text = "UNIT STATUS   %s   |   HP %d / %d   |   ORDER: %s" % [kind, selected.hp, stats.hp, str(selected.order).to_upper()]
+		action_buttons[0].text = "STOP\n[S]"; action_buttons[0].disabled = false
+		action_buttons[1].text = "MOVE\nRight click"; action_buttons[1].disabled = false
+		if selected.type == "soldier":
+			action_buttons[2].text = "ATTACK\n[A]"; action_buttons[2].disabled = false
+		else:
+			action_buttons[2].text = "GATHER\nRight click ore"; action_buttons[2].disabled = false
 	resume_button.disabled = not active
 	message_label.text = feedback if feedback_time > 0 else "Left: select    Right: order    A: attack mode    B: barracks    S: stop    Esc: menu"
 	result_label.text = ""
 	if sim.winner > 0:
 		result_label.text = "DRAW" if sim.winner == 3 else ("VICTORY" if sim.winner == local_slot else "DEFEAT")
 		result_label.text += "  鈥? Esc to restart / return"
+	for button in action_buttons:
+		button.text = "—"
+		button.disabled = true
 	if sim.buildings.has(selected_building):
 		var b: Dictionary = sim.buildings[selected_building]
 		info_label.text = "%s\nHP %d / %d\n%s" % [str(b.type).to_upper(), b.hp, Simulation.BUILD_TYPES[b.type].hp, "Construction: %.1fs" % (float(b.remaining) / 20) if b.remaining > 0 else "Ready"]
