@@ -26,7 +26,7 @@ var camera: Camera2D
 var tiles: TileMapLayer
 var hud: CanvasLayer
 var top_label: Label
-var resource_label: Label
+var resource_label: Label`nvar selection_label: Label
 var info_label: Label
 var queue_label: Label
 var message_label: Label
@@ -798,6 +798,7 @@ func _draw() -> void:
 func _bar(pos: Vector2, width: float, fraction: float, color: Color) -> void:
 	draw_rect(Rect2(pos, Vector2(width, 4)), Color("#182219"))
 	draw_rect(Rect2(pos, Vector2(width * clampf(fraction, 0, 1), 4)), color)
+
 
 
 
