@@ -515,8 +515,8 @@ func _get_camera_viewport_size() -> Vector2:
 	return get_viewport_rect().size
 
 func _get_map_screen_rect() -> Rect2:
-`	var size := get_viewport_rect().size
-`	return Rect2(Vector2(0, 52), Vector2(size.x - 260, size.y - 184))
+		var size := get_viewport_rect().size
+		return Rect2(Vector2(0, 52), Vector2(size.x - 260, size.y - 184))
 
 func _limit_camera() -> void:
 	var half := get_viewport_rect().size / (2.0 * camera.zoom.x)
@@ -875,6 +875,7 @@ func _draw() -> void:
 func _bar(pos: Vector2, width: float, fraction: float, color: Color) -> void:
 	draw_rect(Rect2(pos, Vector2(width, 4)), Color("#182219"))
 	draw_rect(Rect2(pos, Vector2(width * clampf(fraction, 0, 1), 4)), color)
+
 
 
 
