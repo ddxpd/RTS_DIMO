@@ -10,3 +10,5 @@
 - GitHub upload rule: never push or upload project changes by default. Before any git push or other GitHub upload, ask the user with a clear, prominent confirmation question and wait for explicit approval. Local edits, commits, builds, and exports may proceed under existing authorization.
 
 - MCP development rule: use the project's MCP integration under addons/godot_ai when it is useful for development, testing, or debugging. The user authorizes this MCP usage for this project; do not ask for repeated approval for equivalent use.
+
+- Build and validation rule: after every project modification, unless the user explicitly requests otherwise, generate a fresh Windows EXE and verify the game by running it. Export success alone is insufficient; use the project MCP for gameplay validation when available.
