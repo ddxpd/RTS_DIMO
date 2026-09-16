@@ -763,9 +763,12 @@ func _refresh_ui() -> void:
 		else:
 			action_buttons[1].text = "SOLDIER\n$100"
 			action_buttons[1].disabled = false
-		action_buttons[2].text = "BARRACKS\n$250"\n\t\taction_buttons[2].disabled = false
-		action_buttons[3].text = "BASE\n$500"\n\t\taction_buttons[3].disabled = false
-		action_buttons[4].text = "CANCEL JOB\nRefund"\n\t\taction_buttons[4].disabled = false
+		action_buttons[2].text = "BARRACKS\n$250"
+		action_buttons[2].disabled = false
+		action_buttons[3].text = "BASE\n$500"
+		action_buttons[3].disabled = false
+		action_buttons[4].text = "CANCEL JOB\nRefund"
+		action_buttons[4].disabled = false
 	if sim.winner > 0:
 		result_label.text = "DRAW" if sim.winner == 3 else ("VICTORY" if sim.winner == local_slot else "DEFEAT")
 		result_label.text += "  鈥? Esc to restart / return"
@@ -875,6 +878,7 @@ func _draw() -> void:
 func _bar(pos: Vector2, width: float, fraction: float, color: Color) -> void:
 	draw_rect(Rect2(pos, Vector2(width, 4)), Color("#182219"))
 	draw_rect(Rect2(pos, Vector2(width * clampf(fraction, 0, 1), 4)), color)
+
 
 
 
