@@ -1,0 +1,43 @@
+Godot Engine v4.7.2.stable.official.ed1daf0bf - https://godotengine.org
+
+[   0% ] first_scan_filesystem | Started 项目初始化 (5 steps)
+[   0% ] first_scan_filesystem | 正在扫描文件结构……
+[  16% ] first_scan_filesystem | 正在加载全局类名……
+[  33% ] first_scan_filesystem | 正在校验 GDExtension……
+[  50% ] first_scan_filesystem | 正在创建自动加载脚本……
+[  66% ] first_scan_filesystem | 正在初始化插件……
+MCP | plugin disabled in headless mode
+[  83% ] first_scan_filesystem | 正在启动文件扫描……
+[ DONE ] first_scan_filesystem
+
+MCP | export: stripping autoload/_mcp_game_helper from the exported pack (restored in the editor after export)
+[   0% ] savepack | Started 打包中 (102 steps)
+[   1% ] savepack | 正在保存文件：res://scripts/entities/soldier_entity.gdc
+[   9% ] savepack | 正在保存文件：res://scripts/camera_controller.gdc
+[  17% ] savepack | 正在保存文件：res://scripts/main.gdc
+[  26% ] savepack | 正在保存文件：res://scripts/simulation.gdc
+[  33% ] savepack | 正在保存文件：res://.godot/exported/133200997/export-3ad5c15c4f3250da0cc7c1af1770d85f-main.scn
+[  41% ] savepack | 正在保存文件：res://scripts/entities/barracks_entity.gdc
+[  50% ] savepack | 正在保存文件：res://scripts/entities/base_entity.gdc
+[  58% ] savepack | 正在保存文件：res://scripts/entities/building_entity.gdc
+[  66% ] savepack | 正在保存文件：res://assets/art/pixel_art.gdc
+[  74% ] savepack | 正在保存文件：res://scripts/entities/combat_entity.gdc
+[  82% ] savepack | 正在保存文件：res://scripts/entities/game_entity.gdc
+[  90% ] savepack | 正在保存文件：res://scripts/entities/harvester_entity.gdc
+[  90% ] savepack | 正在保存文件：res://scripts/entities/soldier_entity.gd.remap
+[  90% ] savepack | 正在保存文件：res://scripts/camera_controller.gd.remap
+[  90% ] savepack | 正在保存文件：res://scripts/main.gd.remap
+[  90% ] savepack | 正在保存文件：res://scripts/simulation.gd.remap
+[  90% ] savepack | 正在保存文件：res://scenes/main.tscn.remap
+[  90% ] savepack | 正在保存文件：res://scripts/entities/barracks_entity.gd.remap
+[  90% ] savepack | 正在保存文件：res://scripts/entities/base_entity.gd.remap
+[  90% ] savepack | 正在保存文件：res://scripts/entities/building_entity.gd.remap
+[  90% ] savepack | 正在保存文件：res://assets/art/pixel_art.gd.remap
+[  90% ] savepack | 正在保存文件：res://scripts/entities/combat_entity.gd.remap
+[  90% ] savepack | 正在保存文件：res://scripts/entities/game_entity.gd.remap
+[  90% ] savepack | 正在保存文件：res://scripts/entities/harvester_entity.gd.remap
+[  90% ] savepack | 正在保存文件：res://.godot/global_script_class_cache.cfg
+[  90% ] savepack | 正在保存文件：res://.godot/uid_cache.bin
+[  90% ] savepack | 正在保存文件：res://project.binary
+[ DONE ] savepack
+

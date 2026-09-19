@@ -1,4 +1,4 @@
-﻿extends GameEntity
+extends GameEntity
 class_name CombatEntity
 
 var attack_range: float

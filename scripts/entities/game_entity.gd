@@ -10,11 +10,11 @@ var entity_type: String
 var destroyed := false
 
 func _init(id: int, faction: int, pos: Vector2, health: int, kind: String) -> void:
-    entity_id = id
-    owner = faction
-    position = pos
-    hp = health
-    max_hp = health
+    entity_id   = id
+    owner       = faction
+    position    = pos
+    hp          = health
+    max_hp      = health
     entity_type = kind
 
 func take_damage(amount: int) -> void:

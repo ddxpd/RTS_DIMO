@@ -21,4 +21,4 @@ The earlier implementation only contained combat fields and decorative buildings
 
 Tests were executed against source in Godot. The exported EXE received a startup smoke check; an attempted external test-script run on the release binary did not complete and is not counted as a passed gameplay test. No claims are made about WAN latency/loss, high unit counts, or competitive anti-cheat. Full gameplay network tests used separate local processes.
 
-See README.md for controls, supported features and explicit prototype limits. The new deliverable is build/IronFront.exe; older RTS_Host_P2P_Prototype files are earlier builds.
+See [README.md](../README.md) for controls, supported features and explicit prototype limits. The new deliverable is build/IronFront.exe; older RTS_Host_P2P_Prototype files are earlier builds.

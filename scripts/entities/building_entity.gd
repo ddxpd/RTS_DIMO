@@ -1,4 +1,4 @@
-﻿extends GameEntity
+extends GameEntity
 class_name BuildingEntity
 
 var production_queue: Array = []
