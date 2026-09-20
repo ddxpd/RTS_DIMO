@@ -376,3 +376,17 @@
 - presentation 新增 2 用例：canceled 不中断拖选、真实释放正常完成；丢释放事件走帧兜底（需临时启用 _process——该测试默认 set_process(false)）
 - 实机：按下→注入 canceled→按住 3 秒（约180帧）→仍存活；真实释放后选出 6 单位
 - 回归 5 套全过；导出 EXE（20:52:46）
+
+## 2026-09-20：Download ZIP 分发陷阱与修正
+
+### 事件
+- 用户从 GitHub 仓库 Download ZIP 下载后无法运行：报"此应用无法在你的电脑上运行"
+- 根因：ZIP 打包不还原 LFS 对象，其中 IronFront.exe 实为 ~134 字节指针文本文件而非 104MB 真实程序；SmartScreen 之后的报错即 Windows 执行非 PE 文件
+
+### 修正
+- 提供媒体直链立即解决：https://media.githubusercontent.com/media/ddxpd/RTS_DIMO/main/build/IronFront.exe（校验 109,204,120 字节）
+- 指引用户创建 v0.1 Release 并把 EXE 作为附件发布（标准分发渠道）
+- 新增 Binary distribution rule：大文件一律走 Release 附件或媒体直链；向用户提供构建时必须附字节级校验
+
+### 教训
+- "上传含 EXE 到仓库"≠"用户可从仓库直接下载可执行文件"——LFS 仓库的 ZIP 下载是经典陷阱，今后发布构建默认同时更新 Release 并给直链
