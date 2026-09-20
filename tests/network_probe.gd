@@ -18,7 +18,7 @@ func _process(_delta: float) -> void:
         check(false, "Timeout")
 
 func start() -> void:
-    deadline = Time.get_ticks_msec() + 55000
+    deadline = Time.get_ticks_msec() + 180000
     if role == "host":
         game.create_host()
         check(game.connected, "Host bind")
@@ -40,7 +40,7 @@ func start() -> void:
             return
         game._order.rpc_id(1, {"action": "move", "units": [3], "pos": Vector2(600, 600), "owner": 1})
         await get_tree().create_timer(0.4).timeout
-        if not check(game.sim.units[3].pos == Vector2(304, 160), "Host rejects forged spectator order"):
+        if not check(game.sim.units[3].pos == Vector2(640, 256), "Host rejects forged spectator order"):
             return
         print("NETWORK_TEST PASS spectator permissions")
         get_tree().quit(0)
@@ -66,14 +66,49 @@ func guest() -> void:
     game._left_click(game.sim.units[3].pos)
     if not check(game.selected_units.is_empty(), "Enemy selection disallowed"):
         return
-    game._left_click(game.sim.units[8].pos)
-    if not check(game.selected_units == [8], "Friendly harvester selection"):
+    # Each applied snapshot must advance the guest by exactly one logic tick.
+    var interval_ok := true
+    var samples := 0
+    var last_frame: int = game.sim.frame
+    while samples < 30:
+        await get_tree().process_frame
+        if game.sim.frame != last_frame:
+            if game.sim.frame - last_frame != 1:
+                interval_ok = false
+            last_frame = game.sim.frame
+            samples += 1
+    if not check(interval_ok, "Guest receives one snapshot per logic tick (20 Hz)"):
+        return
+    if not check(game.render_velocities.size() >= game.sim.units.size() - 1, "Guest computes render velocities"):
+        return
+    # The refinery economy: build the drop-off, produce a miner, then gather.
+    game.issue({"action": "build", "type": "refinery", "pos": Vector2(4416, 2496)})
+    var refinery := -1
+    while refinery < 0:
+        for id: int in game.sim.buildings:
+            if game.sim.buildings[id].owner == 2 and game.sim.buildings[id].type == "refinery":
+                refinery = id
+        await get_tree().process_frame
+    while game.sim.buildings[refinery].remaining > 0:
+        await get_tree().process_frame
+    game.selected_building = refinery
+    game._produce("harvester")
+    var miner := -1
+    while miner < 0:
+        for id: int in game.sim.units:
+            if game.sim.units[id].owner == 2 and game.sim.units[id].type == "harvester":
+                miner = id
+                break
+        await get_tree().process_frame
+    game._clear_selection()
+    game._left_click(game.sim.units[miner].pos)
+    if not check(game.selected_units == [miner], "Friendly produced miner selection"):
         return
     game._right_click(game.sim.ores[2].pos)
-    while game.sim.money[2] < 660:
+    while game.sim.money[2] < 5460:
         await get_tree().process_frame
     print("NETWORK_STAGE mined ", game.sim.money[2])
-    game.issue({"action": "build", "type": "barracks", "pos": Vector2(1152, 768)})
+    game.issue({"action": "build", "type": "barracks", "pos": Vector2(4224, 2432)})
     var barracks := -1
     while barracks < 0:
         for id: int in game.sim.buildings:
@@ -84,14 +119,16 @@ func guest() -> void:
         await get_tree().process_frame
     print("NETWORK_STAGE built")
     game.selected_building = barracks
+    while game.sim.money[2] < 5310:
+        await get_tree().process_frame
     game._produce("soldier")
-    while game.sim.units.size() < 7:
+    while game.sim.units.size() < 14:
         await get_tree().process_frame
     print("NETWORK_STAGE produced")
     _setup_target.rpc_id(1)
-    while game.sim.units[5].pos != Vector2(1050, 768):
+    while (game.sim.units[5].pos as Vector2).distance_to(Vector2(1050, 768)) > 5.0:
         await get_tree().process_frame
-    game._left_click(game.sim.units[6].pos)
+    game._left_click(game.sim.units[9].pos)
     game._right_click(Vector2(1050, 768))
     while game.sim.units.has(5):
         await get_tree().process_frame

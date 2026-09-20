@@ -43,22 +43,63 @@ func run() -> void:
     click(Vector2(550, 330), MOUSE_BUTTON_RIGHT)
     check(game.sim.units[3].order == "move" and not game.clicks.is_empty(), "Right-click issues move and destination effect")
     var event := InputEventMouseButton.new()
-    event.position     = game.get_global_transform_with_canvas() * Vector2(275, 125)
+    event.position     = game.get_global_transform_with_canvas() * Vector2(560, 240)
     event.button_index = MOUSE_BUTTON_LEFT
     event.pressed      = true
     root.push_input(event, true)
     event          = event.duplicate()
-    event.position = game.get_global_transform_with_canvas() * Vector2(330, 240)
+    event.position = game.get_global_transform_with_canvas() * Vector2(680, 340)
     event.pressed  = false
     root.push_input(event, true)
     check(game.selected_units.size() == 2, "Viewport drag selects both soldiers")
+    # A drag that ends over the bottom HUD must still complete the selection.
+    var hud_press := InputEventMouseButton.new()
+    hud_press.button_index = MOUSE_BUTTON_LEFT
+    hud_press.pressed = true
+    hud_press.position = game.get_global_transform_with_canvas() * Vector2(560, 240)
+    root.push_input(hud_press, true)
+    var hud_release := InputEventMouseButton.new()
+    hud_release.button_index = MOUSE_BUTTON_LEFT
+    hud_release.pressed = false
+    hud_release.position = game.get_global_transform_with_canvas() * Vector2(700, 1150)
+    root.push_input(hud_release, true)
+    check(game.selected_units.size() == 6, "Drag ending over HUD completes selection")
+    # A canceled release (focus quirk) must not end an active drag.
+    var cancel_press := InputEventMouseButton.new()
+    cancel_press.button_index = MOUSE_BUTTON_LEFT
+    cancel_press.pressed = true
+    cancel_press.position = game.get_global_transform_with_canvas() * Vector2(560, 240)
+    root.push_input(cancel_press, true)
+    var cancel_release := InputEventMouseButton.new()
+    cancel_release.button_index = MOUSE_BUTTON_LEFT
+    cancel_release.pressed = false
+    cancel_release.canceled = true
+    cancel_release.position = Vector2(760, 990)
+    root.push_input(cancel_release, true)
+    check(game.selection_dragging, "Canceled release keeps the drag alive")
+    var real_release := InputEventMouseButton.new()
+    real_release.button_index = MOUSE_BUTTON_LEFT
+    real_release.pressed = false
+    real_release.position = game.get_global_transform_with_canvas() * Vector2(700, 1150)
+    root.push_input(real_release, true)
+    check(game.selected_units.size() == 6, "Real release after cancel completes selection")
+    # Lost release events finish via the per-frame tracked-button fallback.
+    game._clear_selection()
+    game.selection_dragging = true
+    game.selection_start = Vector2(560, 240)
+    game.selection_current = Vector2(700, 1150)
+    game.set_process(true)
+    await process_frame
+    await process_frame
+    game.set_process(false)
+    check(game.selected_units.size() == 6 and not game.selection_dragging, "Lost releases finish via frame fallback")
     var refinery: int = game.sim._add_building(1, "refinery", Vector2(288, 432), true)
     click(game.sim.buildings[refinery].pos)
     check(game.selected_building == refinery and game.selected_units.is_empty(), "Building selection")
     game._produce("harvester")
     check(game.sim.buildings[refinery].queue.size() == 1, "Production UI callback enqueues")
     game._begin_build("barracks")
-    click(Vector2(448, 160))
+    click(Vector2(704, 320))
     check(game.sim.buildings.size() == 4 and game.build_mode == "", "Build preview click creates construction")
     var wheel := InputEventMouseButton.new()
     wheel.position     = Vector2(300, 300)

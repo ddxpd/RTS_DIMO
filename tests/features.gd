@@ -42,20 +42,14 @@ func run() -> void:
     game._control_group_key(2, false, false)
     if game.selected_units.size() != soldier_ids.size():
         failures.append("pressing 2 did not recall the group")
-    var harvester_id := -1
-    for id: int in game.sim.units:
-        if game.sim.units[id].owner == 1 and game.sim.units[id].type == "harvester":
-            harvester_id = id
-            break
-    if harvester_id < 0:
-        failures.append("no friendly harvester for group append test")
-    else:
-        game._clear_selection()
-        game.selected_units.append(harvester_id)
-        game._control_group_key(2, false, true)
-        group_state = game.control_groups.get(2) as Dictionary
-        if (group_state.get("units") as Array).size() != soldier_ids.size() + 1:
-            failures.append("Shift+2 did not append to the group")
+    var harvester_id: int = game.sim.add_unit(1, "harvester", Vector2(700, 900))
+    game._clear_selection()
+    game._clear_selection()
+    game.selected_units.append(harvester_id)
+    game._control_group_key(2, false, true)
+    group_state = game.control_groups.get(2) as Dictionary
+    if (group_state.get("units") as Array).size() != soldier_ids.size() + 1:
+        failures.append("Shift+2 did not append to the group")
     # A building-only group must be recallable by pressing its number.
     game._clear_selection()
     game.selected_building = 1

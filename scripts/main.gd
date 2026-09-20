@@ -15,9 +15,11 @@ var slots: Dictionary = {}
 var handshakes: Dictionary = {}
 var rates: Dictionary = {}
 var accumulator := 0.0
+var render_velocities: Dictionary = {}
 var selected_units: Array[int] = []
 var selected_building := -1
 var selection_dragging := false
+var left_button_held := false
 var selection_start := Vector2.ZERO
 var selection_current := Vector2.ZERO
 var middle_dragging := false
@@ -77,8 +79,8 @@ func _ready() -> void:
     tiles.scale    = Vector2(2, 2)
     tiles.z_index  = -10
     add_child(tiles)
-    for x in range(50):
-        for y in range(30):
+    for x in range(Simulation.GRID.x):
+        for y in range(Simulation.GRID.y):
             tiles.set_cell(Vector2i(x, y), 0, Vector2i((x * 7 + y * 11) % 3, 0))
     camera = Camera2D.new()
     add_child(camera)
@@ -86,7 +88,6 @@ func _ready() -> void:
     camera.zoom = Vector2.ONE
     camera_controller = CameraController.new(camera, Simulation.WORLD,
         func() -> Vector2: return get_viewport_rect().size,
-        func() -> Rect2: return Rect2(0, 52, get_viewport_rect().size.x - 260, get_viewport_rect().size.y - 184),
         func() -> Vector2: return camera.get_viewport().get_mouse_position())
     camera_controller.speed_multiplier = camera_speed_multiplier
     _create_ui()
@@ -354,7 +355,7 @@ func _reset_view() -> void:
     build_mode = ""
     clicks.clear()
     camera.zoom     = Vector2.ONE * maxf(1.0, _min_zoom())
-    camera.position = Vector2(500, 350) if local_slot != 2 else Vector2(1250, 650)
+    camera.position = Vector2(900, 700) if local_slot != 2 else Vector2(3900, 2500)
     menu_visible    = false
     menu.visible    = false
 
@@ -488,7 +489,12 @@ func _server_left() -> void:
 
 func _world(state: Dictionary) -> void:
     if state.get("version") == Simulation.VERSION and state.get("match") == sim.match_id and int(state.frame) >= sim.frame:
+        var previous_positions: Dictionary = {}
+        for id: int in sim.units:
+            previous_positions[id] = sim.units[id].pos
+        var previous_frame: int = sim.frame
         sim.apply_snapshot(state)
+        _update_render_velocities(previous_positions, previous_frame, int(state.frame))
         _audio_for_effects()
 
 @rpc("authority", "reliable")
@@ -583,8 +589,11 @@ func _process(delta: float) -> void:
             _audio_for_effects()
             if is_host and previous_winner == 0 and sim.winner > 0:
                 _final_state.rpc(sim.snapshot())
-            if is_host and sim.frame % 2 == 0 and not slots.is_empty():
+            if is_host and not slots.is_empty():
+                # One snapshot per logic tick (20 Hz) keeps guest motion fluid.
                 _world.rpc(sim.snapshot())
+    elif active and connected and not is_host:
+        _smooth_guest_motion(delta)
     if is_host:
         for id: int in handshakes.keys():
             if Time.get_ticks_msec() - int(handshakes[id]) > 5000:
@@ -596,6 +605,10 @@ func _process(delta: float) -> void:
         camera_controller.update(delta)
     _limit_camera()
     _clean_selection()
+    # Safety net: if the release event was lost entirely, finish the drag on
+    # the first frame where our tracked button state says it was released.
+    if selection_dragging and not left_button_held:
+        _finish_drag_select(selection_current)
     _refresh_ui()
     queue_redraw()
 
@@ -663,11 +676,9 @@ func _unhandled_input(event: InputEvent) -> void:
                     selection_start    = pos
                     selection_current  = pos
             elif not event.pressed and selection_dragging:
-                selection_dragging = false
-                if (pos - selection_start).length() * camera.zoom.x < 8:
-                    _left_click(pos)
-                else:
-                    _select_rect(Rect2(selection_start, pos - selection_start).abs())
+                var button := event as InputEventMouseButton
+                if not button.canceled and not left_button_held:
+                    _finish_drag_select(pos)
         elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed and _screen_is_map(event.position):
             if not build_mode.is_empty():
                 build_mode = ""
@@ -688,12 +699,32 @@ func _unhandled_input(event: InputEvent) -> void:
             selection_current = get_global_transform_with_canvas().affine_inverse() * event.position
 
 func _input(event: InputEvent) -> void:
-    # A release over the sidebar must not leave a drag stuck on.
-    if event is InputEventMouseButton and not event.pressed:
-        if event.button_index == MOUSE_BUTTON_MIDDLE:
-            middle_dragging = false
-        if event.button_index == MOUSE_BUTTON_LEFT and not _screen_is_map(event.position):
-            selection_dragging = false
+    # _input runs before the HUD consumes events, so an active drag keeps
+    # tracking (and can complete) even while the cursor is over HUD panels.
+    if selection_dragging and event is InputEventMouseMotion:
+        selection_current = get_global_transform_with_canvas().affine_inverse() * event.position
+    if event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_MIDDLE:
+        middle_dragging = false
+    if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+        var button := event as InputEventMouseButton
+        # Track the button ourselves: Godot's Input state is also corrupted by
+        # canceled events, so only non-canceled presses/releases update it.
+        if not button.canceled:
+            left_button_held = button.pressed
+        if not button.pressed and selection_dragging:
+            # Canceled releases (focus quirks, confined-cursor edge pressure)
+            # must not end a drag while the button is still physically held.
+            if button.canceled or left_button_held:
+                return
+            _finish_drag_select(get_global_transform_with_canvas().affine_inverse() * event.position)
+
+# Complete a box drag: treat tiny drags as clicks, larger ones as selections.
+func _finish_drag_select(pos: Vector2) -> void:
+    selection_dragging = false
+    if (pos - selection_start).length() * camera.zoom.x < 8:
+        _left_click(pos)
+    else:
+        _select_rect(Rect2(selection_start, pos - selection_start).abs())
 
 func _left_click(pos: Vector2) -> void:
     if not pending_command.is_empty():
@@ -818,6 +849,29 @@ func _control_group_key(group: int, ctrl: bool, shift: bool) -> void:
         selected_units.clear()
         selected_building = group_building
         _notify("Group %d building ready." % group)
+
+# Guest-side smoothing: derive per-unit velocity from consecutive snapshots.
+func _update_render_velocities(previous: Dictionary, previous_frame: int, current_frame: int) -> void:
+    render_velocities.clear()
+    var ticks := current_frame - previous_frame
+    if ticks < 1 or ticks > 10:
+        return
+    for id: int in sim.units:
+        if not previous.has(id):
+            continue
+        var velocity: Vector2 = ((sim.units[id].pos as Vector2) - (previous[id] as Vector2)) / (ticks * 0.05)
+        if velocity.length() > 400.0:
+            velocity = velocity.normalized() * 400.0
+        render_velocities[id] = velocity
+
+# Extrapolate one render frame between snapshots so motion stays fluid on guests.
+func _smooth_guest_motion(delta: float) -> void:
+    for id: int in render_velocities:
+        if sim.units.has(id):
+            var u: Dictionary = sim.units[id]
+            u.pos = (u.pos as Vector2) + (render_velocities[id] as Vector2) * delta
+    for e: Dictionary in sim.effects:
+        e.life = maxf(0.0, float(e.life) - delta * 20.0)
 
 func _right_click(pos: Vector2) -> void:
     pending_command = ""
@@ -1135,9 +1189,9 @@ func _draw() -> void:
         else:
             draw_circle(e.to, 5 + (10 - e.life) * 2, Color(1, 0.6, 0.2, float(e.life) / 10))
     if local_slot in [1, 2]:
-        for y in range(30):
-            for x in range(50):
-                var index := y * 50 + x
+        for y in range(Simulation.GRID.y):
+            for x in range(Simulation.GRID.x):
+                var index := y * Simulation.GRID.x + x
                 if sim.visible[local_slot][index] == 0:
                     var alpha := 0.62 if sim.explored[local_slot][index] == 1 else 1.0
                     draw_rect(Rect2(x * 32, y * 32, 32, 32), Color(0.035, 0.055, 0.055, alpha))

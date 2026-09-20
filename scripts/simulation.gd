@@ -3,7 +3,9 @@ extends RefCounted
 const VERSION := "rts-economy-2"
 const TICK := 20
 const CELL := 32
-const WORLD := Vector2(1600, 960)
+const WORLD := Vector2(4800, 3200)
+const GRID := Vector2i(150, 100)
+const GRID_CELLS := GRID.x * GRID.y
 const UNIT_TYPES := {
     "soldier": {"hp": 100, "speed": 100.0, "range": 125.0, "damage": 16, "cooldown": 12, "radius": 11.0, "cost": 100, "time": 50},
     "harvester": {"hp": 160, "speed": 75.0, "range": 0.0, "damage": 0, "cooldown": 20, "radius": 14.0, "cost": 200, "time": 70}
@@ -34,7 +36,7 @@ func reset(with_ai: bool = false) -> void:
     units.clear()
     buildings.clear()
     ores.clear()
-    money      = {1: 600, 2: 600}
+    money      = {1: 6000, 2: 6000}
     frame      = 0
     winner     = 0
     next_id    = 1
@@ -42,20 +44,32 @@ func reset(with_ai: bool = false) -> void:
     effects.clear()
     for owner in [1, 2]:
         var cells := PackedByteArray()
-        cells.resize(1500)
+        cells.resize(GRID_CELLS)
         cells.fill(0)
         visible[owner] = cells.duplicate()
         explored[owner] = cells.duplicate()
-    obstacles = [Rect2(704, 64, 128, 192), Rect2(736, 672, 128, 224), Rect2(992, 416, 96, 96), Rect2(448, 448, 96, 96)]
-    _add_building(1, "base", Vector2(192, 192), true)
-    _add_building(2, "base", Vector2(1408, 768), true)
-    add_unit(1, "soldier", Vector2(304, 160))
-    add_unit(1, "soldier", Vector2(304, 208))
-    add_unit(1, "harvester", Vector2(192, 304))
-    add_unit(2, "soldier", Vector2(1296, 736))
-    add_unit(2, "soldier", Vector2(1296, 784))
-    add_unit(2, "harvester", Vector2(1408, 656))
-    ores = {1: {"pos": Vector2(352, 352), "amount": 4000}, 2: {"pos": Vector2(1248, 576), "amount": 4000}, 3: {"pos": Vector2(800, 480), "amount": 6000}}
+    obstacles = [Rect2(2112, 192, 384, 576), Rect2(2208, 2016, 384, 672), Rect2(2976, 1248, 288, 288), Rect2(1344, 1344, 288, 288)]
+    _add_building(1, "base", Vector2(384, 384), true)
+    _add_building(2, "base", Vector2(4416, 2816), true)
+    add_unit(1, "soldier", Vector2(640, 256))
+    add_unit(1, "soldier", Vector2(640, 320))
+    add_unit(1, "soldier", Vector2(640, 384))
+    add_unit(1, "soldier", Vector2(640, 448))
+    add_unit(1, "soldier", Vector2(640, 512))
+    add_unit(1, "soldier", Vector2(640, 576))
+    add_unit(2, "soldier", Vector2(4160, 2944))
+    add_unit(2, "soldier", Vector2(4160, 2880))
+    add_unit(2, "soldier", Vector2(4160, 2816))
+    add_unit(2, "soldier", Vector2(4160, 2752))
+    add_unit(2, "soldier", Vector2(4160, 2688))
+    add_unit(2, "soldier", Vector2(4160, 2624))
+    ores = {
+        1: {"pos": Vector2(704, 704), "amount": 4000}, 2: {"pos": Vector2(4096, 2496), "amount": 4000},
+        3: {"pos": Vector2(2400, 1600), "amount": 6000},
+        4: {"pos": Vector2(704, 1600), "amount": 5000}, 5: {"pos": Vector2(4096, 1600), "amount": 5000},
+        6: {"pos": Vector2(1600, 500), "amount": 6000}, 7: {"pos": Vector2(3200, 2700), "amount": 6000},
+        8: {"pos": Vector2(3800, 700), "amount": 7000}, 9: {"pos": Vector2(1000, 2500), "amount": 7000}
+    }
     rebuild_navigation()
     update_visibility()
 
@@ -68,13 +82,13 @@ func update_visibility() -> void:
                 if entity.owner != owner or entity.hp <= 0:
                     continue
                 var center: Vector2 = entity.pos
-                for x in range(maxi(0, int(center.x / CELL) - 11), mini(50, int(center.x / CELL) + 12)):
-                    for y in range(maxi(0, int(center.y / CELL) - 11), mini(30, int(center.y / CELL) + 12)):
+                for x in range(maxi(0, int(center.x / CELL) - 11), mini(GRID.x, int(center.x / CELL) + 12)):
+                    for y in range(maxi(0, int(center.y / CELL) - 11), mini(GRID.y, int(center.y / CELL) + 12)):
                         if center.distance_to(Vector2(x * CELL + 16, y * CELL + 16)) <= 340:
-                            cells[y * 50 + x] = 1
+                            cells[y * GRID.x + x] = 1
         visible[owner] = cells
         var known: PackedByteArray = explored[owner]
-        for i in range(1500):
+        for i in range(GRID_CELLS):
             if cells[i] == 1:
                 known[i] = 1
         explored[owner] = known
@@ -82,8 +96,8 @@ func update_visibility() -> void:
 func can_see(owner: int, pos: Vector2) -> bool:
     if owner == 0:
         return true
-    var cell := Vector2i((pos / CELL).floor()).clamp(Vector2i.ZERO, Vector2i(49, 29))
-    return visible.has(owner) and visible[owner][cell.y * 50 + cell.x] == 1
+    var cell := Vector2i((pos / CELL).floor()).clamp(Vector2i.ZERO, Vector2i(GRID.x - 1, GRID.y - 1))
+    return visible.has(owner) and visible[owner][cell.y * GRID.x + cell.x] == 1
 
 func allocate() -> int:
     var result := next_id
@@ -328,11 +342,30 @@ func move_towards(u: Dictionary, destination: Vector2, stop_distance: float = 4.
         return
     var waypoint: Vector2 = u.path[0]
     var next: Vector2 = (u.pos as Vector2).move_toward(waypoint, UNIT_TYPES[u.type].speed / TICK)
-    if position_free(next, UNIT_TYPES[u.type].radius):
+    if _unit_blocks(u, next) and position_free(next, UNIT_TYPES[u.type].radius):
+        # Oncoming traffic: steer to our right so opposing flows form lanes.
+        var heading: Vector2 = (waypoint - (u.pos as Vector2)).normalized()
+        var lane: Vector2 = (u.pos as Vector2) + heading.rotated(PI / 4.0) * (UNIT_TYPES[u.type].speed / TICK)
+        if position_free(lane, UNIT_TYPES[u.type].radius):
+            u.pos = lane
+        else:
+            u.path.pop_front()
+    elif position_free(next, UNIT_TYPES[u.type].radius):
         u.pos = next
     else:
-        u.path = []
-    if next.distance_to(waypoint) < 1.0 and not u.path.is_empty():
+        # Blocked (usually a corner clip or an oncoming unit): try both
+        # sidesteps, then give up on the clipped waypoint before repathing.
+        var heading: Vector2 = (waypoint - (u.pos as Vector2)).normalized()
+        var step_length: float = UNIT_TYPES[u.type].speed / TICK
+        var sidestep_right: Vector2 = (u.pos as Vector2) + heading.rotated(PI / 4.0) * step_length
+        var sidestep_left: Vector2 = (u.pos as Vector2) + heading.rotated(-PI / 4.0) * step_length
+        if position_free(sidestep_right, UNIT_TYPES[u.type].radius):
+            u.pos = sidestep_right
+        elif position_free(sidestep_left, UNIT_TYPES[u.type].radius):
+            u.pos = sidestep_left
+        else:
+            u.path.pop_front()
+    if next.distance_to(waypoint) < maxf(2.0, UNIT_TYPES[u.type].radius * 0.4) and not u.path.is_empty():
         u.path.pop_front()
 
 func _closest_enemy(u: Dictionary) -> Array:
@@ -397,7 +430,7 @@ func _gather(u: Dictionary) -> void:
         move_towards(u, ore.pos, 38)
     else:
         u.work += 1
-        if u.work >= 4:
+        if u.work >= 20:
             var amount := mini(10, int(ore.amount))
             ore.amount -= amount
             u.cargo += amount
@@ -518,6 +551,16 @@ func _spawn_position(b: Dictionary) -> Vector2:
                 return p
     return Vector2.ZERO
 
+# Does the proposed position collide with another unit's body?
+func _unit_blocks(u: Dictionary, next: Vector2) -> bool:
+    for other: Dictionary in units.values():
+        if other == u or other.hp <= 0:
+            continue
+        var clearance: float = UNIT_TYPES[u.type].radius + UNIT_TYPES[other.type].radius - 2.0
+        if (other.pos as Vector2).distance_to(next) < clearance:
+            return true
+    return false
+
 func _separate_units() -> void:
     var ids: Array = units.keys()
     ids.sort()
@@ -529,51 +572,117 @@ func _separate_units() -> void:
                 var delta: Vector2 = b.pos - a.pos
                 var minimum: float = UNIT_TYPES[a.type].radius + UNIT_TYPES[b.type].radius + 1
                 var distance := delta.length()
-                if distance >= minimum:
+                # Touching units let the move sidesteps form lanes; separation
+                # only resolves deeper overlaps so it cannot fight the path.
+                if distance >= minimum - 1.0:
                     continue
                 var normal := Vector2.RIGHT if distance < 0.001 else delta / distance
                 var amount := (minimum - distance) / 2.0
-                var pa: Vector2 = a.pos - normal * amount
-                var pb: Vector2 = b.pos + normal * amount
+                # Slide tangentially as well so head-on units circle around each
+                # other instead of pushing straight back and stalling.
+                var tangent := normal.rotated(PI / 2.0)
+                var slide := amount * 0.6
+                var pa: Vector2 = a.pos - normal * amount + tangent * slide
+                var pb: Vector2 = b.pos + normal * amount + tangent * slide
                 if position_free(pa, UNIT_TYPES[a.type].radius):
                     a.pos = pa
                 if position_free(pb, UNIT_TYPES[b.type].radius):
                     b.pos = pb
 
 func _ai_step() -> void:
-    var barracks := -1
     var base := -1
     var refinery := -1
+    var barracks := -1
+    var bunker := -1
     for id: int in buildings:
-        if buildings[id].owner == 2:
-            if buildings[id].type == "barracks":
-                barracks = id
-            elif buildings[id].type == "base":
-                base = id
-            elif buildings[id].type == "refinery":
-                refinery = id
-    # Economy first: the AI needs a refinery so miners can deliver credits.
+        if buildings[id].owner != 2:
+            continue
+        if buildings[id].type == "base":
+            base = id
+        elif buildings[id].type == "refinery":
+            refinery = id
+        elif buildings[id].type == "barracks":
+            barracks = id
+        elif buildings[id].type == "bunker":
+            bunker = id
+    var miners := 0
+    var soldiers: Array = []
+    for id: int in units:
+        var u: Dictionary = units[id]
+        if u.owner != 2:
+            continue
+        if u.type == "harvester":
+            miners += 1
+        elif u.type == "soldier" and u.order == "idle":
+            soldiers.append(id)
+    # Economy first: refinery, miners, then army production and a bunker.
     if refinery < 0 and base >= 0:
         for offset: Vector2 in [Vector2(192, 0), Vector2(0, -192), Vector2(192, -160)]:
             if command(2, {"action": "build", "type": "refinery", "pos": buildings[base].pos + offset}).is_empty():
                 break
+    if refinery >= 0 and miners < 5 and buildings[refinery].queue.size() < 2:
+        command(2, {"action": "produce", "building": refinery, "type": "harvester"})
     if barracks < 0 and refinery >= 0:
         for offset: Vector2 in [Vector2(-192, 0), Vector2(0, -192), Vector2(-192, -160)]:
             if command(2, {"action": "build", "type": "barracks", "pos": buildings[refinery].pos + offset}).is_empty():
                 break
     if barracks >= 0 and buildings[barracks].queue.size() < 2:
         command(2, {"action": "produce", "building": barracks, "type": "soldier"})
-    for id: int in units:
-        var u: Dictionary = units[id]
-        if u.owner != 2 or u.order != "idle":
+    if bunker < 0 and base >= 0 and int(money[2]) > 1200:
+        for offset: Vector2 in [Vector2(0, 192), Vector2(-192, 96), Vector2(192, 96)]:
+            if command(2, {"action": "build", "type": "bunker", "pos": buildings[base].pos + offset}).is_empty():
+                break
+    # Defense overrides attack plans: intercept enemies near friendly buildings.
+    var threat := _ai_threat()
+    if not threat.is_empty():
+        var defenders: Array = soldiers.slice(0, mini(6, soldiers.size()))
+        if not defenders.is_empty():
+            command(2, {"action": "attack", "units": defenders, "kind": "unit", "target": int(threat.id)})
+            return
+    # Squad tactics: stage near home until strong enough, then hunt the
+    # nearest enemy building instead of walking a queue into the enemy base.
+    if soldiers.size() >= 6:
+        var target := _ai_attack_target()
+        if target >= 0:
+            command(2, {"action": "attack_move", "units": soldiers, "pos": buildings[target].pos})
+    elif not soldiers.is_empty() and base >= 0:
+        var staging: Vector2 = buildings[base].pos + Vector2(-192, 0)
+        command(2, {"action": "attack_move", "units": soldiers, "pos": staging})
+
+# Nearest enemy unit inside AI territory (near any friendly building).
+func _ai_threat() -> Dictionary:
+    var best: Dictionary = {}
+    var best_distance := 600.0
+    for bid: int in buildings:
+        if buildings[bid].owner != 2:
             continue
-        if u.type == "harvester":
-            command(2, {"action": "gather", "units": [id], "target": 2})
-        elif frame > 1200:
-            for bid: int in buildings:
-                if buildings[bid].owner == 1 and buildings[bid].type == "base":
-                    command(2, {"action": "attack", "units": [id], "kind": "building", "target": bid})
-                    break
+        for id: int in units:
+            var u: Dictionary = units[id]
+            if u.owner == 1 and u.hp > 0:
+                var distance: float = (u.pos as Vector2).distance_to(buildings[bid].pos)
+                if distance < best_distance:
+                    best_distance = distance
+                    best = {"id": id}
+    return best
+
+# Enemy building closest to the AI's own base.
+func _ai_attack_target() -> int:
+    var origin: Vector2 = WORLD / 2.0
+    for b: Dictionary in buildings.values():
+        if b.owner == 2 and b.type == "base":
+            origin = b.pos
+            break
+    var best := -1
+    var best_distance := INF
+    for id: int in buildings:
+        var b: Dictionary = buildings[id]
+        if b.owner != 1:
+            continue
+        var distance: float = (b.pos as Vector2).distance_to(origin)
+        if distance < best_distance:
+            best_distance = distance
+            best = id
+    return best
 
 func snapshot() -> Dictionary:
     return {"version": VERSION, "match": match_id, "frame": frame, "units": units.duplicate(true), "buildings": buildings.duplicate(true),

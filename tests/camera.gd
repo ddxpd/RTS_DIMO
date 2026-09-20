@@ -19,7 +19,8 @@ func run() -> void:
 
     # 1) Dynamic zoom floor keeps the world larger than the viewport on both axes.
     var min_zoom: float = game._min_zoom()
-    var fit_zoom := maxf(size.x / 1600.0, size.y / 960.0)
+    var world: Vector2 = game.Simulation.WORLD
+    var fit_zoom := maxf(size.x / world.x, size.y / world.y)
     if min_zoom <= fit_zoom:
         failures.append("zoom floor lets the world fit the viewport")
     if game.camera.zoom.x < min_zoom - 0.001:
@@ -42,7 +43,7 @@ func run() -> void:
     var map_center := map.get_center()
     var cases := {
         "left": [Vector2(map.position.x + 5, map_center.y), Vector2(-1, 0)],
-        "right": [Vector2(map.end.x - 5, map_center.y), Vector2(1, 0)],
+        "right": [Vector2(size.x - 10, map_center.y), Vector2(1, 0)],
         "up": [Vector2(map_center.x, 10), Vector2(0, -1)],
         "down": [Vector2(map_center.x, size.y - 10), Vector2(0, 1)]
     }
@@ -55,13 +56,14 @@ func run() -> void:
         if moved.dot(expected) <= 0.0:
             failures.append("edge scroll failed: " + direction_name)
 
-    # 3b) The old in-map edge strips no longer trigger vertical scrolling.
-    for dead_y: float in [60.0, map.end.y - 8.0]:
+    # 3b) The old in-map edge strips no longer trigger scrolling.
+    var dead_positions := [Vector2(map_center.x, 60.0), Vector2(map_center.x, map.end.y - 8.0), Vector2(map.end.x - 8.0, map_center.y)]
+    for dead_pos: Vector2 in dead_positions:
         game.camera.position = Vector2(800, 480)
-        mouse_state["pos"] = Vector2(map_center.x, dead_y)
+        mouse_state["pos"] = dead_pos
         game.camera_controller.update(1.0)
         if game.camera.position != Vector2(800, 480):
-            failures.append("old map strip still scrolls at y=" + str(dead_y))
+            failures.append("old map strip still scrolls at " + str(dead_pos))
 
     # 4) The camera clamps at world borders instead of escaping them.
     game.camera.position = Vector2(100, 100)
@@ -77,7 +79,7 @@ func run() -> void:
     var pinned: float = game.camera.position.x
     if absf(pinned - 480.0) > 1.0:
         failures.append("camera did not pin at the left border")
-    mouse_state["pos"] = Vector2(1650, 540)
+    mouse_state["pos"] = Vector2(size.x - 10, 540)
     game.camera_controller.update(1.0)
     if game.camera.position.x <= pinned + 1.0:
         failures.append("camera stayed stuck at the border after reversing")
