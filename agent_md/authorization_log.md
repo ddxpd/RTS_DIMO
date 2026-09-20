@@ -26,3 +26,4 @@
 - 2026-09-20 | git push origin HEAD~1:main（方案 B） | 网络推送 | 用户明确选择排除 EXE：仅推源码与文档，50 个提交 6 秒完成，零 LFS 上传 | 是
 - 2026-09-20 | 误推修复：force-with-lease 回退远端到 5e48a8c 并 rebase 文档提交 | 远端历史修正 | 文档提交误将 EXE 提交作为父级带入远端；按方案 B 意图回退，EXE 移至 local/exe-build 本地分支 | 是
 - 2026-09-20 | git branch -D backup/pre-exe-rewrite + reflog expire + lfs prune + gc | 历史清理（不可逆） | 用户确认方案 A：.git 从 2,506MB 降至 110MB，删除 24 个旧 EXE LFS 对象，保留最新 EXE | 是
+- 2026-09-20 | git push origin main（用户明确要求"这次包含exe"） | 网络推送+大文件 | 推送 2 个提交：源码改动 + 当前 EXE（新 LFS 对象 109MB，3.1MB/s 上传完成）；远端 c537c5e→5b6c4c7 | 是（用户指令已含大文件确认）
