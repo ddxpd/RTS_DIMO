@@ -28,3 +28,4 @@
 - 2026-09-20 | git branch -D backup/pre-exe-rewrite + reflog expire + lfs prune + gc | 历史清理（不可逆） | 用户确认方案 A：.git 从 2,506MB 降至 110MB，删除 24 个旧 EXE LFS 对象，保留最新 EXE | 是
 - 2026-09-20 | git push origin main（用户明确要求"这次包含exe"） | 网络推送+大文件 | 推送 2 个提交：源码改动 + 当前 EXE（新 LFS 对象 109MB，3.1MB/s 上传完成）；远端 c537c5e→5b6c4c7 | 是（用户指令已含大文件确认）
 - 2026-09-20 | Stop-Process 结束旧版 IronFront.exe (PID 140420) | 进程终止 | 旧游戏进程锁定 EXE 导致导出静默失败 | 是
+- 2026-09-20 | 规则更新：无用户主动要求一律不推送（也不主动询问/诱导推送）；用户会自行发起 | 用户指示 | 修订 GitHub upload rule | —
