@@ -454,3 +454,15 @@
 - features 新增 4 组用例：双击同类全选、4 单 2+2 分布、混编 Tab 切换（ATTACK↔GATHER）、编队卡显示与点击召回
 - 实机六项全过：2 建筑全选 / [2,2] 队列 / "2 x BARRACKS" 标签 / "1: SOLDIER" 卡 / GROUP 名册 / Tab 切换
 - 回归 5 套全过；导出 EXE（00:53:26）
+
+## 2026-09-21：多建筑全高亮 + 逐建筑 Tab 详情页
+
+### 改进
+- 双击同类全选后，_draw 高亮条件由 selected_building==id 改为 selected_buildings.has(id) or selected_building==id——全部已选建筑同时显示黄框/集结点/地堡射程
+- 多建筑选择时 Tab 切换 building_tab_index：状态栏显示 "2 x BARRACKS [i/n]"，功能区、生产进度条、队列文本、取消按钮全部跟随当前 Tab 页建筑；取消精确作用于 Tab 页建筑
+- 单建筑/单位选择行为不变（单位混编 Tab 仍切兵种页）
+
+### 验证
+- features 回归：多选后首页显示第一建筑（空队列）、Tab 后显示第二建筑（SOLDIER 2%）、取消作用于 Tab 页建筑
+- 实机：双击两兵营均选中，Tab [1/2]→[2/2]，进度条 空→可见，队列 QUEUE EMPTY→QUEUE(1/5) Now SOLDIER 2%
+- 回归 5 套全过；导出 EXE（01:01:25）

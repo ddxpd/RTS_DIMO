@@ -25,6 +25,7 @@ var selected_buildings: Array[int] = []
 var last_click_building := -1
 var last_click_building_time := 0.0
 var action_type_index := 0
+var building_tab_index := 0
 var group_cards: Array[Button] = []
 var selection_start := Vector2.ZERO
 var selection_current := Vector2.ZERO
@@ -695,10 +696,14 @@ func _unhandled_input(event: InputEvent) -> void:
         elif active and not menu_visible and event.keycode >= KEY_1 and event.keycode <= KEY_9:
             _control_group_key(int(event.keycode) - int(KEY_1) + 1, event.ctrl_pressed, event.shift_pressed)
         elif active and not menu_visible and event.keycode == KEY_TAB:
-            var types: Array = _selected_unit_types()
-            if types.size() > 1:
-                action_type_index = (action_type_index + 1) % types.size()
-                _notify("Actions: %s" % str(types[action_type_index]).to_upper())
+            if selected_buildings.size() > 1:
+                building_tab_index = (building_tab_index + 1) % selected_buildings.size()
+                _notify("Building %d / %d" % [building_tab_index + 1, selected_buildings.size()])
+            else:
+                var types: Array = _selected_unit_types()
+                if types.size() > 1:
+                    action_type_index = (action_type_index + 1) % types.size()
+                    _notify("Actions: %s" % str(types[action_type_index]).to_upper())
     if not active or menu_visible:
         return
     if event is InputEventMouseButton:
@@ -1108,7 +1113,10 @@ func _produce(kind: String) -> void:
     _play_tone(520.0, 0.08, 0.12, 100.0)
 
 func _cancel_job() -> void:
-    issue({"action": "cancel_production", "building": selected_building})
+    var target := selected_building
+    if selected_buildings.size() > 1:
+        target = selected_buildings[building_tab_index % selected_buildings.size()]
+    issue({"action": "cancel_production", "building": target})
 
 func _stop() -> void:
     issue({"action": "stop", "units": selected_units.duplicate()})
@@ -1174,33 +1182,15 @@ func _refresh_ui() -> void:
         else:
             action_buttons[2].text = "GATHER (RMB)"
         action_buttons[2].disabled = false
-    elif selected_buildings.size() > 1:
-        var first: Dictionary = sim.buildings.get(selected_building, {})
-        if first.is_empty() and not selected_buildings.is_empty():
-            first = sim.buildings[selected_buildings[0]]
-        selection_label.text = "BUILDINGS   %d x %s   |   Right-click: rally point" % [selected_buildings.size(), str(first.get("type", "")).to_upper()]
-        var multi_labels: Dictionary = {}
-        if first.type == "barracks":
-            active_actions = 5
-            multi_labels = {1: "SOLDIER ($100)", 4: "CANCEL (Refund)"}
-        elif first.type == "refinery":
-            active_actions = 5
-            multi_labels = {1: "MINER ($200)", 4: "CANCEL (Refund)"}
-        for i in range(action_buttons.size()):
-            if multi_labels.has(i):
-                action_buttons[i].text     = str(multi_labels[i])
-                action_buttons[i].disabled = false
-            else:
-                action_buttons[i].text     = "—"
-                action_buttons[i].disabled = true
-        var total_jobs := 0
-        for id: int in selected_buildings:
-            total_jobs += sim.buildings.get(id, {}).get("queue", []).size()
-        production_queue_label.text = "TOTAL QUEUE: %d" % total_jobs
     elif sim.buildings.has(selected_building):
         var b: Dictionary = sim.buildings[selected_building]
+        var tab_prefix := ""
+        if selected_buildings.size() > 1:
+            building_tab_index = building_tab_index % selected_buildings.size()
+            b = sim.buildings[selected_buildings[building_tab_index]]
+            tab_prefix = "%d x %s  [%d/%d]   " % [selected_buildings.size(), str(b.type).to_upper(), building_tab_index + 1, selected_buildings.size()]
         var rally_hint := "   |   Right-click: rally point" if b.type in ["barracks", "refinery"] else ""
-        selection_label.text = "BUILDING   %s   |   HP %d / %d%s" % [str(b.type).to_upper(), b.hp, Simulation.BUILD_TYPES[b.type].hp, rally_hint]
+        selection_label.text = "BUILDING   %s%s   |   HP %d / %d%s" % [tab_prefix, str(b.type).to_upper(), b.hp, Simulation.BUILD_TYPES[b.type].hp, rally_hint]
         # Only the building's own actions: production on its producer,
         # construction orders on the base; nothing unrelated leaks in.
         var labels: Dictionary = {}
@@ -1310,7 +1300,7 @@ func _draw() -> void:
         _bar(rect.position - Vector2(0, 8), rect.size.x, float(b.hp) / Simulation.BUILD_TYPES[b.type].hp, Color("#75c46e"))
         if b.remaining > 0:
             _bar(rect.position + Vector2(0, rect.size.y + 4), rect.size.x, 1.0 - float(b.remaining) / Simulation.BUILD_TYPES[b.type].time, Color("#eac75b"))
-        if selected_building == id:
+        if selected_buildings.has(id) or selected_building == id:
             draw_rect(rect.grow(3), Color("#dfe995"), false, 2)
             if b.type == "bunker":
                 draw_arc(b.pos, Simulation.BUILD_TYPES.bunker.range, 0, TAU, 48, Color(0.55, 0.85, 1.0, 0.35), 1)

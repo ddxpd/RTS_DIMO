@@ -120,6 +120,23 @@ func run() -> void:
             queue_sizes.append(game.sim.buildings[id].queue.size())
         if queue_sizes != [2, 2]:
             failures.append("production not distributed: %s" % str(queue_sizes))
+        # Tab cycles the per-building detail page (progress bar, queue, cancel).
+        game.sim.buildings[first_barracks].queue.clear()
+        game.sim.buildings[second_barracks].queue.clear()
+        game.sim.command(1, {"action": "produce", "building": second_barracks, "type": "soldier"})
+        game._refresh_ui()
+        if not game.production_queue_label.text.contains("QUEUE EMPTY"):
+            failures.append("multi-building detail should start at the first building")
+        var building_tab := InputEventKey.new()
+        building_tab.keycode = KEY_TAB
+        building_tab.pressed = true
+        game._unhandled_input(building_tab)
+        game._refresh_ui()
+        if not game.production_queue_label.text.contains("SOLDIER"):
+            failures.append("Tab did not switch to the next building detail")
+        game._cancel_job()
+        if not game.sim.buildings[second_barracks].queue.is_empty():
+            failures.append("Cancel did not target the tabbed building")
     # Mixed-type selections cycle their action panel with Tab.
     game._clear_selection()
     game.selected_units.append(3)
