@@ -21,6 +21,11 @@ var selected_building := -1
 var selection_dragging := false
 var left_button_held := false
 var last_mouse_event_msec := 0
+var selected_buildings: Array[int] = []
+var last_click_building := -1
+var last_click_building_time := 0.0
+var action_type_index := 0
+var group_cards: Array[Button] = []
 var selection_start := Vector2.ZERO
 var selection_current := Vector2.ZERO
 var middle_dragging := false
@@ -196,6 +201,21 @@ func _create_ui() -> void:
     bottom.offset_bottom = -42
     bottom.offset_right = 0
     root.add_child(bottom)
+    # SC2-style control group cards floating above the command bar.
+    var groups_row := HBoxContainer.new()
+    groups_row.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+    groups_row.offset_top = -212
+    groups_row.offset_bottom = -178
+    groups_row.offset_left = 12
+    groups_row.add_theme_constant_override("separation", 6)
+    root.add_child(groups_row)
+    for n in range(9):
+        var card := Button.new()
+        card.custom_minimum_size = Vector2(96, 34)
+        card.text = "%d —" % (n + 1)
+        card.pressed.connect(_control_group_key.bind(n + 1, false, false))
+        groups_row.add_child(card)
+        group_cards.append(card)
     var bottom_row := HBoxContainer.new()
     bottom_row.add_theme_constant_override("separation", 12)
     bottom.add_child(bottom_row)
@@ -343,6 +363,7 @@ func _button(parent: Node, caption: String, callback: Callable) -> Button:
 func _clear_selection() -> void:
     selected_units.clear()
     selected_building = -1
+    selected_buildings.clear()
     selection_dragging = false
 
 # Keep the world strictly larger than the viewport on both axes so the
@@ -619,6 +640,15 @@ func _clean_selection() -> void:
         if sim.units.has(id) and sim.units[id].owner == local_slot:
             valid.append(id)
     selected_units = valid
+    var valid_buildings: Array[int] = []
+    for id: int in selected_buildings:
+        if sim.buildings.has(id) and sim.buildings[id].owner == local_slot:
+            valid_buildings.append(id)
+    selected_buildings = valid_buildings
+    if selected_buildings.is_empty():
+        selected_building = -1
+    elif not selected_buildings.has(selected_building):
+        selected_building = selected_buildings[0]
     if not sim.buildings.has(selected_building) or sim.buildings[selected_building].owner != local_slot:
         selected_building = -1
 
@@ -664,6 +694,11 @@ func _unhandled_input(event: InputEvent) -> void:
             _stop()
         elif active and not menu_visible and event.keycode >= KEY_1 and event.keycode <= KEY_9:
             _control_group_key(int(event.keycode) - int(KEY_1) + 1, event.ctrl_pressed, event.shift_pressed)
+        elif active and not menu_visible and event.keycode == KEY_TAB:
+            var types: Array = _selected_unit_types()
+            if types.size() > 1:
+                action_type_index = (action_type_index + 1) % types.size()
+                _notify("Actions: %s" % str(types[action_type_index]).to_upper())
     if not active or menu_visible:
         return
     if event is InputEventMouseButton:
@@ -762,8 +797,51 @@ func _left_click(pos: Vector2) -> void:
             return
     for id: int in sim.buildings:
         if sim.buildings[id].owner == local_slot and sim.footprint(sim.buildings[id]).has_point(pos):
-            selected_building = id
+            var now := Time.get_ticks_msec() / 1000.0
+            if id == last_click_building and now - last_click_building_time <= 0.4:
+                _select_same_type_buildings_on_screen(str(sim.buildings[id].type))
+                last_click_building = -1
+            else:
+                selected_building = id
+                selected_buildings.clear()
+                selected_buildings.append(id)
+                last_click_building = id
+            last_click_building_time = now
             return
+
+# Distinct unit kinds in the current selection, in stable order.
+func _selected_unit_types() -> Array:
+    var types: Array = []
+    for id: int in selected_units:
+        if sim.units.has(id) and not types.has(sim.units[id].type):
+            types.append(sim.units[id].type)
+    return types
+
+# Compact roster text such as "6 SOLDIER + 2 HARVESTER".
+func _selection_roster() -> String:
+    var counts := {}
+    for id: int in selected_units:
+        if sim.units.has(id):
+            var kind := str(sim.units[id].type).to_upper()
+            counts[kind] = int(counts.get(kind, 0)) + 1
+    var parts: Array = []
+    for kind: String in counts:
+        parts.append("%d %s" % [int(counts[kind]), kind])
+    return " + ".join(parts)
+
+# Double-click: grab every on-screen building of the same kind as the clicked one.
+func _select_same_type_buildings_on_screen(kind: String) -> void:
+    selected_units.clear()
+    selected_buildings.clear()
+    var half := get_viewport().get_visible_rect().size / (2.0 * camera.zoom)
+    var view := Rect2(camera.position - half, half * 2.0)
+    for id: int in sim.buildings:
+        var b: Dictionary = sim.buildings[id]
+        if b.owner == local_slot and b.type == kind and view.has_point(b.pos):
+            selected_buildings.append(id)
+    if not selected_buildings.is_empty():
+        selected_building = selected_buildings[0]
+        _notify("All %ss on screen!" % kind)
 
 # Double-click: grab every on-screen unit of the same kind as the clicked one.
 func _select_same_type_on_screen(kind: String) -> void:
@@ -819,8 +897,11 @@ func _control_group_key(group: int, ctrl: bool, shift: bool) -> void:
         var members: Array[int] = []
         for id: int in selected_units:
             members.append(id)
-        control_groups[group] = {"units": members, "building": selected_building}
-        var label := "%d unit(s)" % members.size() if not members.is_empty() else "building"
+        var building_list: Array[int] = selected_buildings.duplicate()
+        if building_list.is_empty() and selected_building >= 0:
+            building_list.append(selected_building)
+        control_groups[group] = {"units": members, "building": selected_building, "buildings": building_list}
+        var label := "%d unit(s)" % members.size() if not members.is_empty() else "%d building(s)" % selected_buildings.size()
         _notify("Group %d assigned: %s." % [group, label])
         return
     if shift:
@@ -858,10 +939,17 @@ func _control_group_key(group: int, ctrl: bool, shift: bool) -> void:
     if not group_units.is_empty():
         selected_units = group_units
         selected_building = -1
+        selected_buildings.clear()
         _respond(group_units[0], "Group %d reporting." % group)
     else:
+        var group_buildings: Array[int] = []
+        for value: Variant in state.get("buildings", []):
+            var bid := int(value)
+            if sim.buildings.has(bid) and sim.buildings[bid].owner == local_slot and not group_buildings.has(bid):
+                group_buildings.append(bid)
         selected_units.clear()
-        selected_building = group_building
+        selected_buildings = group_buildings
+        selected_building = group_buildings[0] if not group_buildings.is_empty() else -1
         _notify("Group %d building ready." % group)
 
 # Guest-side smoothing: derive per-unit velocity from consecutive snapshots.
@@ -892,9 +980,13 @@ func _right_click(pos: Vector2) -> void:
     if not Rect2(Vector2.ZERO, Simulation.WORLD).has_point(pos):
         return
     if selected_units.is_empty():
-        if sim.buildings.has(selected_building):
-            issue({"action": "set_rally", "building": selected_building, "pos": pos})
-            _notify("Rally point set.")
+        var rally_targets: Array[int] = selected_buildings.duplicate()
+        if rally_targets.is_empty() and selected_building >= 0:
+            rally_targets.append(selected_building)
+        if not rally_targets.is_empty():
+            for id: int in rally_targets:
+                issue({"action": "set_rally", "building": id, "pos": pos})
+            _notify("Rally points set.")
             clicks.append({"pos": pos, "life": 0.55, "action": "rally"})
         return
     var order := {"action": "move", "units": selected_units.duplicate(), "pos": pos}
@@ -1001,7 +1093,18 @@ func _place_building(pos: Vector2) -> void:
     build_mode = ""
 
 func _produce(kind: String) -> void:
-    issue({"action": "produce", "building": selected_building, "type": kind})
+    # With several compatible producers selected, spread jobs across them by
+    # always choosing the completed building with the shortest queue.
+    var best := selected_building
+    var best_queue := 99
+    for id: int in selected_buildings:
+        var b: Dictionary = sim.buildings.get(id, {})
+        if b.is_empty() or int(b.remaining) > 0:
+            continue
+        if b.queue.size() < best_queue:
+            best_queue = b.queue.size()
+            best = id
+    issue({"action": "produce", "building": best, "type": kind})
     _play_tone(520.0, 0.08, 0.12, 100.0)
 
 func _cancel_job() -> void:
@@ -1050,19 +1153,50 @@ func _refresh_ui() -> void:
     production_queue_label.text = ""
     if not selected_units.is_empty():
         active_actions = 3
+        var types: Array = _selected_unit_types()
+        if action_type_index >= types.size():
+            action_type_index = 0
+        var current_type: String = types[action_type_index]
         var selected: Dictionary = sim.units[selected_units[0]]
-        var kind := str(selected.type).to_upper()
-        var stats: Dictionary = Simulation.UNIT_TYPES[selected.type]
-        selection_label.text = "UNIT STATUS   %s   |   HP %d / %d   |   ORDER: %s" % [kind, selected.hp, stats.hp, str(selected.order).to_upper()]
+        var stats: Dictionary = Simulation.UNIT_TYPES[current_type]
+        if selected_units.size() == 1:
+            selection_label.text = "UNIT STATUS   %s   |   HP %d / %d   |   ORDER: %s" % [current_type.to_upper(), selected.hp, stats.hp, str(selected.order).to_upper()]
+        else:
+            selection_label.text = "GROUP   %s" % _selection_roster()
+        if types.size() > 1:
+            selection_label.text += "   |   TAB: %s (%d/%d)" % [current_type.to_upper(), action_type_index + 1, types.size()]
         action_buttons[0].text = "STOP (S)"
         action_buttons[0].disabled = false
         action_buttons[1].text = "MOVE (RMB)"
         action_buttons[1].disabled = false
-        if selected.type == "soldier":
+        if current_type == "soldier":
             action_buttons[2].text = "ATTACK (A) ON" if attack_mode else "ATTACK (A)"
         else:
             action_buttons[2].text = "GATHER (RMB)"
         action_buttons[2].disabled = false
+    elif selected_buildings.size() > 1:
+        var first: Dictionary = sim.buildings.get(selected_building, {})
+        if first.is_empty() and not selected_buildings.is_empty():
+            first = sim.buildings[selected_buildings[0]]
+        selection_label.text = "BUILDINGS   %d x %s   |   Right-click: rally point" % [selected_buildings.size(), str(first.get("type", "")).to_upper()]
+        var multi_labels: Dictionary = {}
+        if first.type == "barracks":
+            active_actions = 5
+            multi_labels = {1: "SOLDIER ($100)", 4: "CANCEL (Refund)"}
+        elif first.type == "refinery":
+            active_actions = 5
+            multi_labels = {1: "MINER ($200)", 4: "CANCEL (Refund)"}
+        for i in range(action_buttons.size()):
+            if multi_labels.has(i):
+                action_buttons[i].text     = str(multi_labels[i])
+                action_buttons[i].disabled = false
+            else:
+                action_buttons[i].text     = "—"
+                action_buttons[i].disabled = true
+        var total_jobs := 0
+        for id: int in selected_buildings:
+            total_jobs += sim.buildings.get(id, {}).get("queue", []).size()
+        production_queue_label.text = "TOTAL QUEUE: %d" % total_jobs
     elif sim.buildings.has(selected_building):
         var b: Dictionary = sim.buildings[selected_building]
         var rally_hint := "   |   Right-click: rally point" if b.type in ["barracks", "refinery"] else ""
@@ -1117,6 +1251,22 @@ func _refresh_ui() -> void:
     if sim.winner > 0:
         result_label.text = "DRAW" if sim.winner == 3 else ("VICTORY" if sim.winner == local_slot else "DEFEAT")
         result_label.text += "  — Esc to restart / return"
+    for n: int in range(group_cards.size()):
+        var group_number := n + 1
+        if control_groups.has(group_number):
+            var group_state: Dictionary = control_groups[group_number]
+            var units_in_group: Array = group_state.get("units", [])
+            var buildings_in_group: Array = group_state.get("buildings", [])
+            var first_name := "—"
+            if not units_in_group.is_empty() and sim.units.has(int(units_in_group[0])):
+                first_name = str(sim.units[int(units_in_group[0])].type).to_upper()
+            elif not buildings_in_group.is_empty() and sim.buildings.has(int(buildings_in_group[0])):
+                first_name = str(sim.buildings[int(buildings_in_group[0])].type).to_upper()
+            group_cards[n].text = "%d: %s" % [group_number, first_name]
+            group_cards[n].modulate = Color.WHITE
+        else:
+            group_cards[n].text = "%d —" % group_number
+            group_cards[n].modulate = Color(1, 1, 1, 0.35)
     if sim.buildings.has(selected_building):
         var b: Dictionary = sim.buildings[selected_building]
         info_label.text = "%s\nHP %d / %d\n%s" % [str(b.type).to_upper(), b.hp, Simulation.BUILD_TYPES[b.type].hp, "Construction: %.1fs" % (float(b.remaining) / 20) if b.remaining > 0 else "Ready"]

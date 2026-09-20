@@ -98,6 +98,52 @@ func run() -> void:
     if not rallied:
         failures.append("produced harvester did not receive the rally move order")
 
+    # Building double-click selects all on-screen same-type buildings.
+    game.sim.reset(true)
+    game.sim.command(1, {"action": "build", "type": "barracks", "pos": Vector2(704, 320)})
+    var first_barracks: int = game.sim.next_id - 1
+    game.sim.buildings[first_barracks].remaining = 0
+    game.sim.command(1, {"action": "build", "type": "barracks", "pos": Vector2(900, 500)})
+    var second_barracks: int = game.sim.next_id - 1
+    game.sim.buildings[second_barracks].remaining = 0
+    game._clear_selection()
+    game._left_click(game.sim.buildings[first_barracks].pos)
+    game._left_click(game.sim.buildings[first_barracks].pos)
+    if game.selected_buildings.size() != 2:
+        failures.append("double-click did not select all same-type buildings")
+    else:
+        # Production orders spread across selected producers by shortest queue.
+        for i in range(4):
+            game._produce("soldier")
+        var queue_sizes := []
+        for id: int in game.selected_buildings:
+            queue_sizes.append(game.sim.buildings[id].queue.size())
+        if queue_sizes != [2, 2]:
+            failures.append("production not distributed: %s" % str(queue_sizes))
+    # Mixed-type selections cycle their action panel with Tab.
+    game._clear_selection()
+    game.selected_units.append(3)
+    var mixed_miner: int = game.sim.add_unit(1, "harvester", Vector2(700, 900))
+    game.selected_units.append(mixed_miner)
+    game._refresh_ui()
+    var attack_text: String = game.action_buttons[2].text
+    var tab_event := InputEventKey.new()
+    tab_event.keycode = KEY_TAB
+    tab_event.pressed = true
+    game._unhandled_input(tab_event)
+    game._refresh_ui()
+    if game.action_buttons[2].text == attack_text:
+        failures.append("Tab did not cycle the mixed-type action panel")
+    # Group cards show the number and the first unit name; clicking recalls.
+    game._control_group_key(5, true, false)
+    game._refresh_ui()
+    if not game.group_cards[4].text.contains("SOLDIER"):
+        failures.append("group card missing first unit name")
+    game._clear_selection()
+    game.group_cards[4].emit_signal("pressed")
+    if game.selected_units.size() != 2:
+        failures.append("group card click did not recall the group")
+
     # Bunker: placed directly like a barracks, constructed with progress, then auto-fires.
     game.sim.reset(true)
     var bunker_error: String = game.sim.command(1, {"action": "build", "type": "bunker", "pos": Vector2(256, 64)})
