@@ -245,3 +245,16 @@
 
 ### 验证
 - 回归 5 套全过；导出 EXE（00:54:19）
+
+## 2026-09-20：上传策略与历史清理
+
+### 新增规则（agent_md/AGENTS.md）
+- 大文件上传规则：推送包含 >10MB 大文件（EXE/PCK/LFS 对象）前，必须单独询问用户是否包含，并提供"排除大文件 / 改用 GitHub Releases"选项，等待明确批准
+
+### 历史清理
+- filter-branch 从 50 个未推送提交中剥离全部旧版 EXE（本地保留 backup/pre-exe-rewrite 备份分支）
+- 最新 EXE 以单一 LFS 对象重新提交（7da45af，仅本地）
+
+### 上传（方案 B）
+- 用户选择排除 EXE：git push origin HEAD~1:main，50 个提交 6 秒完成，零 LFS 流量
+- 远端 main：4f274c6 → 5e48a8c；本地保留 1 个未推送提交（EXE）
