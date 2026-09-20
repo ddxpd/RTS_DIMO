@@ -137,20 +137,28 @@ func run() -> void:
         game._cancel_job()
         if not game.sim.buildings[second_barracks].queue.is_empty():
             failures.append("Cancel did not target the tabbed building")
-    # Mixed-type selections cycle their action panel with Tab.
+    # Mixed selections show one SC2-style card: universal commands stay fixed
+    # while ATTACK and GATHER each own a slot, enabled per availability.
     game._clear_selection()
     game.selected_units.append(3)
     var mixed_miner: int = game.sim.add_unit(1, "harvester", Vector2(700, 900))
     game.selected_units.append(mixed_miner)
     game._refresh_ui()
-    var attack_text: String = game.action_buttons[2].text
-    var tab_event := InputEventKey.new()
-    tab_event.keycode = KEY_TAB
-    tab_event.pressed = true
-    game._unhandled_input(tab_event)
+    if game.action_buttons[2].disabled or game.action_buttons[3].disabled:
+        failures.append("mixed selection must show ATTACK and GATHER together")
+    game._clear_selection()
+    game.selected_units.append(3)
     game._refresh_ui()
-    if game.action_buttons[2].text == attack_text:
-        failures.append("Tab did not cycle the mixed-type action panel")
+    if not game.action_buttons[3].disabled:
+        failures.append("GATHER must be disabled without miners")
+    game._clear_selection()
+    game.selected_units.append(mixed_miner)
+    game._refresh_ui()
+    if not game.action_buttons[2].disabled:
+        failures.append("ATTACK must be disabled without soldiers")
+    game._clear_selection()
+    game.selected_units.append(3)
+    game.selected_units.append(mixed_miner)
     # Group cards show the number and the first unit name; clicking recalls.
     game._control_group_key(5, true, false)
     game._refresh_ui()

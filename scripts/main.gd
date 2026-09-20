@@ -24,7 +24,6 @@ var last_mouse_event_msec := 0
 var selected_buildings: Array[int] = []
 var last_click_building := -1
 var last_click_building_time := 0.0
-var action_type_index := 0
 var building_tab_index := 0
 var group_cards: Array[Button] = []
 var selection_start := Vector2.ZERO
@@ -699,11 +698,6 @@ func _unhandled_input(event: InputEvent) -> void:
             if selected_buildings.size() > 1:
                 building_tab_index = (building_tab_index + 1) % selected_buildings.size()
                 _notify("Building %d / %d" % [building_tab_index + 1, selected_buildings.size()])
-            else:
-                var types: Array = _selected_unit_types()
-                if types.size() > 1:
-                    action_type_index = (action_type_index + 1) % types.size()
-                    _notify("Actions: %s" % str(types[action_type_index]).to_upper())
     if not active or menu_visible:
         return
     if event is InputEventMouseButton:
@@ -813,14 +807,6 @@ func _left_click(pos: Vector2) -> void:
                 last_click_building = id
             last_click_building_time = now
             return
-
-# Distinct unit kinds in the current selection, in stable order.
-func _selected_unit_types() -> Array:
-    var types: Array = []
-    for id: int in selected_units:
-        if sim.units.has(id) and not types.has(sim.units[id].type):
-            types.append(sim.units[id].type)
-    return types
 
 # Compact roster text such as "6 SOLDIER + 2 HARVESTER".
 func _selection_roster() -> String:
@@ -1029,18 +1015,16 @@ func _begin_build(kind: String) -> void:
 # Bottom action bar: dispatch a clicked button to the matching unit or building command.
 func _action_clicked(index: int) -> void:
     if not selected_units.is_empty():
-        var kind: String = sim.units[selected_units[0]].type
         match index:
             0:
                 _stop()
             1:
                 _begin_pending("move")
             2:
-                if kind == "soldier":
-                    attack_mode = not attack_mode
-                    _notify("Attack mode %s. Left-click a target or ground." % ("ON" if attack_mode else "OFF"))
-                else:
-                    _begin_pending("gather")
+                attack_mode = not attack_mode
+                _notify("Attack mode %s. Left-click a target or ground." % ("ON" if attack_mode else "OFF"))
+            3:
+                _begin_pending("gather")
     elif sim.buildings.has(selected_building):
         var building: Dictionary = sim.buildings[selected_building]
         match index:
@@ -1160,28 +1144,30 @@ func _refresh_ui() -> void:
     production_bar.visible = false
     production_queue_label.text = ""
     if not selected_units.is_empty():
-        active_actions = 3
-        var types: Array = _selected_unit_types()
-        if action_type_index >= types.size():
-            action_type_index = 0
-        var current_type: String = types[action_type_index]
+        active_actions = 4
         var selected: Dictionary = sim.units[selected_units[0]]
-        var stats: Dictionary = Simulation.UNIT_TYPES[current_type]
         if selected_units.size() == 1:
-            selection_label.text = "UNIT STATUS   %s   |   HP %d / %d   |   ORDER: %s" % [current_type.to_upper(), selected.hp, stats.hp, str(selected.order).to_upper()]
+            var stats: Dictionary = Simulation.UNIT_TYPES[selected.type]
+            selection_label.text = "UNIT STATUS   %s   |   HP %d / %d   |   ORDER: %s" % [str(selected.type).to_upper(), selected.hp, stats.hp, str(selected.order).to_upper()]
         else:
             selection_label.text = "GROUP   %s" % _selection_roster()
-        if types.size() > 1:
-            selection_label.text += "   |   TAB: %s (%d/%d)" % [current_type.to_upper(), action_type_index + 1, types.size()]
-        action_buttons[0].text = "STOP (S)"
+        # SC2-style command card: universal commands stay in fixed slots and
+        # type-specific commands each get their own slot, all visible at once.
+        var has_soldier := false
+        var has_harvester := false
+        for id: int in selected_units:
+            if sim.units[id].type == "soldier":
+                has_soldier = true
+            elif sim.units[id].type == "harvester":
+                has_harvester = true
+        action_buttons[0].text     = "STOP (S)"
         action_buttons[0].disabled = false
-        action_buttons[1].text = "MOVE (RMB)"
+        action_buttons[1].text     = "MOVE (RMB)"
         action_buttons[1].disabled = false
-        if current_type == "soldier":
-            action_buttons[2].text = "ATTACK (A) ON" if attack_mode else "ATTACK (A)"
-        else:
-            action_buttons[2].text = "GATHER (RMB)"
-        action_buttons[2].disabled = false
+        action_buttons[2].text     = ("ATTACK (A) ON" if attack_mode else "ATTACK (A)") if has_soldier else "—"
+        action_buttons[2].disabled = not has_soldier
+        action_buttons[3].text     = "GATHER (RMB)" if has_harvester else "—"
+        action_buttons[3].disabled = not has_harvester
     elif sim.buildings.has(selected_building):
         var b: Dictionary = sim.buildings[selected_building]
         var tab_prefix := ""

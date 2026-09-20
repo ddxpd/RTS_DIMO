@@ -466,3 +466,16 @@
 - features 回归：多选后首页显示第一建筑（空队列）、Tab 后显示第二建筑（SOLDIER 2%）、取消作用于 Tab 页建筑
 - 实机：双击两兵营均选中，Tab [1/2]→[2/2]，进度条 空→可见，队列 QUEUE EMPTY→QUEUE(1/5) Now SOLDIER 2%
 - 回归 5 套全过；导出 EXE（01:01:25）
+
+## 2026-09-21：功能区改为 SC2 式同卡共存
+
+### 改进（用户选择"同卡共存"方案）
+- 旧交互：混编队伍按 Tab 整卡切换兵种功能页（STOP/MOVE/ATTACK ↔ STOP/MOVE/GATHER）
+- 新交互（SC2 命令卡式）：通用命令槽位固定——[0] STOP、[1] MOVE；兵种专属命令各占一槽——[2] ATTACK（含士兵时启用，含 ON 态）、[3] GATHER（含矿车时启用）；四键同屏、各自只对可执行兵种生效（模拟层按类型过滤），无需 Tab
+- 移除单位 Tab 分页与 action_type_index/_selected_unit_types；Tab 仅保留多建筑详情页切换
+- 命令派发固定：0=停止、1=移动待定、2=攻击模式、3=采集待定
+
+### 验证
+- features 回归改写：混编时 ATTACK+GATHER 同时启用；纯士兵 GATHER 禁用；纯矿车 ATTACK 禁用
+- 实机三态验证：混编四键全开 / 纯士兵 GATHER 禁 / 纯矿车 ATTACK 禁
+- 回归 5 套全过；导出 EXE（01:18:14）
