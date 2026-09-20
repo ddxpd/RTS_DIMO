@@ -108,7 +108,7 @@ func add_unit(owner: int, kind: String, pos: Vector2) -> int:
     var id := allocate()
     var stats: Dictionary = UNIT_TYPES[kind]
     units[id] = {"owner": owner, "type": kind, "pos": pos, "hp": stats.hp, "order": "idle", "target": Vector2.ZERO,
-        "attack_kind": "", "attack_id": -1, "ore": -1, "cargo": 0, "cooldown": 0, "work": 0, "path": [], "repath": 0, "flash": 0, "auto": true}
+        "attack_kind": "", "attack_id": -1, "ore": -1, "cargo": 0, "cooldown": 0, "work": 0, "path": [], "repath": 0, "flash": 0, "auto": true, "stuck": 0}
     return id
 
 func _add_building(owner: int, kind: String, pos: Vector2, complete: bool) -> int:
@@ -276,7 +276,14 @@ func command(owner: int, c: Dictionary) -> String:
         if action == "move":
             var index := accepted
             var offset := Vector2((index % 4) * 30, (index / 4) * 30) if requested.size() > 1 else Vector2.ZERO
-            u.target = (c.pos + offset).clamp(Vector2(18, 18), WORLD - Vector2(18, 18))
+            var destination: Vector2 = (c.pos + offset).clamp(Vector2(18, 18), WORLD - Vector2(18, 18))
+            # Formation offsets can land on terrain; slide them toward the
+            # clicked point until the destination is actually reachable.
+            for i in range(24):
+                if position_free(destination, UNIT_TYPES[u.type].radius):
+                    break
+                destination = destination.move_toward(u.pos, 8.0)
+            u.target = destination
         elif action == "attack":
             u.attack_kind = str(c.kind)
             u.attack_id = int(c.target)
@@ -339,6 +346,13 @@ func move_towards(u: Dictionary, destination: Vector2, stop_distance: float = 4.
             u.path.append(destination)
         u.repath = 20
     if u.path.is_empty():
+        # Final approach: same nav cell as the goal but the exact point is
+        # still away — walk straight to it while terrain allows, instead of
+        # freezing one cell short forever.
+        if (u.pos as Vector2).distance_to(destination) > stop_distance and position_free(destination, UNIT_TYPES[u.type].radius):
+            var direct: Vector2 = (u.pos as Vector2).move_toward(destination, UNIT_TYPES[u.type].speed / TICK)
+            if position_free(direct, UNIT_TYPES[u.type].radius):
+                u.pos = direct
         return
     var waypoint: Vector2 = u.path[0]
     var next: Vector2 = (u.pos as Vector2).move_toward(waypoint, UNIT_TYPES[u.type].speed / TICK)
@@ -353,17 +367,24 @@ func move_towards(u: Dictionary, destination: Vector2, stop_distance: float = 4.
     elif position_free(next, UNIT_TYPES[u.type].radius):
         u.pos = next
     else:
-        # Blocked (usually a corner clip or an oncoming unit): try both
-        # sidesteps, then give up on the clipped waypoint before repathing.
+        # Blocked (a corner clip or an oncoming unit): escalate sidesteps
+        # from diagonal to perpendicular before giving up on the waypoint.
         var heading: Vector2 = (waypoint - (u.pos as Vector2)).normalized()
         var step_length: float = UNIT_TYPES[u.type].speed / TICK
-        var sidestep_right: Vector2 = (u.pos as Vector2) + heading.rotated(PI / 4.0) * step_length
-        var sidestep_left: Vector2 = (u.pos as Vector2) + heading.rotated(-PI / 4.0) * step_length
-        if position_free(sidestep_right, UNIT_TYPES[u.type].radius):
-            u.pos = sidestep_right
-        elif position_free(sidestep_left, UNIT_TYPES[u.type].radius):
-            u.pos = sidestep_left
-        else:
+        var radius: float = UNIT_TYPES[u.type].radius
+        var sidesteps := [
+            (u.pos as Vector2) + heading.rotated(PI / 4.0) * step_length,
+            (u.pos as Vector2) + heading.rotated(-PI / 4.0) * step_length,
+            (u.pos as Vector2) + heading.rotated(PI / 2.0) * step_length,
+            (u.pos as Vector2) + heading.rotated(-PI / 2.0) * step_length
+        ]
+        var escaped := false
+        for sidestep: Vector2 in sidesteps:
+            if position_free(sidestep, radius):
+                u.pos = sidestep
+                escaped = true
+                break
+        if not escaped:
             u.path.pop_front()
     if next.distance_to(waypoint) < maxf(2.0, UNIT_TYPES[u.type].radius * 0.4) and not u.path.is_empty():
         u.path.pop_front()
@@ -483,6 +504,7 @@ func step() -> void:
             continue
         u.flash = maxi(0, int(u.flash) - 1)
         u.cooldown = maxi(0, int(u.cooldown) - 1)
+        var pos_before: Vector2 = u.pos
         if u.order == "move":
             move_towards(u, u.target)
             if (u.pos as Vector2).distance_to(u.target) < 5:
@@ -510,6 +532,15 @@ func step() -> void:
         elif u.type == "harvester" and bool(u.get("auto", true)) and frame % 10 == 0:
             # Idle automated miners keep seeking the nearest visible ore.
             _auto_mine(u)
+        # Escape hatch: a unit pressed into a corner by its group can stall
+        # forever; after ~2s without progress shove it to a nearby free spot.
+        if u.order in ["move", "attack_move", "gather"]:
+            if (u.pos as Vector2).distance_to(pos_before) < 0.005:
+                u.stuck = int(u.stuck) + 1
+            else:
+                u.stuck = 0
+            if int(u.stuck) >= 40:
+                _unstick(u)
     _separate_units()
     var removed_building := false
     for kind: String in ["unit", "building"]:
@@ -560,6 +591,20 @@ func _unit_blocks(u: Dictionary, next: Vector2) -> bool:
         if (other.pos as Vector2).distance_to(next) < clearance:
             return true
     return false
+
+# Shove a wedged unit to the closest free position within a small radius.
+func _unstick(u: Dictionary) -> void:
+    var radius: float = UNIT_TYPES[u.type].radius
+    for ring in range(1, 5):
+        for i in range(8):
+            var candidate: Vector2 = (u.pos as Vector2) + Vector2.from_angle(TAU * i / 8.0) * ring * 12.0
+            if position_free(candidate, radius):
+                u.pos = candidate
+                u.path = []
+                u.repath = 0
+                u.stuck = 0
+                return
+    u.stuck = 0
 
 func _separate_units() -> void:
     var ids: Array = units.keys()

@@ -112,6 +112,36 @@ func run() -> void:
             break
     check(west_arrived, "West miner crosses after head-on meeting")
     check(east_arrived, "East miner crosses after head-on meeting")
+    # A squad squeezed around a terrain corner must fully arrive (no stragglers).
+    s.reset()
+    s.units.clear()
+    var squad: Array = []
+    for i in range(6):
+        squad.append(s.add_unit(1, "soldier", Vector2(2080, 120 + i * 40)))
+    s.command(1, {"action": "move", "units": squad, "pos": Vector2(2400, 100)})
+    var squad_arrived := false
+    for i in range(900):
+        s.step()
+        var pending := squad.size()
+        for uid: int in squad:
+            if s.units[uid].order == "idle":
+                pending -= 1
+        if pending == 0:
+            squad_arrived = true
+            break
+    check(squad_arrived, "Corner squad fully arrives instead of stalling")
+    # Formation targets landing on terrain slide to a reachable spot.
+    s.reset()
+    s.units.clear()
+    var wedge := s.add_unit(1, "soldier", Vector2(2080, 400))
+    s.command(1, {"action": "move", "units": [wedge], "pos": Vector2(2160, 400)})
+    var wedge_done := false
+    for i in range(500):
+        s.step()
+        if s.units[wedge].order == "idle":
+            wedge_done = true
+            break
+    check(wedge_done and (s.units[wedge].pos as Vector2).distance_to(Vector2(2160, 400)) < 120, "Terrain-clipped destination still completes")
     # Chase, cooldown, damage, effects, safe removal and stale target reset.
     s.reset()
     s.units[3].pos = Vector2(300, 400)
