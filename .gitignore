@@ -1,3 +1,5 @@
 ﻿.godot/
 export_templates/
 *.tpz
+# Large binaries are published via Releases, not git history
+build/IronFront.exe
