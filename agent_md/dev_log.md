@@ -417,3 +417,20 @@
 - gameplay 新增 2 用例（57 checks）：6 士兵绕角 900 tick 内全员 idle；目标点在岩石内仍 3 tick 完成且距点击 65px
 - 实机复现用户场景：绕角小队 102 tick 全员到达、0 卡死；岩石内目标 3 tick 到达
 - 回归 5 套全过；导出 EXE（23:14:18，期间结束旧版进程 PID 140420 解除文件锁）
+
+## 2026-09-21：虚假重复按下重置框选（用户报告 #3）
+
+### Bug（确认属实）
+- 现象：从画面左上按住左键向右下框选时，框中途消失并从当前鼠标位置重新开始——用户全程未松开
+- 根因：selection_start 仅在 _unhandled_input 按下分支写入；Windows 输入栈（鼠标受限/原始输入）会注入虚假的重复 WM_LBUTTONDOWN，被无条件接受 → 拖动起点被重置到当前光标 → 旧框变零尺寸"消失"、新框从光标处重新生长
+
+### 修复方法（与 Bug 配对）
+- 新增 last_mouse_event_msec 时间戳：_input 收到任意鼠标移动/左键事件时更新
+- _input 按下处理新增守卫：按下时若 selection_dragging 且 left_button_held（单键不可能合法二次按下）：
+  - 距上次鼠标输入 <1500ms → 判定虚假重复按下，set_input_as_handled 吞噬并返回（_unhandled_input 不会收到，起点保持）
+  - ≥1500ms → 判定释放事件已丢失的陈旧拖动：先 _finish_drag_select(selection_current) 完成旧框，再放行本次按下开启新拖动
+
+### 验证
+- presentation 新增回归：重复按下后 selection_start 不变且原框完成选择（2 单位）；陈旧拖动（2000ms 无输入）从新按下重启且旧框先完成（6 单位）
+- 实机复现用户场景：注入重复按下后起点保持 (560,240)、拖选存活、释放后按原框选出 2 单位
+- 回归 5 套全过（gameplay 57 / presentation 含 4 条拖选用例）；导出 EXE（00:15:20）

@@ -20,6 +20,7 @@ var selected_units: Array[int] = []
 var selected_building := -1
 var selection_dragging := false
 var left_button_held := false
+var last_mouse_event_msec := 0
 var selection_start := Vector2.ZERO
 var selection_current := Vector2.ZERO
 var middle_dragging := false
@@ -701,12 +702,25 @@ func _unhandled_input(event: InputEvent) -> void:
 func _input(event: InputEvent) -> void:
     # _input runs before the HUD consumes events, so an active drag keeps
     # tracking (and can complete) even while the cursor is over HUD panels.
-    if selection_dragging and event is InputEventMouseMotion:
-        selection_current = get_global_transform_with_canvas().affine_inverse() * event.position
+    if event is InputEventMouseMotion:
+        last_mouse_event_msec = Time.get_ticks_msec()
+        if selection_dragging:
+            selection_current = get_global_transform_with_canvas().affine_inverse() * event.position
     if event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_MIDDLE:
         middle_dragging = false
     if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
         var button := event as InputEventMouseButton
+        var now := Time.get_ticks_msec()
+        # A second press while the button is already held mid-drag is a
+        # spurious duplicate from the input stack (seen with confined cursor
+        # on Windows): swallow it so the original box start is preserved.
+        # Stale drags (release event lost entirely) restart from this press.
+        if button.pressed and selection_dragging and left_button_held and not button.canceled:
+            if now - last_mouse_event_msec < 1500:
+                get_viewport().set_input_as_handled()
+                return
+            _finish_drag_select(selection_current)
+        last_mouse_event_msec = now
         # Track the button ourselves: Godot's Input state is also corrupted by
         # canceled events, so only non-canceled presses/releases update it.
         if not button.canceled:

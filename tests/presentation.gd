@@ -93,6 +93,46 @@ func run() -> void:
     await process_frame
     game.set_process(false)
     check(game.selected_units.size() == 6 and not game.selection_dragging, "Lost releases finish via frame fallback")
+    # A spurious duplicate press mid-drag must not restart the box.
+    var box_press := InputEventMouseButton.new()
+    box_press.button_index = MOUSE_BUTTON_LEFT
+    box_press.pressed = true
+    box_press.position = game.get_global_transform_with_canvas() * Vector2(560, 240)
+    root.push_input(box_press, true)
+    var box_motion := InputEventMouseMotion.new()
+    box_motion.position = game.get_global_transform_with_canvas() * Vector2(680, 340)
+    root.push_input(box_motion, true)
+    var duplicate_press := InputEventMouseButton.new()
+    duplicate_press.button_index = MOUSE_BUTTON_LEFT
+    duplicate_press.pressed = true
+    duplicate_press.position = box_motion.position
+    root.push_input(duplicate_press, true)
+    check(game.selection_dragging and game.selection_start == Vector2(560, 240), "Duplicate press keeps the original box")
+    var box_release := InputEventMouseButton.new()
+    box_release.button_index = MOUSE_BUTTON_LEFT
+    box_release.pressed = false
+    box_release.position = box_motion.position
+    root.push_input(box_release, true)
+    check(game.selected_units.size() == 2, "Original box completes after duplicate press")
+    # A stale drag (lost release, no input for 2s) restarts from the new press.
+    game._clear_selection()
+    game.selection_dragging = true
+    game.left_button_held = true
+    game.selection_start = Vector2(560, 240)
+    game.selection_current = Vector2(700, 1150)
+    game.last_mouse_event_msec = Time.get_ticks_msec() - 2000
+    var stale_press := InputEventMouseButton.new()
+    stale_press.button_index = MOUSE_BUTTON_LEFT
+    stale_press.pressed = true
+    stale_press.position = game.get_global_transform_with_canvas() * Vector2(680, 340)
+    root.push_input(stale_press, true)
+    check(game.selection_dragging and game.selection_start == Vector2(680, 340), "Stale drag restarts from the new press")
+    check(game.selected_units.size() == 6, "Stale box completed before restart")
+    var stale_release := InputEventMouseButton.new()
+    stale_release.button_index = MOUSE_BUTTON_LEFT
+    stale_release.pressed = false
+    stale_release.position = stale_press.position
+    root.push_input(stale_release, true)
     var refinery: int = game.sim._add_building(1, "refinery", Vector2(288, 432), true)
     click(game.sim.buildings[refinery].pos)
     check(game.selected_building == refinery and game.selected_units.is_empty(), "Building selection")
