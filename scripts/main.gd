@@ -27,6 +27,12 @@ var last_click_building_time := 0.0
 var building_tab_index := 0
 var group_cards: Array[Button] = []
 var bottom_zones: Dictionary = {}
+var roster_row: HBoxContainer
+var production_queue_row: HBoxContainer
+var cjk_font: SystemFont
+
+# Placeholder thumbnails; swap the character for a texture once art exists.
+const UNIT_THUMBNAILS := {"soldier": "兵", "harvester": "矿"}
 var selection_start := Vector2.ZERO
 var selection_current := Vector2.ZERO
 var middle_dragging := false
@@ -76,6 +82,33 @@ var camera_speed_slider: HSlider
 var camera_speed_value_label: Label
 
 # Scene bootstrap: create the simulation, world tiles, camera, HUD, and audio.
+# Remove and free all children immediately so refreshes can rebuild inline.
+func _clear_container(container: Control) -> void:
+    for child: Node in container.get_children():
+        container.remove_child(child)
+        child.free()
+
+# Build one unit thumbnail tile (placeholder glyph today, art later) with an
+# optional caption such as "x6" or "37%".
+func _make_unit_thumbnail(kind: String, caption: String, size: int) -> VBoxContainer:
+    var tile := VBoxContainer.new()
+    tile.add_theme_constant_override("separation", 0)
+    var icon := Button.new()
+    icon.custom_minimum_size = Vector2(size, size)
+    icon.text = str(UNIT_THUMBNAILS.get(kind, "?"))
+    icon.tooltip_text = kind
+    icon.add_theme_font_size_override("font_size", int(size * 0.5))
+    if cjk_font != null:
+        icon.add_theme_font_override("font", cjk_font)
+    tile.add_child(icon)
+    if not caption.is_empty():
+        var count_label := Label.new()
+        count_label.text = caption
+        count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        count_label.add_theme_font_size_override("font_size", 12)
+        tile.add_child(count_label)
+    return tile
+
 # Register one named command-bar zone; returns its content container so
 # callers can populate it. Future zones plug in without layout surgery.
 func _add_bottom_zone(row: HBoxContainer, key: String, min_size: Vector2, caption: String, expand: bool) -> VBoxContainer:
@@ -246,6 +279,11 @@ func _create_ui() -> void:
     status_content.add_theme_constant_override("separation", 12)
     status_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     status_zone.add_child(status_content)
+    cjk_font = SystemFont.new()
+    cjk_font.font_names = PackedStringArray(["Microsoft YaHei UI", "Microsoft YaHei", "SimHei", "sans-serif"])
+    roster_row = HBoxContainer.new()
+    roster_row.add_theme_constant_override("separation", 6)
+    status_content.add_child(roster_row)
     selection_label = Label.new()
     selection_label.custom_minimum_size = Vector2(0, 76)
     selection_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -262,6 +300,9 @@ func _create_ui() -> void:
     production_queue_label.add_theme_font_size_override("font_size", 13)
     production_queue_label.text = ""
     production_panel.add_child(production_queue_label)
+    production_queue_row = HBoxContainer.new()
+    production_queue_row.add_theme_constant_override("separation", 4)
+    production_panel.add_child(production_queue_row)
     production_bar = ProgressBar.new()
     production_bar.custom_minimum_size = Vector2(180, 16)
     production_bar.show_percentage = true
@@ -836,18 +877,6 @@ func _left_click(pos: Vector2) -> void:
             last_click_building_time = now
             return
 
-# Compact roster text such as "6 SOLDIER + 2 HARVESTER".
-func _selection_roster() -> String:
-    var counts := {}
-    for id: int in selected_units:
-        if sim.units.has(id):
-            var kind := str(sim.units[id].type).to_upper()
-            counts[kind] = int(counts.get(kind, 0)) + 1
-    var parts: Array = []
-    for kind: String in counts:
-        parts.append("%d %s" % [int(counts[kind]), kind])
-    return " + ".join(parts)
-
 # Double-click: grab every on-screen building of the same kind as the clicked one.
 func _select_same_type_buildings_on_screen(kind: String) -> void:
     selected_units.clear()
@@ -1174,11 +1203,19 @@ func _refresh_ui() -> void:
     if not selected_units.is_empty():
         active_actions = 4
         var selected: Dictionary = sim.units[selected_units[0]]
+        # Roster: one thumbnail tile per unit kind with its count.
+        _clear_container(roster_row)
+        var roster_counts := {}
+        for id: int in selected_units:
+            var roster_kind := str(sim.units[id].type)
+            roster_counts[roster_kind] = int(roster_counts.get(roster_kind, 0)) + 1
+        for roster_kind: String in roster_counts:
+            roster_row.add_child(_make_unit_thumbnail(roster_kind, "x%d" % int(roster_counts[roster_kind]), 52))
         if selected_units.size() == 1:
             var stats: Dictionary = Simulation.UNIT_TYPES[selected.type]
-            selection_label.text = "UNIT STATUS   %s   |   HP %d / %d   |   ORDER: %s" % [str(selected.type).to_upper(), selected.hp, stats.hp, str(selected.order).to_upper()]
+            selection_label.text = "UNIT STATUS   |   HP %d / %d   |   ORDER: %s" % [selected.hp, stats.hp, str(selected.order).to_upper()]
         else:
-            selection_label.text = "GROUP   %s" % _selection_roster()
+            selection_label.text = "GROUP"
         # SC2-style command card: universal commands stay in fixed slots and
         # type-specific commands each get their own slot, all visible at once.
         var has_soldier := false
@@ -1224,6 +1261,7 @@ func _refresh_ui() -> void:
             else:
                 action_buttons[i].text     = "—"
                 action_buttons[i].disabled = true
+        _clear_container(production_queue_row)
         if not b.queue.is_empty():
             var job: Dictionary = b.queue[0]
             var job_time: int = Simulation.UNIT_TYPES[job.type].time
@@ -1231,15 +1269,12 @@ func _refresh_ui() -> void:
             production_bar.visible = true
             production_bar.max_value = job_time
             production_bar.value = job_time - int(job.remaining)
-            production_queue_label.text = "QUEUE (%d / 5)\n" % b.queue.size()
-            production_queue_label.text += "Now: %s %.0f%%\n" % [str(job.type).to_upper(), progress]
-            if b.queue.size() > 1:
-                var next_names: Array = []
-                for i: int in range(1, mini(4, b.queue.size())):
-                    next_names.append(str(b.queue[i].type).to_upper())
-                production_queue_label.text += "Next: %s" % "+".join(next_names)
-                if b.queue.size() > 4:
-                    production_queue_label.text += " +%d more" % (b.queue.size() - 4)
+            production_queue_label.text = "QUEUE %d / 5" % b.queue.size()
+            # The queue is a row of thumbnails; the first shows its progress.
+            for i: int in b.queue.size():
+                var entry: Dictionary = b.queue[i]
+                var caption := "%.0f%%" % progress if i == 0 else ""
+                production_queue_row.add_child(_make_unit_thumbnail(str(entry.type), caption, 40))
         else:
             production_bar.visible = false
             production_queue_label.text = "QUEUE EMPTY"

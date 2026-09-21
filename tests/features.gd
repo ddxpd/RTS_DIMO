@@ -78,7 +78,7 @@ func run() -> void:
     game._refresh_ui()
     if not game.production_bar.visible:
         failures.append("production progress bar not visible")
-    if not game.production_queue_label.text.contains("HARVESTER"):
+    if game.production_queue_row.get_child_count() != 1:
         failures.append("production queue does not list the job")
 
     # Feature 4: rally point sends freshly produced units to the marker.
@@ -120,6 +120,9 @@ func run() -> void:
             queue_sizes.append(game.sim.buildings[id].queue.size())
         if queue_sizes != [2, 2]:
             failures.append("production not distributed: %s" % str(queue_sizes))
+        game._refresh_ui()
+        if game.production_queue_row.get_child_count() != 2:
+            failures.append("queue must render one thumbnail per job")
         # Tab cycles the per-building detail page (progress bar, queue, cancel).
         game.sim.buildings[first_barracks].queue.clear()
         game.sim.buildings[second_barracks].queue.clear()
@@ -132,7 +135,7 @@ func run() -> void:
         building_tab.pressed = true
         game._unhandled_input(building_tab)
         game._refresh_ui()
-        if not game.production_queue_label.text.contains("SOLDIER"):
+        if game.production_queue_row.get_child_count() != 1:
             failures.append("Tab did not switch to the next building detail")
         game._cancel_job()
         if not game.sim.buildings[second_barracks].queue.is_empty():
@@ -146,6 +149,8 @@ func run() -> void:
     game._refresh_ui()
     if game.action_buttons[2].disabled or game.action_buttons[3].disabled:
         failures.append("mixed selection must show ATTACK and GATHER together")
+    if game.roster_row.get_child_count() != 2:
+        failures.append("roster must render one thumbnail per unit kind")
     game._clear_selection()
     game.selected_units.append(3)
     game._refresh_ui()
