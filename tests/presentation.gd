@@ -34,6 +34,10 @@ func run() -> void:
     await process_frame
     game.camera.force_update_scroll()
     click(game.sim.units[3].pos)
+    check(game.bottom_zones.has_all(["map", "status", "command"]), "Command bar splits into map/status/command zones")
+    var map_zone: Control = game.bottom_zones.get("map")
+    if map_zone == null or map_zone.custom_minimum_size.x < 200:
+        check(false, "Map zone reserves left-side space")
     check(game.selected_units == [3], "Viewport left-click selects friendly unit")
     var initial: Vector2 = game.sim.units[3].pos
     click(Vector2(550, 330))

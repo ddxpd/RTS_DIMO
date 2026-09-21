@@ -26,6 +26,7 @@ var last_click_building := -1
 var last_click_building_time := 0.0
 var building_tab_index := 0
 var group_cards: Array[Button] = []
+var bottom_zones: Dictionary = {}
 var selection_start := Vector2.ZERO
 var selection_current := Vector2.ZERO
 var middle_dragging := false
@@ -75,6 +76,24 @@ var camera_speed_slider: HSlider
 var camera_speed_value_label: Label
 
 # Scene bootstrap: create the simulation, world tiles, camera, HUD, and audio.
+# Register one named command-bar zone; returns its content container so
+# callers can populate it. Future zones plug in without layout surgery.
+func _add_bottom_zone(row: HBoxContainer, key: String, min_size: Vector2, caption: String, expand: bool) -> VBoxContainer:
+    var zone := VBoxContainer.new()
+    zone.add_theme_constant_override("separation", 2)
+    zone.custom_minimum_size = min_size
+    if expand:
+        zone.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    if not caption.is_empty():
+        var caption_label := Label.new()
+        caption_label.text = caption
+        caption_label.add_theme_font_size_override("font_size", 11)
+        caption_label.modulate = Color(1, 1, 1, 0.5)
+        zone.add_child(caption_label)
+    row.add_child(zone)
+    bottom_zones[key] = zone
+    return zone
+
 func _ready() -> void:
     _load_settings()
     texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -219,17 +238,25 @@ func _create_ui() -> void:
     var bottom_row := HBoxContainer.new()
     bottom_row.add_theme_constant_override("separation", 12)
     bottom.add_child(bottom_row)
+    # The command bar is composed of named zones; future zones (minimap,
+    # extras) plug in through _add_bottom_zone without touching the layout.
+    _add_bottom_zone(bottom_row, "map", Vector2(220, 96), "", false)
+    var status_zone: VBoxContainer = _add_bottom_zone(bottom_row, "status", Vector2(0, 96), "STATUS", true)
+    var status_content := HBoxContainer.new()
+    status_content.add_theme_constant_override("separation", 12)
+    status_content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    status_zone.add_child(status_content)
     selection_label = Label.new()
     selection_label.custom_minimum_size = Vector2(0, 76)
     selection_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     selection_label.add_theme_font_size_override("font_size", 16)
     selection_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     selection_label.text = "UNIT STATUS\nNo unit selected — left-click a unit on the battlefield."
-    bottom_row.add_child(selection_label)
+    status_content.add_child(selection_label)
     var production_panel := VBoxContainer.new()
     production_panel.add_theme_constant_override("separation", 4)
     production_panel.custom_minimum_size = Vector2(190, 76)
-    bottom_row.add_child(production_panel)
+    status_content.add_child(production_panel)
     production_queue_label = Label.new()
     production_queue_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
     production_queue_label.add_theme_font_size_override("font_size", 13)
@@ -240,10 +267,11 @@ func _create_ui() -> void:
     production_bar.show_percentage = true
     production_bar.visible = false
     production_panel.add_child(production_bar)
+    var command_zone: VBoxContainer = _add_bottom_zone(bottom_row, "command", Vector2(420, 96), "COMMAND", false)
     action_grid = GridContainer.new()
     action_grid.columns = 4
     action_grid.custom_minimum_size = Vector2(420, 96)
-    bottom_row.add_child(action_grid)
+    command_zone.add_child(action_grid)
     for i in range(8):
         var action_button := Button.new()
         action_button.custom_minimum_size = Vector2(100, 42)
