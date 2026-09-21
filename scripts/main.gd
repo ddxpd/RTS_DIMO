@@ -283,17 +283,11 @@ func _create_ui() -> void:
     cjk_font.font_names = PackedStringArray(["Microsoft YaHei UI", "Microsoft YaHei", "SimHei", "sans-serif"])
     roster_row = HBoxContainer.new()
     roster_row.add_theme_constant_override("separation", 6)
+    # Fixed width keeps the queue anchor stable no matter the roster size.
+    roster_row.custom_minimum_size = Vector2(260, 0)
     status_content.add_child(roster_row)
-    selection_label = Label.new()
-    selection_label.custom_minimum_size = Vector2(0, 76)
-    selection_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-    selection_label.add_theme_font_size_override("font_size", 16)
-    selection_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    selection_label.text = "UNIT STATUS\nNo unit selected — left-click a unit on the battlefield."
-    status_content.add_child(selection_label)
     var production_panel := VBoxContainer.new()
     production_panel.add_theme_constant_override("separation", 4)
-    production_panel.custom_minimum_size = Vector2(190, 76)
     status_content.add_child(production_panel)
     production_queue_label = Label.new()
     production_queue_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -302,12 +296,21 @@ func _create_ui() -> void:
     production_panel.add_child(production_queue_label)
     production_queue_row = HBoxContainer.new()
     production_queue_row.add_theme_constant_override("separation", 4)
+    # Fixed five-slot strip: job i always renders at the same x position.
+    production_queue_row.custom_minimum_size = Vector2(240, 0)
     production_panel.add_child(production_queue_row)
     production_bar = ProgressBar.new()
     production_bar.custom_minimum_size = Vector2(180, 16)
     production_bar.show_percentage = true
     production_bar.visible = false
     production_panel.add_child(production_bar)
+    selection_label = Label.new()
+    selection_label.custom_minimum_size = Vector2(0, 76)
+    selection_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+    selection_label.add_theme_font_size_override("font_size", 16)
+    selection_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    selection_label.text = "UNIT STATUS\nNo unit selected — left-click a unit on the battlefield."
+    status_content.add_child(selection_label)
     var command_zone: VBoxContainer = _add_bottom_zone(bottom_row, "command", Vector2(420, 96), "COMMAND", false)
     action_grid = GridContainer.new()
     action_grid.columns = 4
