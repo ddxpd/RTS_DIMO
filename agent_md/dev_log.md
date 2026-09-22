@@ -518,3 +518,50 @@
 ### 验证
 - 实机：1 个任务与 3 个任务时首图标 x 均=516；第 3 图标 x=604（固定槽距）；条宽恒 240
 - 回归 5 套全过；导出 EXE（20:17:02）
+
+## 2026-09-21：2D-v0.1 里程碑标签
+
+- 推送 9 个提交（ae6497b→c05fe0f，含最终 2D EXE 109MB LFS 对象）
+- 附注标签 **2D-v0.1** 指向 c05fe0f：3D 重写前完整 2D 版本（地图×10、9 矿、AI 小队、SC2 式命令卡/编队卡、三区状态栏、缩略图系统、全部修复与 57 项 gameplay 回归）
+- 此里程碑后进入饥荒式 3D 表现层重写
+
+## 2026-09-21：饥荒式 3D 表现层重写（首版可玩）
+
+### 架构变更
+- 场景根 Node2D → Node3D（main.tscn + main.gd）
+- Camera2D → Camera3D：透视投影，固定偏航 0°/俯角 33°/FOV 50，焦距=650/zoom_level
+- CameraController 重写为 3D：focus(Vector2 地面坐标)驱动相机位置，_visible_ground_rect() 用四角射线求地面可见范围
+- 地形：TileMapLayer → 4 块 2400×1600 烘焙贴图平面（视觉与 2D 一致）
+- 迷雾：1.5 万个 draw_rect → 单张 150×100 alpha 纹理平面（nearest 采样）
+- 实体：_draw() 即时绘制 → _sync_visuals() 标记-清扫管理 Sprite3D 广告牌（units/buildings/ores/rocks）
+- 覆盖层：选框/点击标记/建造预览 → 贴地 PlaneMesh + Sprite3D
+- 输入：get_global_transform_with_canvas → _screen_to_world（射线∩y=0 平面）+ _world_to_screen（unproject）
+- 模拟层 simulation.gd、HUD CanvasLayer、全部玩法逻辑零改动
+
+### 已验证
+- gameplay 57/0、features 0、action_bar 0、camera 3D 版 0——4 套通过
+- 实机：3D 场景渲染正常（地形/迷雾/单位/建筑），左键选择 [3]，右键移动 idle→move
+- EXE 导出（22:03:22）
+
+### 已知待办
+- presentation 测试需 3D 坐标全面适配（当前 headless 下超时，事件坐标与 3D 投影不匹配）
+- 特效/血条/进度条/名册缩略图为占位实现（Sprite3D 无纹理），后续迭代
+- 建造预览/集结点/地堡射程等 overlay 的视觉细节待打磨
+
+## 2026-09-22：Blender 3D 实体模型替换像素贴图
+### 实现
+- 新增 assets/models/source/ironfront_models.blend 与 8 个独立 GLB：soldier、harvester、base、barracks、refinery、bunker、ore、rock。
+- 新增 EntityVisual：统一缩放、底部落地、阵营材质实例、受击/施工染色、朝向平滑和 AnimationPlayer 状态动画。
+- main.gd 的单位/建筑/矿石/岩石/建筑预览改为 Node3D 模型；新增战场阳光与环境光，地面接受光照和阴影。
+- 保持模拟、网络协议、选择判定、迷雾规则和 HUD 交互不变。
+
+### Bug 与修复（成对记录）
+- 症状：headless 注入路径中重复鼠标按下会重启框选。根因：_input 与 _unhandled_input 接收子集不一致，left_button_held / motion 时间戳不完整。修复：_unhandled_input 幂等维护按钮状态与 motion 时间戳，并在重复按下时保留原框选。验证：presentation.gd 0 failures。
+- 症状：协议不兼容/观战阶段日志大量 PackedByteArray 越界。根因：local_slot=0 时 explored 数组不存在，岩石可见性仍直接索引。修复：取得 explored 后检查 size，无数据或索引越界时隐藏岩石。验证：多进程网络测试不再出现越界。
+- 症状：网络 guest 建成兵营后无法生产士兵。根因：测试直接设置 selected_building，但 _clean_selection 因 selected_buildings 为空将其清空。修复：合法单选自动同步到 selected_buildings。验证：guest queue=1、units 达到 14 并继续完成攻击/胜利流程。
+- 症状：round2 重开测试永久等待移动。根因：红方 guest 固定命令蓝方单位 6，被主机权限校验拒绝。修复：重开后动态选择第一个红方单位，并在近距目标验证移动与冻结快照。验证：round2 快照一致和主机退出处理 PASS。
+
+### 验证
+- visual_models / gameplay(57 checks) / features / camera / action_bar / presentation：全部 0 failures。
+- 多进程 ENet：协议不匹配拒绝、观战权限、红方经济/建造/生产/攻击/胜利、两轮完整快照一致、重开与主机退出处理全部 PASS。
+- SOLO 实机截图：build/verification/visual_models.png；战场区域绿色地面约 67%，机械灰约 11%，迷雾/阴影约 14%，存在蓝色阵营与黄色矿石像素。

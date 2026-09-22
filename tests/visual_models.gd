@@ -1,0 +1,94 @@
+extends SceneTree
+
+const MAIN = preload("res://scenes/main.tscn")
+
+var game: Node3D
+var failures: Array[String] = []
+
+
+func _initialize() -> void:
+    run.call_deferred()
+
+
+func check(condition: bool, message: String) -> void:
+    if not condition:
+        failures.append(message)
+        push_error(message)
+
+
+func _has_animations(available: Array[StringName], required: Array[String]) -> bool:
+    for animation_name: String in required:
+        if not available.has(StringName(animation_name)):
+            return false
+    return true
+
+
+func run() -> void:
+    root.size = Vector2i(1280, 800)
+    game = MAIN.instantiate()
+    root.add_child(game)
+    game.play_solo()
+    game.set_process(false)
+    game.sim.ai_enabled = false
+    await process_frame
+    await process_frame
+    game._sync_visuals()
+
+    var soldier_visual: EntityVisual = game.unit_visuals[3].visual
+    check(soldier_visual.kind == "soldier", "Soldier uses the 3D model visual")
+    check(soldier_visual.owner_id == 1, "Soldier visual records blue ownership")
+    check(_has_animations(soldier_visual.get_animation_names(), ["idle", "move", "attack"]), "Soldier exposes state animations")
+
+    game.sim.units[3].order = "move"
+    game.sim.units[3].target = Vector2(800, 300)
+    game._sync_units()
+    check(soldier_visual.animation_state == "move", "Soldier move order plays move animation")
+
+    game.sim.units[3].order = "attack"
+    game.sim.units[3].attack_kind = "building"
+    game.sim.units[3].attack_id = 2
+    game._sync_units()
+    check(soldier_visual.animation_state == "attack", "Soldier attack order plays attack animation")
+
+    var ore_id := 1
+    var harvester_id: int = game.sim.add_unit(1, "harvester", game.sim.ores[ore_id].pos)
+    game.sim.units[harvester_id].order = "gather"
+    game.sim.units[harvester_id].ore = ore_id
+    game._sync_units()
+    var harvester_visual: EntityVisual = game.unit_visuals[harvester_id].visual
+    check(_has_animations(harvester_visual.get_animation_names(), ["idle", "move", "mine", "unload"]), "Harvester exposes state animations")
+    check(harvester_visual.animation_state == "mine", "Harvester at ore plays mine animation")
+
+    var refinery_id: int = game.sim._add_building(1, "refinery", Vector2(960, 960), true)
+    game.sim.units[harvester_id].pos = Vector2(960, 990)
+    game.sim.units[harvester_id].cargo = 60
+    game._sync_units()
+    check(harvester_visual.animation_state == "unload", "Full harvester at refinery plays unload animation")
+
+    var barracks_id: int = game.sim._add_building(1, "barracks", Vector2(960, 760), false)
+    game._sync_buildings()
+    var barracks_visual: EntityVisual = game.building_visuals[barracks_id].visual
+    check(barracks_visual.animation_state == "construction", "Unfinished building plays construction animation")
+    game.sim.buildings[barracks_id].remaining = 0
+    game.sim.buildings[barracks_id].queue.append({"type": "soldier", "remaining": 1})
+    game._sync_buildings()
+    check(barracks_visual.animation_state == "active", "Building with queue plays active animation")
+
+    var bunker_id: int = game.sim._add_building(1, "bunker", Vector2(1150, 760), true)
+    game.sim.buildings[bunker_id].cooldown = 10
+    game._sync_buildings()
+    var bunker_visual: EntityVisual = game.building_visuals[bunker_id].visual
+    check(bunker_visual.animation_state == "fire", "Bunker cooldown plays fire animation")
+
+    check(game.ore_visuals.size() == game.sim.ores.size(), "Every ore has a 3D visual")
+    check(game.rock_visuals.size() > 0, "Rock obstacles use 3D rock models")
+    game.sim.explored[1].fill(1)
+    game._sync_rocks()
+    check(game.rock_visuals.all(func(visual: EntityVisual) -> bool: return visual.visible), "Explored rocks become visible")
+
+    game._begin_build("refinery")
+    game._sync_build_preview()
+    check(game.build_preview_model != null and game.build_preview_model.kind == "refinery", "Build preview uses the refinery 3D model")
+
+    print("VISUAL_MODELS_TEST failures=", failures)
+    quit(0 if failures.is_empty() else 1)

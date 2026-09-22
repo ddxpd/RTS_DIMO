@@ -58,8 +58,16 @@ func guest() -> void:
         _request_restart.rpc_id(1)
         while game.sim.winner != 0 or game.sim.frame > 100:
             await get_tree().process_frame
-        game.issue({"action": "move", "units": [6], "pos": Vector2(1200, 850)})
-        while (game.sim.units[6].pos as Vector2).distance_to(Vector2(1200, 850)) > 5:
+        var mover := -1
+        for id: int in game.sim.units:
+            if game.sim.units[id].owner == 2:
+                mover = id
+                break
+        if not check(mover >= 0, "Red mover exists after restart"):
+            return
+        var destination := Vector2(4000, 2800)
+        game.issue({"action": "move", "units": [mover], "pos": destination})
+        while (game.sim.units[mover].pos as Vector2).distance_to(destination) > 5:
             await get_tree().process_frame
         _freeze_report.rpc_id(1)
         return

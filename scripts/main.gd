@@ -1,4 +1,4 @@
-extends Node2D
+extends Node3D
 const Simulation = preload("res://scripts/simulation.gd")
 const Art = preload("res://assets/art/pixel_art.gd")
 const CameraController = preload("res://scripts/camera_controller.gd")
@@ -38,9 +38,13 @@ var selection_current := Vector2.ZERO
 var middle_dragging := false
 var build_mode := ""
 var menu_visible := true
-var camera: Camera2D
+var camera: Camera3D
+var camera_zoom_level := 1.0
 var camera_controller: CameraController
-var tiles: TileMapLayer
+var terrain_chunks: Array[MeshInstance3D] = []
+var fog_plane: MeshInstance3D
+var fog_texture: ImageTexture
+var fog_image: Image
 var hud: CanvasLayer
 var top_label: Label
 var resource_label: Label
@@ -57,7 +61,6 @@ var menu_buttons: VBoxContainer
 var resume_button: Button
 var address: LineEdit
 var build_buttons: Array[Button] = []
-var sprites: Dictionary = {}
 var clicks: Array = []
 var feedback := ""
 var feedback_time := 0.0
@@ -77,7 +80,7 @@ var last_click_time := 0.0
 var last_click_unit := -1
 var production_bar: ProgressBar
 var production_queue_label: Label
-var camera_speed_multiplier := 1.4
+var camera_speed_multiplier := 1.8
 var camera_speed_slider: HSlider
 var camera_speed_value_label: Label
 
@@ -127,27 +130,125 @@ func _add_bottom_zone(row: HBoxContainer, key: String, min_size: Vector2, captio
     bottom_zones[key] = zone
     return zone
 
+# Bake the procedural tile pattern into four ground planes (Don't Starve stage).
+func _create_terrain() -> void:
+    # Single continuous ground plane: no seams, no floating patches.
+    var tex := ImageTexture.create_from_image(Art.terrain_image())
+    var mesh := PlaneMesh.new()
+    mesh.size = Simulation.WORLD
+    var surface := StandardMaterial3D.new()
+    surface.albedo_texture = tex
+    surface.albedo_color = Color("#425238")
+    surface.roughness = 0.88
+    surface.metallic = 0.0
+    surface.cull_mode = BaseMaterial3D.CULL_DISABLED
+    # Repeat the 48x16 tileset across the whole 4800x3200 world.
+    surface.texture_repeat = true
+    surface.uv1_scale = Vector3(Simulation.WORLD.x / 144.0, Simulation.WORLD.y / 16.0, 1.0)
+    var mi := MeshInstance3D.new()
+    mi.mesh = mesh
+    mi.material_override = surface
+    mi.position = Vector3(Simulation.WORLD.x / 2.0, 0, Simulation.WORLD.y / 2.0)
+    add_child(mi)
+    terrain_chunks.append(mi)
+
+# Clear battlefield lighting makes the mechanical models readable from above.
+func _create_lighting() -> void:
+    var sun := DirectionalLight3D.new()
+    sun.name = "BattlefieldSun"
+    sun.rotation_degrees = Vector3(-55, -32, 0)
+    sun.light_color = Color("#fff1d6")
+    sun.light_energy = 1.12
+    sun.shadow_enabled = true
+    sun.directional_shadow_max_distance = 1600.0
+    add_child(sun)
+
+    var environment := Environment.new()
+    environment.background_mode = Environment.BG_COLOR
+    environment.background_color = Color("#203028")
+    environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+    environment.ambient_light_color = Color("#9fb6a6")
+    environment.ambient_light_energy = 0.72
+    environment.glow_enabled = true
+    environment.glow_intensity = 0.35
+    var world_environment := WorldEnvironment.new()
+    world_environment.name = "BattlefieldEnvironment"
+    world_environment.environment = environment
+    add_child(world_environment)
+
+
+# One low-res alpha texture covers the whole map fog (nearest-filtered).
+func _create_fog() -> void:
+    fog_image = Image.create(Simulation.GRID.x, Simulation.GRID.y, false, Image.FORMAT_RGBA8)
+    fog_texture = ImageTexture.create_from_image(fog_image)
+
+    var mesh := PlaneMesh.new()
+    mesh.size = Simulation.WORLD
+    var surface := StandardMaterial3D.new()
+    surface.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    surface.albedo_texture = fog_texture
+    surface.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    fog_plane = MeshInstance3D.new()
+    fog_plane.mesh = mesh
+    fog_plane.material_override = surface
+    fog_plane.position = Vector3(Simulation.WORLD.x / 2.0, 1.0, Simulation.WORLD.y / 2.0)
+    add_child(fog_plane)
+
+# Fixed-pitch perspective camera looking at the focus point on the ground.
+func _update_camera_transform() -> void:
+    if camera_controller != null:
+        camera_controller.focus = camera_controller.focus.clamp(Vector2.ZERO, Simulation.WORLD)
+    var focus3 := Vector3(camera_controller.focus.x, 0, camera_controller.focus.y)
+    var pitch := deg_to_rad(42.0)
+    var dist := 1200.0 / camera_zoom_level
+    camera.position = focus3 + Vector3(0, dist * sin(pitch), -dist * cos(pitch))
+    camera.look_at(focus3)
+
+# Project a ground point back to screen space (for input event construction).
+func _world_to_screen(world: Vector2) -> Vector2:
+    return camera.unproject_position(Vector3(world.x, 0, world.y))
+
+# Project a screen point onto the y=0 ground plane.
+func _screen_to_world(screen: Vector2) -> Vector2:
+    var from := camera.project_ray_origin(screen)
+    var dir := camera.project_ray_normal(screen)
+    if absf(dir.y) < 0.001:
+        return camera_controller.focus
+    var t := -from.y / dir.y
+    if t < 0.0:
+        return camera_controller.focus
+    var hit := from + dir * t
+    return Vector2(hit.x, hit.z)
+
+# Make a billboard sprite standing on the ground.
+func _make_billboard(tex: Texture2D, size: Vector2, pos2d: Vector2) -> Sprite3D:
+    var sprite := Sprite3D.new()
+    sprite.texture = tex
+    sprite.pixel_size = size.y / maxf(tex.get_height(), 1.0)
+    sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+    sprite.shaded = false
+
+    sprite.position = Vector3(pos2d.x, size.y / 2.0, pos2d.y)
+    return sprite
+
 func _ready() -> void:
     _load_settings()
-    texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
     sim.reset(false)
-    sprites        = {1: Art.sprites(Color("#5fa5e0")), 2: Art.sprites(Color("#d66551"))}
-    tiles          = TileMapLayer.new()
-    tiles.tile_set = Art.terrain()
-    tiles.scale    = Vector2(2, 2)
-    tiles.z_index  = -10
-    add_child(tiles)
-    for x in range(Simulation.GRID.x):
-        for y in range(Simulation.GRID.y):
-            tiles.set_cell(Vector2i(x, y), 0, Vector2i((x * 7 + y * 11) % 3, 0))
-    camera = Camera2D.new()
+    _create_terrain()
+    _create_lighting()
+    _create_fog()
+    camera = Camera3D.new()
+    camera.fov = 38.0
+    camera.near = 1.0
+    camera.far = 5000.0
     add_child(camera)
-    camera.position = Vector2(500, 350)
-    camera.zoom = Vector2.ONE
+    camera.make_current()
     camera_controller = CameraController.new(camera, Simulation.WORLD,
-        func() -> Vector2: return get_viewport_rect().size,
-        func() -> Vector2: return camera.get_viewport().get_mouse_position())
+        func() -> Vector2: return get_viewport().get_visible_rect().size,
+        func() -> Vector2: return get_viewport().get_mouse_position())
     camera_controller.speed_multiplier = camera_speed_multiplier
+    camera_controller.focus = Vector2(900, 700)
+    _update_camera_transform()
     _create_ui()
     _create_audio()
     multiplayer.peer_connected.connect(_peer_joined)
@@ -156,12 +257,10 @@ func _ready() -> void:
     multiplayer.connection_failed.connect(_connection_failed)
     multiplayer.server_disconnected.connect(_server_left)
     _refresh_ui()
-
-# Persisted user preferences live in user://settings.cfg.
 func _load_settings() -> void:
     var config := ConfigFile.new()
     if config.load("user://settings.cfg") == OK:
-        camera_speed_multiplier = clampf(float(config.get_value("camera", "speed_multiplier", 1.4)), 0.5, 3.0)
+        camera_speed_multiplier = clampf(float(config.get_value("camera", "speed_multiplier", 1.8)), 0.5, 3.0)
 
 func _save_settings() -> void:
     var config := ConfigFile.new()
@@ -441,15 +540,16 @@ func _clear_selection() -> void:
 # Keep the world strictly larger than the viewport on both axes so the
 # camera always has room to move; otherwise it clamps dead at the center.
 func _min_zoom() -> float:
-    var size := get_viewport_rect().size
-    return maxf(size.x / Simulation.WORLD.x, size.y / Simulation.WORLD.y) + 0.05
+    # 0.45 caps at ~2670 dist (~1780 height, ~1x world width visible).
+    return 0.45
 
 func _reset_view() -> void:
     _clear_selection()
     build_mode = ""
     clicks.clear()
-    camera.zoom     = Vector2.ONE * maxf(1.0, _min_zoom())
-    camera.position = Vector2(900, 700) if local_slot != 2 else Vector2(3900, 2500)
+    camera_zoom_level = 2.0
+    camera_controller.focus = Vector2(900, 700) if local_slot != 2 else Vector2(3900, 2500)
+    _update_camera_transform()
     menu_visible    = false
     menu.visible    = false
 
@@ -695,7 +795,7 @@ func _process(delta: float) -> void:
                 handshakes.erase(id)
     if active and not menu_visible:
         var direction := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
-        camera.position += direction * delta * 500 * camera_speed_multiplier / camera.zoom.x
+        camera_controller.focus -= direction * delta * 500 * camera_speed_multiplier / camera_zoom_level
         camera_controller.update(delta)
     _limit_camera()
     _clean_selection()
@@ -704,7 +804,7 @@ func _process(delta: float) -> void:
     if selection_dragging and not left_button_held:
         _finish_drag_select(selection_current)
     _refresh_ui()
-    queue_redraw()
+    _sync_visuals()
 
 func _clean_selection() -> void:
     var valid: Array[int] = []
@@ -718,30 +818,37 @@ func _clean_selection() -> void:
             valid_buildings.append(id)
     selected_buildings = valid_buildings
     if selected_buildings.is_empty():
-        selected_building = -1
+        if selected_building >= 0 and sim.buildings.has(selected_building) and sim.buildings[selected_building].owner == local_slot:
+            selected_buildings.append(selected_building)
+        else:
+            selected_building = -1
     elif not selected_buildings.has(selected_building):
         selected_building = selected_buildings[0]
     if not sim.buildings.has(selected_building) or sim.buildings[selected_building].owner != local_slot:
         selected_building = -1
 
 func _get_camera_viewport_size() -> Vector2:
-    return get_viewport_rect().size
+    return get_viewport().get_visible_rect().size
 
 func _get_map_screen_rect() -> Rect2:
-        var size := get_viewport_rect().size
+        var size := get_viewport().get_visible_rect().size
         return Rect2(Vector2(0, 52), Vector2(size.x - 260, size.y - 184))
 
 func _limit_camera() -> void:
-    var half := get_viewport_rect().size / (2.0 * camera.zoom.x)
-    var max_center := Simulation.WORLD - half
-    camera.position = camera.position.clamp(half.min(Simulation.WORLD / 2), max_center.max(Simulation.WORLD / 2))
+    if camera_controller != null:
+        camera_controller._limit_camera()
+        _update_camera_transform()
 
 func _screen_is_map(pos: Vector2) -> bool:
-    var size := get_viewport_rect().size
+    var size := get_viewport().get_visible_rect().size
     return pos.x < size.x - 260 and pos.y > 52 and pos.y < size.y - 132
 
 # Translate keyboard and mouse input into selection and simulation orders.
 func _unhandled_input(event: InputEvent) -> void:
+    # _input and _unhandled_input can receive different subsets of injected or
+    # platform events, so keep the anti-duplicate timestamp accurate in both.
+    if event is InputEventMouseMotion:
+        last_mouse_event_msec = Time.get_ticks_msec()
     if event is InputEventKey and event.pressed and not event.echo:
         if rebinding_attack:
             if event.keycode != KEY_ESCAPE:
@@ -773,20 +880,32 @@ func _unhandled_input(event: InputEvent) -> void:
     if not active or menu_visible:
         return
     if event is InputEventMouseButton:
-        var pos: Vector2 = get_global_transform_with_canvas().affine_inverse() * event.position
-        if event.button_index == MOUSE_BUTTON_LEFT:
-            if event.pressed and _screen_is_map(event.position):
+        var pos: Vector2 = _screen_to_world(event.position)
+        var button := event as InputEventMouseButton
+        if button.button_index == MOUSE_BUTTON_LEFT:
+            var was_held := left_button_held
+            if button.pressed and not button.canceled:
+                left_button_held = true
+            if button.pressed and _screen_is_map(event.position):
+                # Preserve the original box when Windows emits a duplicate press
+                # while the tracked button is still held. Stale drags fall
+                # through so their lost release can be recovered below.
+                if selection_dragging and was_held:
+                    var press_msec := Time.get_ticks_msec()
+                    if press_msec - last_mouse_event_msec < 1500:
+                        return
                 if not build_mode.is_empty():
                     _place_building(pos)
                 else:
                     selection_dragging = true
                     selection_start    = pos
                     selection_current  = pos
-            elif not event.pressed and selection_dragging:
-                var button := event as InputEventMouseButton
-                if not button.canceled and not left_button_held:
+            elif not button.pressed and selection_dragging:
+                if not button.canceled:
                     _finish_drag_select(pos)
-        elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed and _screen_is_map(event.position):
+            if not button.pressed and not button.canceled:
+                left_button_held = false
+        elif button.button_index == MOUSE_BUTTON_RIGHT and button.pressed and _screen_is_map(event.position):
             if not build_mode.is_empty():
                 build_mode = ""
             else:
@@ -794,16 +913,21 @@ func _unhandled_input(event: InputEvent) -> void:
         elif event.button_index == MOUSE_BUTTON_MIDDLE:
             middle_dragging = event.pressed
         elif event.pressed and _screen_is_map(event.position) and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
-            var before := get_global_mouse_position()
+            var before := _screen_to_world(event.position)
             var factor := 1.15 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / 1.15
-            camera.zoom = Vector2.ONE * clampf(camera.zoom.x * factor, _min_zoom(), 2.5)
-            camera.force_update_scroll()
-            camera.position += before - get_global_mouse_position()
+            camera_zoom_level = clampf(camera_zoom_level * factor, _min_zoom(), 6.0)
+            # Iterative anchor: perspective projection needs multiple passes
+            # to converge the world point under the cursor exactly.
+            for i in range(3):
+                _update_camera_transform()
+                var after := _screen_to_world(event.position)
+                camera_controller.focus += before - after
+            _update_camera_transform()
     elif event is InputEventMouseMotion:
         if middle_dragging:
-            camera.position -= event.relative / camera.zoom.x
+            camera_controller.focus += Vector2(event.relative.x, event.relative.y) / camera_zoom_level
         if selection_dragging:
-            selection_current = get_global_transform_with_canvas().affine_inverse() * event.position
+            selection_current = _screen_to_world(event.position)
 
 func _input(event: InputEvent) -> void:
     # _input runs before the HUD consumes events, so an active drag keeps
@@ -811,7 +935,7 @@ func _input(event: InputEvent) -> void:
     if event is InputEventMouseMotion:
         last_mouse_event_msec = Time.get_ticks_msec()
         if selection_dragging:
-            selection_current = get_global_transform_with_canvas().affine_inverse() * event.position
+            selection_current = _screen_to_world(event.position)
     if event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_MIDDLE:
         middle_dragging = false
     if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -836,12 +960,12 @@ func _input(event: InputEvent) -> void:
             # must not end a drag while the button is still physically held.
             if button.canceled or left_button_held:
                 return
-            _finish_drag_select(get_global_transform_with_canvas().affine_inverse() * event.position)
+            _finish_drag_select(_screen_to_world(event.position))
 
 # Complete a box drag: treat tiny drags as clicks, larger ones as selections.
 func _finish_drag_select(pos: Vector2) -> void:
     selection_dragging = false
-    if (pos - selection_start).length() * camera.zoom.x < 8:
+    if (pos - selection_start).length() * camera_zoom_level < 8:
         _left_click(pos)
     else:
         _select_rect(Rect2(selection_start, pos - selection_start).abs())
@@ -884,8 +1008,8 @@ func _left_click(pos: Vector2) -> void:
 func _select_same_type_buildings_on_screen(kind: String) -> void:
     selected_units.clear()
     selected_buildings.clear()
-    var half := get_viewport().get_visible_rect().size / (2.0 * camera.zoom)
-    var view := Rect2(camera.position - half, half * 2.0)
+    var half := camera_controller._visible_ground_rect().size / 2.0
+    var view := Rect2(camera_controller.focus - half, half * 2.0)
     for id: int in sim.buildings:
         var b: Dictionary = sim.buildings[id]
         if b.owner == local_slot and b.type == kind and view.has_point(b.pos):
@@ -898,8 +1022,8 @@ func _select_same_type_buildings_on_screen(kind: String) -> void:
 func _select_same_type_on_screen(kind: String) -> void:
     selected_units.clear()
     selected_building = -1
-    var half := get_viewport().get_visible_rect().size / (2.0 * camera.zoom)
-    var view := Rect2(camera.position - half, half * 2.0)
+    var half := camera_controller._visible_ground_rect().size / 2.0
+    var view := Rect2(camera_controller.focus - half, half * 2.0)
     for id: int in sim.units:
         var u: Dictionary = sim.units[id]
         if u.owner == local_slot and u.type == kind and view.has_point(u.pos):
@@ -1329,96 +1453,389 @@ func _refresh_ui() -> void:
         queue_label.text = "Buildings cost credits.\nPlace near your existing base."
 
 # Render world geometry and entities; UI is rendered by CanvasLayer controls.
-func _draw() -> void:
-    for rock: Rect2 in sim.obstacles:
-        draw_rect(rock, Color("#29352e"))
-        for x in range(int(rock.position.x), int(rock.end.x), 32):
-            for y in range(int(rock.position.y), int(rock.end.y), 32):
-                draw_texture_rect(sprites[1].rock, Rect2(Vector2(x, y), Vector2(36, 36)), false)
-    for ore: Dictionary in sim.ores.values():
-        if ore.amount > 0:
-            draw_texture_rect(sprites[1].ore, Rect2(ore.pos - Vector2(32, 24), Vector2(64, 48)), false)
-            draw_string(ThemeDB.fallback_font, ore.pos + Vector2(-22, 36), str(ore.amount), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f5d677"))
+# Per-frame visual sync: manage 3D nodes from simulation state.
+var unit_visuals: Dictionary = {}
+var building_visuals: Dictionary = {}
+var ore_visuals: Dictionary = {}
+var rock_visuals: Array[EntityVisual] = []
+var effect_visuals: Dictionary = {}
+var marker_visuals: Dictionary = {}
+var selection_rect_overlay: Panel
+var build_preview_visual: MeshInstance3D
+var build_preview_model: EntityVisual
+
+
+func _sync_visuals() -> void:
+    _sync_rocks()
+    _sync_ores()
+    _sync_buildings()
+    _sync_units()
+    _sync_effects()
+    _sync_markers()
+    _sync_selection_rect()
+    _sync_build_preview()
+    _sync_fog()
+
+
+func _sync_rocks() -> void:
+    if rock_visuals.is_empty():
+        # Tile rock clusters across each obstacle footprint.
+        for rock: Rect2 in sim.obstacles:
+            var spacing := 72.0
+            var cols := maxi(1, int(rock.size.x / spacing))
+            var rows := maxi(1, int(rock.size.y / spacing))
+            for cx in range(cols):
+                for cy in range(rows):
+                    var pos := Vector2(
+                        rock.position.x + (cx + 0.5) * rock.size.x / cols,
+                        rock.position.y + (cy + 0.5) * rock.size.y / rows
+                    )
+                    var jitter := Vector2(randf_range(-14, 14), randf_range(-14, 14))
+                    var scale_factor := randf_range(0.72, 1.1)
+                    var visual := EntityVisual.new("rock", 1)
+                    visual.set_position_2d(pos + jitter)
+                    visual.scale = Vector3.ONE * scale_factor
+                    add_child(visual)
+                    rock_visuals.append(visual)
+
+    # Fog: rocks only show in explored terrain (permanent reveal, like terrain).
+    for visual: EntityVisual in rock_visuals:
+        var cell := Vector2i((Vector2(visual.position.x, visual.position.z) / Simulation.CELL).floor()).clamp(Vector2i.ZERO, Vector2i(Simulation.GRID.x - 1, Simulation.GRID.y - 1))
+        var index := cell.y * Simulation.GRID.x + cell.x
+        var explored: PackedByteArray = sim.explored.get(local_slot, PackedByteArray())
+        visual.visible = index >= 0 and index < explored.size() and explored[index] == 1
+
+
+func _sync_ores() -> void:
+    var seen := {}
+    for id: int in sim.ores:
+        var ore: Dictionary = sim.ores[id]
+        if not ore_visuals.has(id):
+            var visual := EntityVisual.new("ore", 1)
+            visual.name = "Ore%d" % id
+            visual.set_position_2d(ore.pos)
+            add_child(visual)
+            var label := Label3D.new()
+            label.text = str(ore.amount)
+            label.font_size = 32
+            label.pixel_size = 0.02
+            label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+            label.position = Vector3(0, visual.get_model_height() + 8, 0)
+            visual.add_child(label)
+            ore_visuals[id] = {"visual": visual, "label": label}
+        var vis: Dictionary = ore_visuals[id]
+        var visual: EntityVisual = vis.visual
+
+        # Fog of war: only render ores the local player can currently see.
+        visual.visible = ore.amount > 0 and sim.can_see(local_slot, ore.pos)
+        visual.set_position_2d(ore.pos)
+        var label: Label3D = vis.label
+        label.text = str(ore.amount)
+        seen[id] = true
+    for id: int in ore_visuals.keys():
+        if not seen.has(id):
+            ore_visuals[id].visual.queue_free()
+            ore_visuals.erase(id)
+
+
+func _sync_buildings() -> void:
+    var seen := {}
     for id: int in sim.buildings:
         var b: Dictionary = sim.buildings[id]
-        if b.owner != local_slot and not sim.can_see(local_slot, b.pos):
-            continue
-        var rect: Rect2 = sim.footprint(b)
-        draw_rect(Rect2(rect.position + Vector2(6, 10), rect.size), Color(0, 0, 0, 0.3))
-        var tint := Color(0.65, 0.65, 0.65) if b.remaining > 0 else Color.WHITE
-        if b.flash > 0:
-            tint = Color(2, 2, 2)
-        draw_texture_rect(sprites[b.owner][b.type], rect, false, tint)
-        _bar(rect.position - Vector2(0, 8), rect.size.x, float(b.hp) / Simulation.BUILD_TYPES[b.type].hp, Color("#75c46e"))
+        if not building_visuals.has(id):
+            var visual := EntityVisual.new(b.type, b.owner)
+            visual.name = "Building%d" % id
+            visual.set_position_2d(b.pos)
+            add_child(visual)
+            var hp_bar := _make_status_bar(Simulation.BUILD_TYPES[b.type].size.x * 0.8, 5, Color("#75c46e"))
+            hp_bar.position = Vector3(0, visual.get_model_height() + 12, 0)
+            visual.add_child(hp_bar)
+            building_visuals[id] = {"visual": visual, "hp_bar": hp_bar}
+        var vis: Dictionary = building_visuals[id]
+        var visual: EntityVisual = vis.visual
+
+        # Fog: enemy buildings only render when currently visible.
+        visual.visible = b.owner == local_slot or sim.can_see(local_slot, b.pos)
+        visual.set_position_2d(b.pos)
+        visual.set_faction(b.owner)
+        visual.set_flash(b.flash > 0)
+        visual.set_construction_tint(b.remaining > 0)
         if b.remaining > 0:
-            _bar(rect.position + Vector2(0, rect.size.y + 4), rect.size.x, 1.0 - float(b.remaining) / Simulation.BUILD_TYPES[b.type].time, Color("#eac75b"))
-        if selected_buildings.has(id) or selected_building == id:
-            draw_rect(rect.grow(3), Color("#dfe995"), false, 2)
-            if b.type == "bunker":
-                draw_arc(b.pos, Simulation.BUILD_TYPES.bunker.range, 0, TAU, 48, Color(0.55, 0.85, 1.0, 0.35), 1)
-            if b.has("rally") and (b.rally as Vector2) != Vector2.ZERO:
-                draw_line(b.pos, b.rally, Color(0.55, 0.85, 1.0, 0.5), 1)
-                draw_circle(b.rally, 9, Color(0.55, 0.85, 1.0, 0.35))
-                draw_circle(b.rally, 4, Color("#c8ecff"))
-                draw_string(ThemeDB.fallback_font, b.rally + Vector2(10, -8), "R", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c8ecff"))
+            visual.set_animation("construction")
+        elif b.type == "bunker" and int(b.cooldown) > 4:
+            visual.set_animation("fire")
+        elif not b.queue.is_empty() and b.type in ["barracks", "refinery"]:
+            visual.set_animation("active")
+        else:
+            visual.set_animation("idle")
+
+        _update_status_bar(vis.hp_bar, float(b.hp) / Simulation.BUILD_TYPES[b.type].hp)
+        if b.remaining > 0:
+            if not vis.has("build_bar"):
+                var build_bar := _make_status_bar(Simulation.BUILD_TYPES[b.type].size.x * 0.8, 5, Color("#eac75b"))
+                build_bar.position = Vector3(0, visual.get_model_height() + 20, 0)
+                visual.add_child(build_bar)
+                vis["build_bar"] = build_bar
+            _update_status_bar(vis.build_bar, 1.0 - float(b.remaining) / Simulation.BUILD_TYPES[b.type].time)
+        seen[id] = true
+    for id: int in building_visuals.keys():
+        if not seen.has(id):
+            building_visuals[id].visual.queue_free()
+            building_visuals.erase(id)
+
+
+func _sync_units() -> void:
+    var seen := {}
     for id: int in sim.units:
         var u: Dictionary = sim.units[id]
-        if u.owner != local_slot and not sim.can_see(local_slot, u.pos):
-            continue
-        var pos: Vector2 = u.pos
-        if selected_units.has(id):
-            draw_arc(pos, 19, 0, TAU, 24, Color("#cbef84"), 2)
-            if u.order == "attack":
-                var targets: Dictionary = sim.units if u.attack_kind == "unit" else sim.buildings
-                if targets.has(int(u.attack_id)):
-                    draw_line(pos, targets[int(u.attack_id)].pos, Color(0.9, 0.25, 0.15, 0.45), 1)
-        draw_rect(Rect2(pos + Vector2(-11, 8), Vector2(24, 8)), Color(0, 0, 0, 0.3))
-        var size := Vector2(30, 30) if u.type == "soldier" else Vector2(36, 36)
-        draw_texture_rect(sprites[u.owner][u.type], Rect2(pos - size / 2, size), false, Color(2, 2, 2) if u.flash > 0 else Color.WHITE)
-        _bar(pos + Vector2(-15, -24), 30, float(u.hp) / Simulation.UNIT_TYPES[u.type].hp, Color("#75c46e"))
-        if u.type == "harvester" and u.cargo > 0:
-            _bar(pos + Vector2(-15, 23), 30, float(u.cargo) / 60, Color("#eac75b"))
-        if id == speech_unit and speech_time > 0.0:
-            var bubble := Rect2(pos + Vector2(18, -48), Vector2(126, 25))
-            draw_rect(bubble, Color("#eef2d8"), true)
-            draw_rect(bubble, Color("#27352f"), false, 1)
-            draw_string(ThemeDB.fallback_font, bubble.position + Vector2(5, 17), speech_text, HORIZONTAL_ALIGNMENT_LEFT, 116, 11, Color("#18231f"))
-    for e: Dictionary in sim.effects:
+        if not unit_visuals.has(id):
+            var visual := EntityVisual.new(u.type, u.owner)
+            visual.name = "Unit%d" % id
+            visual.set_position_2d(u.pos)
+            add_child(visual)
+            var hp_bar := _make_status_bar(30, 4, Color("#75c46e"))
+            hp_bar.position = Vector3(0, visual.get_model_height() + 12, 0)
+            visual.add_child(hp_bar)
+            unit_visuals[id] = {"visual": visual, "hp_bar": hp_bar}
+        var vis: Dictionary = unit_visuals[id]
+        var visual: EntityVisual = vis.visual
+
+        # Fog: enemy units only render when currently visible.
+        visual.visible = u.owner == local_slot or sim.can_see(local_slot, u.pos)
+        visual.set_position_2d(u.pos)
+        visual.set_faction(u.owner)
+        visual.set_flash(u.flash > 0)
+        visual.set_heading(_unit_heading(u))
+        visual.set_animation(_unit_animation_state(u))
+        _update_status_bar(vis.hp_bar, float(u.hp) / Simulation.UNIT_TYPES[u.type].hp)
+
+        # Cargo bar for harvesters (reset when cargo drops to 0).
+        if u.type == "harvester":
+            if u.cargo > 0:
+                if not vis.has("cargo_bar"):
+                    var cargo_bar := _make_status_bar(30, 4, Color("#eac75b"))
+                    cargo_bar.position = Vector3(0, visual.get_model_height() + 20, 0)
+                    visual.add_child(cargo_bar)
+                    vis["cargo_bar"] = cargo_bar
+                _update_status_bar(vis.cargo_bar, float(u.cargo) / 60.0)
+            elif vis.has("cargo_bar"):
+                _update_status_bar(vis.cargo_bar, 0.0)
+        seen[id] = true
+    for id: int in unit_visuals.keys():
+        if not seen.has(id):
+            unit_visuals[id].visual.queue_free()
+            unit_visuals.erase(id)
+
+
+func _unit_animation_state(u: Dictionary) -> String:
+    if u.order == "attack":
+        return "attack"
+    if u.order in ["move", "attack_move"]:
+        return "move"
+    if u.type == "harvester" and u.order == "gather":
+        var destination := _unit_destination(u)
+        var near_target := (u.pos as Vector2).distance_to(destination) <= (46.0 if int(u.cargo) < 60 else 44.0)
+        if near_target:
+            return "unload" if int(u.cargo) > 0 else "mine"
+        return "move"
+    return "idle"
+
+
+func _unit_destination(u: Dictionary) -> Vector2:
+    if u.order == "attack":
+        if u.attack_kind == "unit" and sim.units.has(int(u.attack_id)):
+            return sim.units[int(u.attack_id)].pos
+        if u.attack_kind == "building" and sim.buildings.has(int(u.attack_id)):
+            return sim.buildings[int(u.attack_id)].pos
+    if u.order == "gather" and u.type == "harvester":
+        if int(u.cargo) >= 60:
+            return _nearest_refinery_position(u)
+        if sim.ores.has(int(u.ore)):
+            return sim.ores[int(u.ore)].pos
+    return u.target
+
+
+func _nearest_refinery_position(u: Dictionary) -> Vector2:
+    var best_position: Vector2 = u.pos
+    var best_distance := INF
+    for building: Dictionary in sim.buildings.values():
+        var refinery: bool = building.type == "refinery" and building.owner == u.owner and building.remaining == 0
+        var distance: float = (u.pos as Vector2).distance_to(building.pos) if refinery else INF
+        if distance < best_distance:
+            best_distance = distance
+            best_position = building.pos
+    return best_position
+
+
+func _unit_heading(u: Dictionary) -> Vector2:
+    var destination := _unit_destination(u)
+    var heading := destination - (u.pos as Vector2)
+    if heading.length_squared() > 1.0:
+        return heading
+    if render_velocities.has(u.get("id", -1)):
+        return render_velocities[u.get("id", -1)]
+    return Vector2.UP
+
+var _dot_texture: ImageTexture
+
+# Simple white dot for effects and click markers (tinted by modulate).
+func _white_dot() -> ImageTexture:
+    if _dot_texture == null:
+        var img := Image.create(8, 8, false, Image.FORMAT_RGBA8)
+        img.fill(Color.WHITE)
+        _dot_texture = ImageTexture.create_from_image(img)
+    return _dot_texture
+
+# Create a status bar (bg + fill) as billboarded Sprite3D pair above a unit.
+func _make_status_bar(width: float, height: float, fill_color: Color) -> Node3D:
+    var holder := Node3D.new()
+    var bg := Sprite3D.new()
+    bg.texture = _white_dot()
+    bg.pixel_size = 1.0
+    bg.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+    bg.shaded = false
+    bg.modulate = Color("#182219")
+    bg.scale = Vector3(width / 8.0, height / 8.0, 1)
+    holder.add_child(bg)
+    var fill := Sprite3D.new()
+    fill.texture = _white_dot()
+    fill.pixel_size = 1.0
+    fill.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+    fill.shaded = false
+    fill.modulate = fill_color
+    fill.scale = Vector3(width / 8.0, height / 8.0, 1)
+    fill.position.z = -0.5
+    holder.add_child(fill)
+    holder.set_meta("fill", fill)
+    holder.set_meta("width", width)
+    return holder
+
+func _update_status_bar(holder: Node3D, fraction: float, color: Color = Color.TRANSPARENT) -> void:
+    var fill: Sprite3D = holder.get_meta("fill")
+    var width: float = holder.get_meta("width")
+    fill.scale.x = maxf(0.01, width / 8.0 * clampf(fraction, 0.0, 1.0))
+    if color != Color.TRANSPARENT:
+        fill.modulate = color
+
+func _sync_effects() -> void:
+    var seen := {}
+    for i: int in sim.effects.size():
+        var e: Dictionary = sim.effects[i]
+        # Fog: effects only render in visible areas.
         if not sim.can_see(local_slot, e.to):
             continue
+        var key := "%d_%d" % [int(e.frame), i]
+        if not effect_visuals.has(key):
+            var sprite := Sprite3D.new()
+            sprite.pixel_size = 2.0
+            sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+            sprite.shaded = false
+            sprite.texture = _white_dot()
+            add_child(sprite)
+            effect_visuals[key] = sprite
+        var sprite: Sprite3D = effect_visuals[key]
+        var progress := 1.0 - float(e.life) / 10.0
         if e.kind == "shot":
-            var progress := 1.0 - float(e.life) / 5.0
-            var point: Vector2 = (e.from as Vector2).lerp(e.to, progress)
-            draw_line(e.from, point, Color("#dfb66a"), 1)
-            draw_circle(point, 3, Color("#ffe9a2"))
-            draw_circle(e.to, 5 * (1.0 - progress), Color("#ff8c50"))
+            var point := Vector3((e.from as Vector2).lerp(e.to, progress).x, 12, (e.from as Vector2).lerp(e.to, progress).y)
+            point.y = 12
+            sprite.position = point
+            sprite.modulate = Color("#ffe9a2")
         else:
-            draw_circle(e.to, 5 + (10 - e.life) * 2, Color(1, 0.6, 0.2, float(e.life) / 10))
+            var pos3 := Vector3((e.to as Vector2).x, 5 + (10 - e.life) * 2, (e.to as Vector2).y)
+            sprite.position = pos3
+            sprite.modulate = Color(1, 0.6, 0.2, float(e.life) / 10)
+        seen[key] = true
+    for key: String in effect_visuals.keys():
+        if not seen.has(key):
+            effect_visuals[key].queue_free()
+            effect_visuals.erase(key)
+
+func _sync_markers() -> void:
+    var seen := {}
+    for i: int in clicks.size():
+        var click: Dictionary = clicks[i]
+        var key := "click_%d" % i
+        if not marker_visuals.has(key):
+            var sprite := Sprite3D.new()
+            sprite.pixel_size = 3.0
+            sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+            sprite.shaded = false
+            sprite.texture = _white_dot()
+            add_child(sprite)
+            marker_visuals[key] = sprite
+        var sprite: Sprite3D = marker_visuals[key]
+        var pos3 := Vector3((click.pos as Vector2).x, 5, (click.pos as Vector2).y)
+        sprite.position = pos3
+        var p: float = 1.0 - click.life / 0.55
+        sprite.modulate = Color("#ffc359", 1.0 - p)
+        seen[key] = true
+    for key: String in marker_visuals.keys():
+        if not seen.has(key):
+            marker_visuals[key].queue_free()
+            marker_visuals.erase(key)
+
+func _sync_selection_rect() -> void:
+    if selection_dragging:
+        var start_screen := _world_to_screen(selection_start)
+        var end_screen := _world_to_screen(selection_current)
+        var rect := Rect2(start_screen, end_screen - start_screen).abs()
+        if selection_rect_overlay == null:
+            selection_rect_overlay = Panel.new()
+            var style := StyleBoxFlat.new()
+            style.bg_color = Color(0.7, 1, 0.5, 0.15)
+            style.border_color = Color("#c5e79d")
+            style.set_border_width_all(1)
+            selection_rect_overlay.add_theme_stylebox_override("panel", style)
+            selection_rect_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+            hud.add_child(selection_rect_overlay)
+        selection_rect_overlay.position = rect.position
+        selection_rect_overlay.size = rect.size
+        selection_rect_overlay.visible = true
+    elif selection_rect_overlay != null:
+        selection_rect_overlay.visible = false
+
+func _sync_build_preview() -> void:
+    if not build_mode.is_empty() and not menu_visible:
+        var pos: Vector2 = sim.snap_build(_screen_to_world(get_viewport().get_mouse_position()))
+        var size: Vector2 = Simulation.BUILD_TYPES[build_mode].size
+        var valid := sim.build_error(local_slot, build_mode, pos).is_empty()
+        if build_preview_model != null and build_preview_model.kind != build_mode:
+            build_preview_model.queue_free()
+            build_preview_model = null
+        if build_preview_model == null:
+            build_preview_model = EntityVisual.new(build_mode, local_slot)
+            add_child(build_preview_model)
+        if build_preview_visual == null:
+            var mesh := PlaneMesh.new()
+            mesh.size = Vector2(100, 100)
+            var surface := StandardMaterial3D.new()
+            surface.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+            surface.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+            build_preview_visual = MeshInstance3D.new()
+            build_preview_visual.mesh = mesh
+            build_preview_visual.material_override = surface
+            add_child(build_preview_visual)
+        build_preview_model.visible = true
+        build_preview_model.set_position_2d(pos)
+        build_preview_model.set_animation("idle")
+        build_preview_visual.visible = true
+        build_preview_visual.position = Vector3(pos.x, 0.5, pos.y)
+        build_preview_visual.scale = Vector3((size.x + 32) / 100.0, 1, (size.y + 32) / 100.0)
+        build_preview_visual.get_active_material(0).albedo_color = Color(0.45, 1, 0.45, 0.3) if valid else Color(1, 0.3, 0.3, 0.3)
+    else:
+        if build_preview_model != null:
+            build_preview_model.visible = false
+        if build_preview_visual != null:
+            build_preview_visual.visible = false
+
+func _sync_fog() -> void:
     if local_slot in [1, 2]:
         for y in range(Simulation.GRID.y):
             for x in range(Simulation.GRID.x):
                 var index := y * Simulation.GRID.x + x
                 if sim.visible[local_slot][index] == 0:
                     var alpha := 0.62 if sim.explored[local_slot][index] == 1 else 1.0
-                    draw_rect(Rect2(x * 32, y * 32, 32, 32), Color(0.035, 0.055, 0.055, alpha))
-    for click: Dictionary in clicks:
-        var p: float = 1.0 - click.life / 0.55
-        var color := Color("#ffc359") if click.action != "attack" else Color("#ff725e")
-        color.a = 1 - p
-        draw_arc(click.pos, lerpf(8, 32, p), 0, TAU, 24, color, 2)
-        draw_line(click.pos - Vector2(7, 0), click.pos + Vector2(7, 0), color, 2)
-        draw_line(click.pos - Vector2(0, 7), click.pos + Vector2(0, 7), color, 2)
-    if selection_dragging:
-        var rect := Rect2(selection_start, selection_current - selection_start).abs()
-        draw_rect(rect, Color(0.7, 1, 0.5, 0.15))
-        draw_rect(rect, Color("#c5e79d"), false, 1)
-    if not build_mode.is_empty() and not menu_visible:
-        var pos: Vector2 = sim.snap_build(get_global_mouse_position())
-        var size: Vector2 = Simulation.BUILD_TYPES[build_mode].size
-        var color := Color(0.45, 1, 0.45, 0.6) if sim.build_error(local_slot, build_mode, pos).is_empty() else Color(1, 0.3, 0.3, 0.6)
-        draw_texture_rect(sprites[local_slot][build_mode], Rect2(pos - size / 2, size), false, color)
-        draw_rect(Rect2(pos - size / 2, size).grow(16), color, false, 2)
-
-func _bar(pos: Vector2, width: float, fraction: float, color: Color) -> void:
-    draw_rect(Rect2(pos, Vector2(width, 4)), Color("#182219"))
-    draw_rect(Rect2(pos, Vector2(width * clampf(fraction, 0, 1), 4)), color)
+                    fog_image.set_pixel(x, y, Color(0.035, 0.055, 0.055, alpha))
+                else:
+                    fog_image.set_pixel(x, y, Color(0, 0, 0, 0))
+        fog_texture.update(fog_image)

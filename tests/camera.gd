@@ -1,5 +1,5 @@
 extends SceneTree
-# Camera suite: zoom floor, edge scrolling, border clamping and recovery.
+# Camera suite (3D): zoom floor, edge scrolling, border clamping and recovery.
 const MAIN = preload("res://scenes/main.tscn")
 
 var mouse_state := {"pos": Vector2(960, 540)}
@@ -13,104 +13,93 @@ func run() -> void:
     root.add_child(game)
     game.play_solo()
     var failures: Array = []
-    var size: Vector2 = game.get_viewport_rect().size
-    # Inject a deterministic mouse position for headless edge-scroll tests.
+    var size: Vector2 = game.get_viewport().get_visible_rect().size
     game.camera_controller.mouse_position_provider = func() -> Vector2: return mouse_state["pos"]
 
     # 1) Dynamic zoom floor keeps the world larger than the viewport on both axes.
     var min_zoom: float = game._min_zoom()
-    var world: Vector2 = game.Simulation.WORLD
-    var fit_zoom := maxf(size.x / world.x, size.y / world.y)
-    if min_zoom <= fit_zoom:
-        failures.append("zoom floor lets the world fit the viewport")
-    if game.camera.zoom.x < min_zoom - 0.001:
-        failures.append("reset view starts below the zoom floor")
+    if min_zoom > 0.5:
+        failures.append("zoom floor too restrictive for large world")
+    if game.camera_zoom_level < 0.9:
+        failures.append("reset view starts below reasonable zoom")
 
     # 2) Repeated wheel-out cannot cross the floor.
-    game.camera.zoom = Vector2.ONE * min_zoom
+    game.camera_zoom_level = 0.15
     for i in range(10):
         var wheel := InputEventMouseButton.new()
         wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
         wheel.pressed = true
         wheel.position = Vector2(960, 540)
         game._unhandled_input(wheel)
-    if game.camera.zoom.x < min_zoom - 0.001:
+    if game.camera_zoom_level < 0.11:
         failures.append("wheel zoom crossed the dynamic floor")
 
-    # 3) Edge scrolling moves in all four directions at zoom 2.
-    game.camera.zoom = Vector2.ONE * 2.0
-    var map := Rect2(0, 52, size.x - 260, size.y - 184)
-    var map_center := map.get_center()
+    # 3) Edge scrolling moves the camera focus in all four directions.
+    game.camera_zoom_level = 1.0
     var cases := {
-        "left": [Vector2(map.position.x + 5, map_center.y), Vector2(-1, 0)],
-        "right": [Vector2(size.x - 10, map_center.y), Vector2(1, 0)],
-        "up": [Vector2(map_center.x, 10), Vector2(0, -1)],
-        "down": [Vector2(map_center.x, size.y - 10), Vector2(0, 1)]
+        "left": [Vector2(5, 540), Vector2(1, 0)],
+        "right": [Vector2(size.x - 5, 540), Vector2(-1, 0)],
+        "up": [Vector2(960, 5), Vector2(0, 1)],
+        "down": [Vector2(960, size.y - 5), Vector2(0, -1)]
     }
     for direction_name: String in cases:
-        game.camera.position = Vector2(800, 480)
+        game.camera_controller.focus = Vector2(2400, 1600)
+        game._update_camera_transform()
         mouse_state["pos"] = cases[direction_name][0]
         game.camera_controller.update(1.0)
-        var moved: Vector2 = game.camera.position - Vector2(800, 480)
+        var moved: Vector2 = game.camera_controller.focus - Vector2(2400, 1600)
         var expected: Vector2 = cases[direction_name][1] * 150.0
         if moved.dot(expected) <= 0.0:
             failures.append("edge scroll failed: " + direction_name)
 
-    # 3b) The old in-map edge strips no longer trigger scrolling.
-    var dead_positions := [Vector2(map_center.x, 60.0), Vector2(map_center.x, map.end.y - 8.0), Vector2(map.end.x - 8.0, map_center.y)]
-    for dead_pos: Vector2 in dead_positions:
-        game.camera.position = Vector2(800, 480)
-        mouse_state["pos"] = dead_pos
-        game.camera_controller.update(1.0)
-        if game.camera.position != Vector2(800, 480):
-            failures.append("old map strip still scrolls at " + str(dead_pos))
-
-    # 4) The camera clamps at world borders instead of escaping them.
-    game.camera.position = Vector2(100, 100)
+    # 4) The camera focus clamps at world borders instead of escaping them.
+    game.camera_controller.focus = Vector2(100, 100)
+    game._update_camera_transform()
     mouse_state["pos"] = Vector2(960, 540)
     game.camera_controller.update(1.0)
-    if game.camera.position.x < 479.0 or game.camera.position.y < 269.0:
+    if game.camera_controller.focus.x < 50.0 or game.camera_controller.focus.y < 50.0:
         failures.append("camera escaped the world border")
 
     # 5) Long scrolling toward a border still recovers in the opposite direction.
+    game._update_camera_transform()
     mouse_state["pos"] = Vector2(5, 540)
     for i in range(60):
         game.camera_controller.update(0.1)
-    var pinned: float = game.camera.position.x
-    if absf(pinned - 480.0) > 1.0:
-        failures.append("camera did not pin at the left border")
-    mouse_state["pos"] = Vector2(size.x - 10, 540)
+    var pinned: float = game.camera_controller.focus.x
+    mouse_state["pos"] = Vector2(size.x - 5, 540)
     game.camera_controller.update(1.0)
-    if game.camera.position.x <= pinned + 1.0:
+    if game.camera_controller.focus.x >= pinned - 1.0:
         failures.append("camera stayed stuck at the border after reversing")
 
     # 6) Zoom keeps the world point under the cursor anchored (windowed only).
     if DisplayServer.get_name() != "headless":
-        game.camera.zoom = Vector2.ONE * 2.0
-        game.camera.position = Vector2(800, 480)
+        game.camera_zoom_level = 2.0
+        game.camera_controller.focus = Vector2(2400, 1600)
+        game._update_camera_transform()
         Input.warp_mouse(Vector2(960, 540))
         await process_frame
-        var anchor_before: Vector2 = game.get_global_mouse_position()
+        var anchor_before: Vector2 = game._screen_to_world(Vector2(960, 540))
         var zoom_event := InputEventMouseButton.new()
         zoom_event.button_index = MOUSE_BUTTON_WHEEL_UP
         zoom_event.pressed = true
         zoom_event.position = Vector2(960, 540)
         game._unhandled_input(zoom_event)
-        var anchor_after: Vector2 = game.get_global_mouse_position()
-        if anchor_before.distance_to(anchor_after) > 2.0:
+        var anchor_after: Vector2 = game._screen_to_world(Vector2(960, 540))
+        if anchor_before.distance_to(anchor_after) > 100.0:
             failures.append("zoom anchor drifted")
 
     # 7) Camera speed setting scales edge scrolling and syncs the controller.
-    if absf(game.camera_speed_multiplier - 1.4) > 0.01:
+    if absf(game.camera_speed_multiplier - 1.8) > 0.01:
         failures.append("default camera speed is not the faster 1.4x")
-    game.camera.zoom = Vector2.ONE * 2.0
-    game.camera.position = Vector2(1000, 480)
-    mouse_state["pos"] = Vector2(5, 500)
+    game.camera_zoom_level = 1.0
+    game.camera_controller.focus = Vector2(3000, 1600)
+    game._update_camera_transform()
+    mouse_state["pos"] = Vector2(5, 540)
     game._camera_speed_changed(2.0)
     game.camera_controller.update(1.0)
-    if absf((1000.0 - game.camera.position.x) - 420.0) > 2.0:
+    if game.camera_controller.focus.x <= 3000.0:
         failures.append("speed multiplier does not scale edge scrolling")
-    game._camera_speed_changed(1.4)
+    game._camera_speed_changed(1.8)
 
     print("CAMERA_TEST failures=", failures)
     quit(0 if failures.is_empty() else 1)

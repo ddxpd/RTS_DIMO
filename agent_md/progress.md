@@ -51,3 +51,53 @@
 - [x] 开发日志 agent_md/dev_log.md 建立
 
 状态：完成
+
+# Progress：Blender 3D 模型替换（2026-09-22）
+- [x] 确认现有视觉架构、模拟状态与测试耦合点
+- [x] 确认美术决策：务实写实机械风、实体+资源替换、状态动画、机械灰+阵营色、清晰战场光
+- [ ] Blender 源资产与 GLB 导出
+状态：进行中
+- [x] 生成并保存 assets/models/source/ironfront_models.blend：8 模型 / 142 对象 / 128 网格 / 11 材质
+- [x] 导出 soldier、harvester、base、barracks、refinery、bunker、ore、rock 独立 GLB
+- 遇到并解决：Blender MCP 禁止 read_factory_settings、Principled 节点本地化命名、修改器上下文、构建器参数签名混用、旧版 glTF 参数 export_colors
+状态：Blender 资产阶段完成，准备 Godot 导入
+- [x] Godot 导入 8 个 GLB；新增 EntityVisual 统一模型缩放、阵营材质、受击/施工染色、朝向与状态动画
+- [x] main.gd 替换单位/建筑/矿石/岩石视觉、建筑预览，并新增战场阳光与环境光
+- [x] 新增 tests/visual_models.gd：模型/动画/施工/生产/开火/资源迷雾/预览全通过
+- [x] 回归 visual_models / gameplay / features / camera / action_bar / presentation 全部 0 failures
+- [x] 修复并记录：重复按下在 headless 注入路径可能重启框选；_unhandled_input 同步维护按钮状态和 motion 时间戳
+状态：Godot 表现层与回归测试完成，进入实机验证
+- [x] 实机 SOLO 启动并保存 1920x1080 战场截图；像素统计确认绿色地面约 67%、机械灰约 11%、迷雾/阴影约 14%，存在蓝色阵营与黄色矿石像素
+- [x] 完整多进程网络验证通过：协议不匹配拒绝、观战权限、红方采矿/建造/生产/攻击/胜利、两轮快照一致、重开与主机退出处理
+- [x] 修复迷雾边界 bug：local_slot 无 explored 数组时岩石直接隐藏，避免空数组越界
+- [x] 修复建筑单选 bug：直接设置合法 selected_building 时自动同步 selected_buildings，生产回调不再被清理
+- [x] 修复网络测试假设：round2 动态选择红方单位并用近距目标验证重开后命令与冻结快照
+状态：实机与联机验证完成，待最终回归/导出
+- [x] 移除临时截图/重置热键；保留 build/verification/visual_models.png 作为实机证据
+- [x] 全套回归最终结果：visual_models=0、gameplay=57/0、features=0、camera=0、action_bar=0、presentation=0
+- [x] 导出 build/IronFront.exe：111,121,248 字节（PCK 内嵌）
+- [x] 导出版 headless 冒烟：退出码 0，无游戏脚本错误
+- [x] 导出版真实渲染进程运行 5 秒存活后自动关闭：alive_after_5s=true
+状态：完成
+
+# Progress：本地效果图收藏网页（2026-09-22）
+- [x] 确认现有网页为空、效果图位置与用户交付偏好
+状态：进行中
+- [x] 遇到 Windows CreateProcess 206 命令长度限制；改为分块写入静态页面
+- [x] 新增 tools/effect-gallery/index.html：两个标签、上传/拖拽/文件夹导入、IndexedDB、搜索排序、卡片、预览、下载、删除、清空
+- [x] 新增 tools/effect-gallery/start.ps1 与 README.md；启动脚本支持 python/py、自动空闲端口、静态服务和打开浏览器
+- [x] 修复一次 PowerShell 写入导致的 start.ps1/README 中文编码损坏；start.ps1 改为 ASCII，README 用 UTF-8 重写
+- [x] 修复 py launcher 参数顺序问题：-3 必须位于 -m http.server 之前
+- [x] 静态验证：HTML 标签/doctype/重复 ID 检查通过；2 个 script 块 node --check 通过；start.ps1 Parser 通过；HTTP 200
+状态：页面实现完成；浏览器控制通道不可用，待项目回归与导出
+- [x] HTTP 验证：本地静态服务返回 200，页面 23,420 bytes
+- [x] HTML Parser：doctype、标签闭合、重复 ID 检查通过
+- [x] Node --check：2 个脚本块语法通过
+- [x] PowerShell Parser：start.ps1 语法通过，python/py 参数顺序正确
+- [x] Godot 回归：visual_models/gameplay/features/camera/action_bar/presentation 全部退出码 0
+- [x] 导出 build/IronFront.exe：111,121,248 bytes，时间 2026-09-22 12:32:16
+- [x] 导出版 headless 冒烟退出码 0；真实渲染进程 5 秒存活后关闭
+- [!] 真实浏览器 UI 测试限制：Browser runtime 可初始化但浏览器列表为空
+状态：实现完成，待提交
+- [x] 本地提交完成：70708b2 Add local effect image gallery
+状态：完成

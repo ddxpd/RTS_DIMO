@@ -28,3 +28,31 @@
   8 士兵+2 采集车），game log 无错误
 - 导出模板 4.7.2 曾缺失，已从 %TEMP% 缓存安装到 AppData 后成功导出
 - build/IronFront.exe：109,188,184 字节，2026-09-19 22:25，PCK 内嵌
+
+# Findings：Blender 3D 模型替换（2026-09-22）
+- 现项目无外部模型资源；8 类实体均由 `assets/art/pixel_art.gd` 动态生成纹理并经 `Sprite3D` 显示。
+- 模拟状态足以驱动动画：士兵 idle/move/attack，采集车 move/mine/unload，建筑 construction/active/fire，不需要改协议。
+- `main.gd` 视觉同步与选择逻辑解耦，替换 Node3D 表现层不会影响框选、点击或网络状态。
+- Blender 当前连接可用，可执行 bpy 程序化建模与 glTF 导出。
+- Blender 5.2 中文界面下 Principled 节点名称为本地化文本，必须按 `ShaderNodeBsdfPrincipled` 类型查找。
+- 程序化 bmesh 细分比临时对象 + modifier_apply 更稳定。
+- glTF 导出器可用 `use_selection=True + export_apply=True` 导出每个模型根及其子层级。
+- EntityVisual 在运行时复制 StandardMaterial3D，避免不同阵营/受击状态污染共享 GLB 材质。
+- 动画由 AnimationPlayer 动态库生成，直接引用 GLB 保留节点名（Leg_L、Drill、RadarDish 等）。
+- presentation.gd 原本仍访问旧 2D 相机 camera.zoom，并要求反投影浮点坐标完全相等；已更新为 3D 相机状态和容差断言。
+- 框选重复按下 bug：headless root.push_input 路径不一定完整经过 _input；在 _unhandled_input 幂等维护 left_button_held 与 last_mouse_event_msec 后修复。
+- 实机画面确认：新 DirectionalLight + WorldEnvironment 后，战场截图不再全黑；模型、阵营色、矿石与迷雾同时存在。
+- 协议握手失败/观战阶段 local_slot 可能为 0，视觉层必须容忍 explored 字典缺项。
+- 网络测试的 50 秒 guest 等待对 3D 资产加载与完整经济流程偏紧；110 秒可稳定覆盖。
+- round2 原测试固定移动单位 6（蓝方）却由红方 guest 下令，会被主机正确拒绝；应动态选择红方单位。
+
+# Findings：本地效果图收藏网页（2026-09-22）
+- 项目当前没有网页结构；现有效果图集中在 build/verification，包含 visual_models、demo_move、demo_build_preview、demo_build_construction 等 PNG。
+- 用户确认：第一版做本地网页、本地上传、浏览器 IndexedDB 保存；后续可再静态部署。
+- 采用零依赖单文件静态页面 + Python HTTP 本地启动脚本，避免引入 Node 或构建链。
+- Windows PowerShell 5 的 Set-Content 管道会把部分中文字符写成损坏字节；网页内容经 Node UTF-8 读取确认正常，start.ps1 改为 ASCII，README 用 Node fs UTF-8 重写。
+- 浏览器技能运行时初始化成功但 agent.browsers.list() 为空，因此本轮无法进行真实浏览器 UI 测试；已记录为验证限制。
+- 静态页面通过 HTTP 200、Node 语法检查、HTML Parser 标签/ID 检查和 PowerShell Parser 检查。
+- start.ps1 最终采用 ASCII 错误/提示文案，避免 Windows PowerShell 管道编码损坏；README 和页面保持 UTF-8。
+- py 启动路径参数顺序已修正为 `py -3 -m http.server ...`；直接 python 路径保持 `python -m http.server ...`。
+- 本地 HTTP 服务已停止，端口 8765 未占用。

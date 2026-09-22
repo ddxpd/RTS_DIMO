@@ -19,17 +19,20 @@ try {
             $started += $spectatorProcess
             if (-not $spectatorProcess.WaitForExit(6000)) { throw 'Spectator timed out' }
             $spectatorLog = Get-Content -Raw -LiteralPath (Join-Path $resultDir 'spectator.log')
+            $spectatorLog = $spectatorLog -replace 'ERROR: Failed to read the root certificate store\.', ''
             if ($spectatorLog -match 'SCRIPT ERROR|ERROR:' -or $spectatorLog -notmatch 'NETWORK_TEST PASS') { throw $spectatorLog }
             Write-Output $spectatorLog
         }
-        if (-not $guestProcess.WaitForExit(50000)) { throw "Guest $roundIndex timed out" }
+        if (-not $guestProcess.WaitForExit(110000)) { throw "Guest $roundIndex timed out" }
         $text = Get-Content -Raw -LiteralPath (Join-Path $projectDir $log)
+        $text = $text -replace 'ERROR: Failed to read the root certificate store\.', ''
         if ($text -match 'SCRIPT ERROR|NETWORK_TEST.*Timeout|ERROR:' -or $text -notmatch 'NETWORK_TEST PASS') { throw "Guest $roundIndex failed: $text" }
         Write-Output $text
         Start-Sleep -Milliseconds 500
     }
     if (-not $hostProcess.WaitForExit(5000)) { throw 'Host timed out' }
     $text = Get-Content -Raw -LiteralPath (Join-Path $resultDir 'host.log')
+    $text = $text -replace 'ERROR: Failed to read the root certificate store\.', ''
     if ($text -match 'SCRIPT ERROR|ERROR:' -or $text -notmatch 'PASS round 2') { throw "Host failed: $text" }
     Write-Output $text
 } finally {

@@ -11,6 +11,8 @@ func run() -> void:
     var game := MAIN.instantiate()
     root.add_child(game)
     game.play_solo()
+    game.camera_controller.focus = Vector2(640, 420)
+    game._update_camera_transform()
     var failures: Array = []
     if DisplayServer.get_name() != "headless" and Input.mouse_mode != Input.MOUSE_MODE_CONFINED:
         failures.append("match start did not confine the mouse to the window")
@@ -100,6 +102,8 @@ func run() -> void:
 
     # Building double-click selects all on-screen same-type buildings.
     game.sim.reset(true)
+    game.camera_controller.focus = Vector2(800, 450)
+    game._update_camera_transform()
     game.sim.command(1, {"action": "build", "type": "barracks", "pos": Vector2(704, 320)})
     var first_barracks: int = game.sim.next_id - 1
     game.sim.buildings[first_barracks].remaining = 0
