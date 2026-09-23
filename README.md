@@ -49,3 +49,7 @@
 - 默认 Godot 路径为 D:/application/Godot_v4.7.2/Godot_v4.7.2-stable_win64_console.exe。
 
 项目内常规查看、修改、脚本运行及导出无需重复确认的用户偏好记录于 [agent_md/AGENTS.md](agent_md/AGENTS.md)；平台强制审批依然适用。
+
+## Current prototype branch
+
+Active development is tracked on `feature/3d-models`.
