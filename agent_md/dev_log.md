@@ -579,3 +579,15 @@
 ### Bug 与修复（成对记录）
 - 症状：施工动画 1.5 秒循环，而兵营/精炼厂/地堡/基地分别需要 4/5/6/7 秒，导致动画重复且与进度条不同步。根因：动画固定时长且 LOOP_LINEAR。修复：construction 归一化为 1 秒 LOOP_NONE，由 set_construction_progress(progress, duration) 按 Simulation 建造时长设置 speed_scale 并 seek 当前比例；基地也补齐施工动画。验证：visual_models 覆盖四种建筑时长与 50% 快照进度，核心七套测试通过。
 - 症状：士兵背对前进方向。根因：模型正面为局部 -Z，旧 set_heading 使用 +Z 计算 atan2。修复：改为 atan2(-heading.x, -heading.y)。验证：士兵东南西北和采集车斜向朝向断言全部通过，实机运行初始采样确认。
+
+## 2026-09-23：士兵可见正面攻击朝向修正
+
+### Bug 与修复（成对记录）
+- 症状：士兵攻击建筑时身体背对目标。根因：旧实现把士兵和采集车统一按局部 -Z 当正面；实际士兵身体正面是局部 +Z，采集车钻头才是 -Z，而旧的自动化测试只验证了假设的 -Z 基向量，没有验证可见身体正面。修复：`EntityVisual` 按模型解析正面轴（soldier=+Z、harvester=-Z），并把 Blender 源文件及导出的 soldier GLB 中 Weapon/Muzzle 移到局部 +Z，身体和枪口同向。验证：visual_models 覆盖东南西北、真实建筑攻击方向、身体正面与枪口方向，failures=[]；实机 MCP 攻击探针 body-forward·target=0.99999994、muzzle·target=0.8137319。
+- 症状：camera 回归偶尔在本机报 “default camera speed is not the faster 1.4x”。根因：测试读取启动值，受 `user://settings.cfg` 中玩家持久化速度影响。修复：测试先显式应用 1.8x 再断言，避免依赖本机配置。验证：camera 单独回归 failures=[]。
+
+### 验证
+- 核心回归：visual_models、visual_performance、gameplay(57 checks/0 failures)、features、camera、action_bar、presentation 全部 failures=[]；同批串行运行时 camera 在输出 failures=[] 后遇到一次 Godot headless 关闭崩溃，单独复跑退出码 0，不影响游戏判定。
+- 多人回归：协议不匹配拒绝、观战权限、红方采矿/建造/生产/攻击/胜利、两轮完整快照一致、重开与主机退出处理全部 PASS。
+- 实机截图：`build/verification/soldier_attack_facing_fixed.png`。
+- 导出：`build/IronFront.exe`，109,693,864 bytes，时间 2026-09-23 20:51:16，SHA256 `A6C302D03A0BEF09EBB9C54A1208DFEA7F20B0DA595EA9A58B349FCC0A0B369D`；导出后 headless 180 帧与真实渲染 300 帧进程退出码均为 0。

@@ -114,3 +114,11 @@
 3. [x] 扩展 visual_models 覆盖四个朝向和四种建筑时长
 4. [x] 核心、联网、实机与导出验证完成
 状态：完成
+
+# Task plan: fix visible soldier attack facing (2026-09-23)
+
+- [x] Reproduce the visible body-facing failure and identify the authoritative model front axis.
+- [x] Correct the soldier source model/weapon direction and runtime per-model heading logic.
+- [x] Strengthen tests to validate the visible soldier front and muzzle against all target directions and a real attack order.
+- [x] Run Godot regressions, real rendered gameplay validation, and export a fresh Windows EXE.
+- [x] Record bug/root cause/fix/verification together in the development log.

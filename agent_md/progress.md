@@ -126,3 +126,14 @@
 - [x] 核心七套测试全部退出码 0；完整 ENet 回归全部 PASS
 - [x] 临时 EXE：109720184 bytes，SHA256 AA0E0C873C84A22FCBC1EB0C29F290D38C46DC89AF9E165C9ADBAF9F43AEE316；headless 0，真实渲染 5 秒存活
 状态：完成
+
+# Progress: soldier visible facing correction (2026-09-23)
+
+- [x] Confirmed prior verification was insufficient: it tested an assumed -Z front rather than the visible body face.
+- [x] Inspected Blender source transforms and identified soldier front as +Z while harvester remains -Z.
+- Status: implementing the correction.
+- [x] 修正 soldier 源模型/GLB 的 Weapon/Muzzle 方向，EntityVisual 按 kind 使用 +Z/-Z 正面轴。
+- [x] 强化 visual_models：东南西北身体与枪口、真实建筑攻击方向全部通过。
+- [x] 完整 Godot 回归、ENet 两轮回归、实机 MCP 攻击探针与截图验证完成。
+- [x] 导出并运行新 build/IronFront.exe：109,693,864 bytes，SHA256 A6C302D03A0BEF09EBB9C54A1208DFEA7F20B0DA595EA9A58B349FCC0A0B369D；headless/真实渲染退出码 0。
+- 状态：完成

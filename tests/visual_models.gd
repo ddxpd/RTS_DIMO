@@ -51,8 +51,35 @@ func _check_track_count(visual: EntityVisual, animation_name: String, expected: 
 func _check_visual_forward(visual: EntityVisual, heading: Vector2, message: String) -> void:
     visual.set_heading(heading)
     visual._process(1.0)
-    var forward := -visual.global_transform.basis.z.normalized()
+    var forward := visual.get_visual_forward()
     check(forward.is_equal_approx(Vector3(heading.x, 0, heading.y)), message)
+
+
+func _check_attack_track(visual: EntityVisual, node_name: String, expected_z: Array, message: String) -> void:
+    var animation := visual.animation_player.get_animation("attack")
+    var expected_path := "soldier/%s:position" % node_name
+    for track_index: int in range(animation.get_track_count()):
+        if String(animation.track_get_path(track_index)) != expected_path:
+            continue
+        check(animation.get_track_count() >= 3, "%s has all attack tracks" % node_name)
+        check(animation.track_get_key_count(track_index) == expected_z.size(), "%s attack key count matches" % node_name)
+        for key_index: int in range(mini(animation.track_get_key_count(track_index), expected_z.size())):
+            var value: Vector3 = animation.track_get_key_value(track_index, key_index)
+            check(value.z > 0.0 && is_equal_approx(value.z, float(expected_z[key_index])), "%s attack key %d stays on the visible soldier front" % [node_name, key_index])
+        return
+    check(false, message)
+
+
+func _check_attack_muzzle_forward(visual: EntityVisual, heading: Vector2, message: String) -> void:
+    visual.set_heading(heading)
+    visual._process(1.0)
+    visual.set_animation("attack")
+    visual.animation_player.seek(0.0, true)
+    var muzzle := visual.model.get_node("soldier/Muzzle") as Node3D
+    var flat_muzzle := Vector3(muzzle.position.x, 0, muzzle.position.z)
+    var muzzle_direction := (visual.global_transform.basis * flat_muzzle).normalized()
+    check(muzzle.position.z > 0.9, "Attack muzzle keeps its local +Z position")
+    check(muzzle_direction.dot(Vector3(heading.x, 0, heading.y)) > 0.7, message)
 
 
 func run() -> void:
@@ -78,6 +105,12 @@ func run() -> void:
     _check_visual_forward(soldier_visual, Vector2.LEFT, "Soldier faces west when moving west")
     _check_visual_forward(soldier_visual, Vector2.DOWN, "Soldier faces south when moving south")
     _check_visual_forward(soldier_visual, Vector2.UP, "Soldier faces north when moving north")
+    _check_attack_track(soldier_visual, "Weapon", [0.52, 0.35, 0.52], "Soldier weapon attack track exists")
+    _check_attack_track(soldier_visual, "Muzzle", [0.98, 0.86, 0.98], "Soldier muzzle attack track exists")
+    _check_attack_muzzle_forward(soldier_visual, Vector2.RIGHT, "Attacking soldier aims east")
+    _check_attack_muzzle_forward(soldier_visual, Vector2.LEFT, "Attacking soldier aims west")
+    _check_attack_muzzle_forward(soldier_visual, Vector2.DOWN, "Attacking soldier aims south")
+    _check_attack_muzzle_forward(soldier_visual, Vector2.UP, "Attacking soldier aims north")
 
     game.sim.units[3].order = "move"
     game.sim.units[3].target = Vector2(800, 300)
@@ -93,6 +126,11 @@ func run() -> void:
     game.sim.units[3].pos = Vector2(4300, 2700)
     game._sync_units()
     check(soldier_visual.animation_state == "attack", "Soldier in building range plays attack animation")
+    var attack_target: Vector2 = game.sim.buildings[2].pos
+    var attack_origin: Vector2 = game.sim.units[3].pos
+    var attack_direction := (attack_target - attack_origin).normalized()
+    _check_visual_forward(soldier_visual, attack_direction, "Soldier body faces the attacked building")
+    _check_attack_muzzle_forward(soldier_visual, attack_direction, "Soldier rifle points at the attacked building")
 
     var ore_id := 1
     var harvester_id: int = game.sim.add_unit(1, "harvester", game.sim.ores[ore_id].pos)

@@ -74,8 +74,18 @@ func set_position_2d(position_2d: Vector2) -> void:
 func set_heading(heading: Vector2) -> void:
     if heading.length_squared() < 0.01:
         return
-    # Soldier and harvester models are authored with their visual front on -Z.
-    _target_heading = atan2(-heading.x, -heading.y)
+    var forward_z := _forward_z()
+    _target_heading = atan2(heading.x * forward_z, heading.y * forward_z)
+
+
+func get_visual_forward() -> Vector3:
+    return (global_transform.basis.z * _forward_z()).normalized()
+
+
+func _forward_z() -> float:
+    # The soldier body is authored facing local +Z. The harvester drill is
+    # authored facing local -Z, so facing must be resolved per model kind.
+    return 1.0 if kind == "soldier" else -1.0
 
 
 func set_animation(next_state: String) -> void:
@@ -279,6 +289,7 @@ func _soldier_move() -> Animation:
 
 func _soldier_attack() -> Animation:
     var animation := _make_animation(0.45)
+    # The visible soldier front and corrected weapon both use local +Z.
     _add_value_track(animation, "soldier/Weapon", "position", [Vector3(0.70, 1.51, 0.52), Vector3(0.70, 1.51, 0.35), Vector3(0.70, 1.51, 0.52)])
     _add_value_track(animation, "soldier/Muzzle", "position", [Vector3(0.70, 1.51, 0.98), Vector3(0.70, 1.51, 0.86), Vector3(0.70, 1.51, 0.98)])
     _add_value_track(animation, "soldier/Arm_R", "rotation", [Vector3(-0.16, 0, 0), Vector3(0.10, 0, 0), Vector3(-0.16, 0, 0)])

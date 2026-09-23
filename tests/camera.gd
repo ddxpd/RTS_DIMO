@@ -89,8 +89,11 @@ func run() -> void:
             failures.append("zoom anchor drifted")
 
     # 7) Camera speed setting scales edge scrolling and syncs the controller.
+    # Apply the value explicitly so a persisted player preference cannot make
+    # this regression suite depend on the local user://settings.cfg state.
+    game._camera_speed_changed(1.8)
     if absf(game.camera_speed_multiplier - 1.8) > 0.01:
-        failures.append("default camera speed is not the faster 1.4x")
+        failures.append("camera speed setting does not apply 1.8x")
     game.camera_zoom_level = 1.0
     game.camera_controller.focus = Vector2(3000, 1600)
     game._update_camera_transform()

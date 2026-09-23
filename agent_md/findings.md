@@ -75,3 +75,9 @@
 - 导出后的士兵正面位于局部 -Z：Weapon z=-0.52、Muzzle z=-0.98；采集车钻头同样位于局部 -Z。
 - 旧朝向公式把 +Z 当正面，导致模型背对前进方向；正确公式为 atan2(-heading.x, -heading.y)。
 - 施工动画改为归一化 1 秒、LOOP_NONE，并通过 AnimationPlayer speed_scale 与 seek 精确映射模拟进度。
+
+## Soldier facing correction investigation (2026-09-23)
+
+- The prior test only asserted Godot's generic local -Z basis and muzzle node position. It did not establish which side of the soldier mesh is the visible face, so it could pass while the body faced away.
+- Blender source inspection: the soldier's faction glow and original weapon/muzzle sit at Blender +Y, which exports to Godot local -Z. The visible soldier front is Blender -Y / Godot +Z. The harvester drill is genuinely Blender +Y / Godot -Z.
+- Correct design: use a per-model forward axis (soldier +Z, harvester -Z), and place the soldier weapon/muzzle on +Z so body and rifle both face the target.

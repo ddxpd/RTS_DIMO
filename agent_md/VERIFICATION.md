@@ -61,3 +61,10 @@ See [README.md](../README.md) for controls, supported features and explicit prot
 - 多人回归：协议拒绝、观战权限、红方经济/生产/攻击/胜利、两轮完整快照一致、重开与主机退出全部 PASS。
 - 临时 EXE：build/IronFront3D-review.exe，109720184 bytes，SHA256 AA0E0C873C84A22FCBC1EB0C29F290D38C46DC89AF9E165C9ADBAF9F43AEE316；headless 180 帧退出码 0，真实渲染 5 秒存活。
 - Git 跟踪的 build/IronFront.exe 未修改。
+
+## 2026-09-23：士兵可见攻击朝向修正验证
+- 根因验证：Blender 源模型士兵身体正面为 Godot 局部 +Z，采集车为 -Z；修复后士兵身体与 Weapon/Muzzle 同为 +Z。
+- `tests/visual_models.gd`：东南西北移动/攻击方向、真实建筑攻击方向、身体正面、Weapon/Muzzle 轨道全部通过，failures=[]。
+- MCP 实机：攻击状态 body-forward·target=0.99999994，muzzle·target=0.8137319；截图 `build/verification/soldier_attack_facing_fixed.png`。
+- 回归：visual_models、visual_performance、gameplay(57/0)、features、camera、action_bar、presentation 全部 failures=[]；完整 ENet 两轮回归 PASS。
+- 导出：`build/IronFront.exe` 109,693,864 bytes，SHA256 `A6C302D03A0BEF09EBB9C54A1208DFEA7F20B0DA595EA9A58B349FCC0A0B369D`；headless 180 帧与真实渲染 300 帧均退出码 0。
