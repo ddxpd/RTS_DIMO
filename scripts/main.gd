@@ -1582,6 +1582,11 @@ func _sync_buildings() -> void:
         visual.set_construction_tint(b.remaining > 0)
         if b.remaining > 0:
             visual.set_animation("construction")
+            var build_time: int = Simulation.BUILD_TYPES[b.type].time
+            visual.set_construction_progress(
+                1.0 - float(b.remaining) / float(build_time),
+                float(build_time) / float(Simulation.TICK)
+            )
         elif b.type == "bunker" and int(b.cooldown) > 4:
             visual.set_animation("fire")
         elif not b.queue.is_empty() and b.type in ["barracks", "refinery"]:

@@ -52,3 +52,12 @@ See [README.md](../README.md) for controls, supported features and explicit prot
 - 联网：完整 ENet 回归通过协议拒绝、观战权限、红方经济/生产/攻击/胜利、两轮完整快照一致、重开与主机退出。
 - 临时 EXE：build/IronFront3D-review.exe，109719480 bytes，SHA256 EC13B695119C7ECD9A251AA63F45C1B96B70FABB93755EDB771A5C36F04BC515；headless 退出码 0，真实渲染 5 秒存活。
 - Git 中跟踪的 build/IronFront.exe 未修改；临时 EXE 不提交。
+
+
+## 2026-09-23：施工动画与单位朝向修正
+- 行为：construction 动画 LOOP_NONE，归一化进度与 Simulation.BUILD_TYPES.time / TICK 完全同步；中途加入按当前 remaining seek。
+- 朝向：士兵和采集车局部 -Z 为正面，东南西北四个方向测试通过。
+- 核心回归：visual_models、visual_performance、gameplay、features、camera、action_bar、presentation 全部退出码 0。
+- 多人回归：协议拒绝、观战权限、红方经济/生产/攻击/胜利、两轮完整快照一致、重开与主机退出全部 PASS。
+- 临时 EXE：build/IronFront3D-review.exe，109720184 bytes，SHA256 AA0E0C873C84A22FCBC1EB0C29F290D38C46DC89AF9E165C9ADBAF9F43AEE316；headless 180 帧退出码 0，真实渲染 5 秒存活。
+- Git 跟踪的 build/IronFront.exe 未修改。

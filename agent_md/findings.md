@@ -68,3 +68,10 @@
 - Godot glTF `embedded_image_handling=1` 会持续从 GLB 抽取金属/粗糙贴图；改为 0 后可删除 8 张重复 PNG，测试仍通过。
 - 180 单位真实渲染优化后约 98 FPS、1106 draw calls、0.0254s/process；优化前约 6 FPS、5440 draw calls、0.218s/process。
 - 剩余性能瓶颈曾位于 simulation：O(N²) 分离循环。改为 64px 空间哈希并 3 次迭代后，逻辑 tick 从约 61ms 降到约 14ms。
+
+
+# Findings：施工动画与单位朝向修正（2026-09-23）
+- 建筑真实时长：兵营 4 秒、精炼厂 5 秒、地堡 6 秒、基地 7 秒；此前施工动画固定 1.5 秒且循环。
+- 导出后的士兵正面位于局部 -Z：Weapon z=-0.52、Muzzle z=-0.98；采集车钻头同样位于局部 -Z。
+- 旧朝向公式把 +Z 当正面，导致模型背对前进方向；正确公式为 atan2(-heading.x, -heading.y)。
+- 施工动画改为归一化 1 秒、LOOP_NONE，并通过 AnimationPlayer speed_scale 与 seek 精确映射模拟进度。

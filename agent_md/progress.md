@@ -116,3 +116,13 @@
 状态：最终记录中
 - [x] 最终复跑：核心七套退出码 0；完整 ENet 回归两轮快照一致全部 PASS
 状态：完成
+
+
+# Progress：施工动画与单位朝向修正（2026-09-23）
+- [x] construction 动画改为一次性播放，速度匹配 4/5/6/7 秒真实建造时间
+- [x] 基地新增施工动画；guest 中途加入按 remaining 进度 seek
+- [x] 士兵与采集车正面 -Z 朝向运动/目标方向
+- [x] visual_models 覆盖东南西北和四种建筑时长/50% 进度
+- [x] 核心七套测试全部退出码 0；完整 ENet 回归全部 PASS
+- [x] 临时 EXE：109720184 bytes，SHA256 AA0E0C873C84A22FCBC1EB0C29F290D38C46DC89AF9E165C9ADBAF9F43AEE316；headless 0，真实渲染 5 秒存活
+状态：完成

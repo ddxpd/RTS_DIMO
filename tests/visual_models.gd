@@ -48,6 +48,13 @@ func _check_track_count(visual: EntityVisual, animation_name: String, expected: 
     check(animation != null and animation.get_track_count() == expected, message)
 
 
+func _check_visual_forward(visual: EntityVisual, heading: Vector2, message: String) -> void:
+    visual.set_heading(heading)
+    visual._process(1.0)
+    var forward := -visual.global_transform.basis.z.normalized()
+    check(forward.is_equal_approx(Vector3(heading.x, 0, heading.y)), message)
+
+
 func run() -> void:
     root.size = Vector2i(1280, 800)
     game = MAIN.instantiate()
@@ -67,6 +74,10 @@ func run() -> void:
     _check_track_count(soldier_visual, "move", 5, "Soldier move animation keeps all limb tracks")
     _check_track_count(soldier_visual, "attack", 3, "Soldier attack animation keeps recoil tracks")
     check(soldier_visual.model.find_children("*", "MeshInstance3D", true, false).size() <= 12, "Optimized soldier keeps at most 12 mesh nodes")
+    _check_visual_forward(soldier_visual, Vector2.RIGHT, "Soldier faces east when moving east")
+    _check_visual_forward(soldier_visual, Vector2.LEFT, "Soldier faces west when moving west")
+    _check_visual_forward(soldier_visual, Vector2.DOWN, "Soldier faces south when moving south")
+    _check_visual_forward(soldier_visual, Vector2.UP, "Soldier faces north when moving north")
 
     game.sim.units[3].order = "move"
     game.sim.units[3].target = Vector2(800, 300)
@@ -95,6 +106,7 @@ func run() -> void:
     _check_track_count(harvester_visual, "mine", 3, "Harvester mine animation keeps drill tracks")
     _check_track_count(harvester_visual, "unload", 3, "Harvester unload animation keeps cargo tracks")
     check(harvester_visual.model.find_children("*", "MeshInstance3D", true, false).size() <= 22, "Optimized harvester keeps at most 22 mesh nodes")
+    _check_visual_forward(harvester_visual, Vector2(0.6, 0.8).normalized(), "Harvester drill faces its travel direction")
     check(harvester_visual.animation_state == "mine", "Harvester at ore plays mine animation")
 
     var refinery_id: int = game.sim._add_building(1, "refinery", Vector2(960, 960), true)
@@ -114,6 +126,13 @@ func run() -> void:
     var refinery_box := _visual_world_aabb(refinery_visual)
     check(_fits_footprint(refinery_box, Sim.BUILD_TYPES.refinery.size), "Completed refinery stays within its 80x80 visual footprint")
     var barracks_visual: EntityVisual = game.building_visuals[barracks_id].visual
+    var barracks_animation := barracks_visual.animation_player.get_animation("construction")
+    check(barracks_animation.loop_mode == Animation.LOOP_NONE, "Construction animation does not loop")
+    check(is_equal_approx(barracks_animation.length, 1.0), "Construction animation is normalized")
+    check(is_equal_approx(barracks_visual.animation_player.speed_scale, 0.25), "Barracks construction animation matches its four-second build time")
+    game.sim.buildings[barracks_id].remaining = Sim.BUILD_TYPES.barracks.time / 2
+    game._sync_buildings()
+    check(is_equal_approx(barracks_visual.animation_player.current_animation_position, 0.5), "Construction animation seeks to the current build progress")
     barracks_visual.animation_player.seek(1.0, true)
     await process_frame
     var construction_box := _visual_world_aabb(barracks_visual)
@@ -125,6 +144,23 @@ func run() -> void:
     var completed_barracks_box := _visual_world_aabb(barracks_visual)
     check(_fits_footprint(completed_barracks_box, Sim.BUILD_TYPES.barracks.size), "Completed barracks stays within its 64x64 visual footprint")
     check(barracks_visual.animation_state == "active", "Building with queue plays active animation")
+
+    var construction_cases := [
+        {"kind": "refinery", "position": Vector2(1250, 900)},
+        {"kind": "bunker", "position": Vector2(1450, 1050)},
+        {"kind": "base", "position": Vector2(1650, 1200)}
+    ]
+    for case: Dictionary in construction_cases:
+        var kind := str(case.kind)
+        var case_time: int = Sim.BUILD_TYPES[kind].time
+        var case_id: int = game.sim._add_building(1, kind, case.position, false)
+        game.sim.buildings[case_id].remaining = case_time / 2
+        game._sync_buildings()
+        var case_visual: EntityVisual = game.building_visuals[case_id].visual
+        var expected_speed := 1.0 / (float(case_time) / float(Sim.TICK))
+        check(case_visual.animation_state == "construction", "%s receives a construction animation" % kind)
+        check(is_equal_approx(case_visual.animation_player.speed_scale, expected_speed), "%s construction animation matches its build time" % kind)
+        check(is_equal_approx(case_visual.animation_player.current_animation_position, 0.5), "%s construction animation starts at snapshot progress" % kind)
 
     var bunker_id: int = game.sim._add_building(1, "bunker", Vector2(1150, 760), true)
     game.sim.buildings[bunker_id].cooldown = 10

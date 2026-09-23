@@ -74,7 +74,8 @@ func set_position_2d(position_2d: Vector2) -> void:
 func set_heading(heading: Vector2) -> void:
     if heading.length_squared() < 0.01:
         return
-    _target_heading = atan2(heading.x, heading.y)
+    # Soldier and harvester models are authored with their visual front on -Z.
+    _target_heading = atan2(-heading.x, -heading.y)
 
 
 func set_animation(next_state: String) -> void:
@@ -89,6 +90,7 @@ func set_animation(next_state: String) -> void:
     animation_state = next_state
     if animation_player == null or not animation_player.has_animation(next_state):
         return
+    animation_player.speed_scale = 1.0
     animation_player.play(next_state)
 
 
@@ -104,6 +106,20 @@ func set_construction_tint(enabled: bool) -> void:
         return
     construction_tint = enabled
     _refresh_material_tint()
+
+
+func set_construction_progress(progress: float, duration: float) -> void:
+    if animation_player == null or not animation_player.has_animation("construction"):
+        return
+    var next_progress := clampf(progress, 0.0, 1.0)
+    var next_duration := maxf(duration, 0.001)
+    var animation := animation_player.get_animation("construction")
+    # The construction clip is normalized to one second. Slowing it by the
+    # actual build duration makes one pass match the complete construction time.
+    animation_player.speed_scale = 1.0 / next_duration
+    if animation_player.assigned_animation != &"construction":
+        animation_player.play("construction")
+    animation_player.seek(animation.length * next_progress, true)
 
 
 func set_faction(next_owner: int) -> void:
@@ -208,6 +224,7 @@ func _build_animation_library() -> AnimationLibrary:
             library.add_animation("unload", _harvester_unload())
         "base":
             library.add_animation("idle", _base_idle())
+            library.add_animation("construction", _construction_animation())
         "barracks":
             library.add_animation("idle", _barracks_idle())
             library.add_animation("active", _barracks_active())
@@ -224,10 +241,10 @@ func _build_animation_library() -> AnimationLibrary:
             library.add_animation("idle", _ore_idle())
     return library
 
-func _make_animation(length: float) -> Animation:
+func _make_animation(length: float, looping: bool = true) -> Animation:
     var animation := Animation.new()
     animation.length = length
-    animation.loop_mode = Animation.LOOP_LINEAR
+    animation.loop_mode = Animation.LOOP_LINEAR if looping else Animation.LOOP_NONE
     return animation
 
 
@@ -357,9 +374,9 @@ func _ore_idle() -> Animation:
 
 
 func _construction_animation() -> Animation:
-    var animation := _make_animation(1.5)
-    # The animated node is below `model`, which already carries MODEL_SETTINGS.scale.
-    # Keep this track normalized so completed buildings are not double-scaled.
+    # Keep this clip normalized. `set_construction_progress()` maps it to the
+    # building's actual build time and seeks to the current construction ratio.
+    var animation := _make_animation(1.0, false)
     var low := Vector3(1, 0.2, 1)
     _add_value_track(animation, kind, "scale", [low, Vector3.ONE])
     return animation

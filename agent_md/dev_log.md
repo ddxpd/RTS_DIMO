@@ -573,3 +573,9 @@
 - 症状：主机与客户端岩石装饰位置可能不同。根因：使用进程随机数。修复：基于障碍/行列索引字符串哈希生成 jitter 与 scale。验证：重建岩石后 transform 完全一致。
 - 症状：180 单位仅约 6 FPS。根因：每实体重复材质刷新/动画库、模型碎片多、单位阴影多、O(N²) 单位分离。修复：状态早退、共享动画库、静态网格合并、LOD/阴影策略、空间哈希分离。验证：约 98 FPS、1106 draw calls。
 - 症状：删除 GLB 抽取贴图后 Godot 重新生成。根因：glTF embedded_image_handling=1。修复：改为 0 保留内嵌资源并删除派生 PNG。验证：视觉/性能测试与导出运行通过。
+
+
+## 2026-09-23：施工动画与单位朝向修正
+### Bug 与修复（成对记录）
+- 症状：施工动画 1.5 秒循环，而兵营/精炼厂/地堡/基地分别需要 4/5/6/7 秒，导致动画重复且与进度条不同步。根因：动画固定时长且 LOOP_LINEAR。修复：construction 归一化为 1 秒 LOOP_NONE，由 set_construction_progress(progress, duration) 按 Simulation 建造时长设置 speed_scale 并 seek 当前比例；基地也补齐施工动画。验证：visual_models 覆盖四种建筑时长与 50% 快照进度，核心七套测试通过。
+- 症状：士兵背对前进方向。根因：模型正面为局部 -Z，旧 set_heading 使用 +Z 计算 atan2。修复：改为 atan2(-heading.x, -heading.y)。验证：士兵东南西北和采集车斜向朝向断言全部通过，实机运行初始采样确认。
