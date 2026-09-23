@@ -87,3 +87,7 @@
 - Browser runtime discovery returned no available browser, so the page cannot be remotely opened in this session. The local server can still be prepared and the URL reported.
 - Generated five local preview assets from the actual barracks GLB: one contact sheet plus blueprint, night-ops, module-family, and combat-ready variants. These are procedural concept overlays, not AI-generated images.
 - The generated files are served by the gallery server under `/generated/`; `tools/*` was added to the export exclude filter so the web-gallery assets do not inflate the game PCK.
+
+## Refresh behavior finding (2026-09-23)
+- The main gallery grid intentionally renders only records in IndexedDB. Files placed under `tools/effect-gallery/generated/` are served by HTTP but are not automatically inserted into IndexedDB, so refreshing the page leaves the main grid empty unless the user imports them.
+- The updated page now has a dedicated generated-concepts section that renders server files on every refresh, independent of IndexedDB. The new import button fetches those files and stores them as normal gallery records.

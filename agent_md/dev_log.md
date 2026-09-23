@@ -599,3 +599,6 @@
 - 限制：当前环境没有可用的内置浏览器控制接口；本批图为程序化概念图，不是 AI 生成图。若要 AI 生成风格，需要用户明确选择 CLI fallback 并配置 `OPENAI_API_KEY`。
 - 验证：五个图片 URL 均 HTTP 200；`visual_models` 0 failures、`gameplay` 57/0；导出 `build/IronFront.exe` 后 headless 180 帧与真实渲染 300 帧均退出码 0。
 - 补充验证限制：最后一次真实渲染 300 帧导出版进程在退出阶段出现一次间歇性 Windows access violation（`0xC0000005`），立即同参数复跑退出码 0；headless 180 帧退出码 0。本批改动仅涉及网页效果图资源与导出排除规则，未改游戏脚本。
+
+## 2026-09-23：刷新不显示生成图片
+- 症状：刷新效果图页面后主网格仍为空。根因：主网格只渲染 IndexedDB 记录；`tools/effect-gallery/generated/` 中的文件只是静态 HTTP 资源，刷新不会自动写入 IndexedDB。修复：页面新增“高科技人类阵营：兵营概念图”静态预览区，刷新即显示；新增“导入这组概念图”按钮，将服务器文件获取为 File 并写入现有图库。验证：HTMLParser 无未闭合标签，两个 inline script 通过 node --check，页面和五个图片 URL HTTP 200；导出后 headless 180 帧退出码 0，真实渲染 300 帧一次遇到已知间歇性关闭崩溃、同参数复跑退出码 0。

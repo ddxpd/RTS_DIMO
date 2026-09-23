@@ -128,3 +128,13 @@
 - [x] Generate several deterministic high-tech human-faction barracks concept/effect images.
 - [x] Make the generated images easy to preview or import from the gallery page.
 - [x] Verify image files and record results/limitations.
+
+# Task plan: make generated barracks concepts visible on refresh (2026-09-23)
+- [ ] Add a persistent server-file preview section to the effect-gallery page.
+- [ ] Add one-click import of those generated files into IndexedDB.
+- [ ] Validate HTML/script syntax and image URLs.
+- [ ] Rebuild and smoke-test the game export, then record the result.
+- [x] Added persistent generated-concept previews directly to the page.
+- [x] Added one-click import from server files into IndexedDB.
+- [x] HTMLParser and both inline scripts passed syntax checks; page and generated image URLs return HTTP 200.
+- [x] Rebuilt IronFront.exe; headless 180-frame smoke passed. Real-render 300-frame run hit the known intermittent shutdown access violation once, then an identical retry exited 0.

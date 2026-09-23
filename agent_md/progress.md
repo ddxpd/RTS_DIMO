@@ -150,3 +150,7 @@
 - 状态：完成；效果图是程序化概念图，不是 AI 生成图。
 - [!] Final exported render smoke had one intermittent Windows access-violation exit (`0xC0000005`) before shutdown; an immediate identical retry exited 0. Headless exit remained 0. This is recorded as a shutdown-only instability, not a reproducible startup/render failure.
 - [x] Reproducibility scripts now derive project/output paths correctly and regenerate the four variants directly into `tools/effect-gallery/generated`; final re-export passed headless 180 frames and real render 300 frames, both exit code 0.
+- [x] Explained and fixed refresh behavior: generated files now appear in a dedicated section immediately; the main IndexedDB grid remains empty until import.
+- [x] Added `import-generated` button, responsive preview grid, and stable server-file import logic.
+- [x] HTML validation: doctype/one generated section/import button/no unclosed tags; two inline scripts pass node --check; page HTTP 200.
+- [x] Final export smoke: headless exit 0; real render had one intermittent shutdown access violation and passed identical retry with exit 0.
