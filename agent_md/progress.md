@@ -101,3 +101,18 @@
 状态：实现完成，待提交
 - [x] 本地提交完成：70708b2 Add local effect image gallery
 状态：完成
+
+# Progress：3D 分支审查修正（2026-09-23）
+- [x] 完成当前分支静态审查、六套核心回归、完整 ENet 回归和 180 单位压力探针
+- [x] 清理审查测试触碰的 import/log 状态与临时性能探针
+状态：进行中
+- [x] 修复空 cargo 背景条、追击/开火动画状态、guest 渲染速度回退和岩石确定性
+- [x] EntityVisual 增加状态早退、共享动画库、LOD/阴影策略；隐藏实体暂停 AnimationPlayer
+- [x] 合并 Blender 静态网格并重导 8 个 GLB；删除 8 张重复抽取贴图
+- [x] simulation 单位分离改为空间哈希；寻路重算间隔按目标哈希错峰
+- [x] 核心七套测试全部通过；完整多进程 ENet 回归两轮全部 PASS
+- [x] 180 单位真实渲染：约 98 FPS、1106 draw calls、0.0254s/process
+- [x] 导出临时 build/IronFront3D-review.exe：109719480 bytes；headless 0，真实渲染 5 秒存活
+状态：最终记录中
+- [x] 最终复跑：核心七套退出码 0；完整 ENet 回归两轮快照一致全部 PASS
+状态：完成

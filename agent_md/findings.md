@@ -56,3 +56,15 @@
 - start.ps1 最终采用 ASCII 错误/提示文案，避免 Windows PowerShell 管道编码损坏；README 和页面保持 UTF-8。
 - py 启动路径参数顺序已修正为 `py -3 -m http.server ...`；直接 python 路径保持 `python -m http.server ...`。
 - 本地 HTTP 服务已停止，端口 8765 未占用。
+
+# Findings：3D 分支审查（2026-09-23）
+- 六套 headless 回归与完整 ENet 回归均通过。
+- cargo=0 时货物条背景仍可见；确认是 `_update_status_bar(..., 0)` 只隐藏填充未隐藏 holder。
+- 士兵 order=attack 时无论是否在射程内都播放 attack；追击阶段应播放 move。
+- 岩石 jitter/scale 使用全局随机，多人客户端装饰布局可能不一致。
+- 180 单位真实渲染压力探针：约 6 FPS、5440 draw calls、5653 render objects、0.218s/process；每个士兵复制 16 个材质，动画库逐实体构建。
+- 8 张 `assets/models/*_IF_Steel_Metallic-IF_Steel_Roughness.png` 及 import 未被 GLB 导入场景引用，可删除。
+- Blender 静态网格合并后，8 个模型的可渲染 Mesh 对象从 123 降到 76；单位关闭阴影并对远距小件使用 1400 单位 visibility range。
+- Godot glTF `embedded_image_handling=1` 会持续从 GLB 抽取金属/粗糙贴图；改为 0 后可删除 8 张重复 PNG，测试仍通过。
+- 180 单位真实渲染优化后约 98 FPS、1106 draw calls、0.0254s/process；优化前约 6 FPS、5440 draw calls、0.218s/process。
+- 剩余性能瓶颈曾位于 simulation：O(N²) 分离循环。改为 64px 空间哈希并 3 次迭代后，逻辑 tick 从约 61ms 降到约 14ms。

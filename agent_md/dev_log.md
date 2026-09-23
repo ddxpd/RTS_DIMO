@@ -565,3 +565,11 @@
 - visual_models / gameplay(57 checks) / features / camera / action_bar / presentation：全部 0 failures。
 - 多进程 ENet：协议不匹配拒绝、观战权限、红方经济/建造/生产/攻击/胜利、两轮完整快照一致、重开与主机退出处理全部 PASS。
 - SOLO 实机截图：build/verification/visual_models.png；战场区域绿色地面约 67%，机械灰约 11%，迷雾/阴影约 14%，存在蓝色阵营与黄色矿石像素。
+
+## 2026-09-23：3D 分支审查修正
+### Bug 与修复（成对记录）
+- 症状：采集车 cargo=0 后货物条仍显示背景。根因：仅把填充宽度置 0，holder 未隐藏。修复：cargo>0 显示 holder，cargo=0 隐藏 holder。验证：visual_models 断言空货物条不可见。
+- 症状：士兵追击远目标时播放 attack。根因：动画状态只看 order。修复：按单位/建筑边缘距离判断射程，未进入射程播放 move。验证：远/近目标两组动画断言。
+- 症状：主机与客户端岩石装饰位置可能不同。根因：使用进程随机数。修复：基于障碍/行列索引字符串哈希生成 jitter 与 scale。验证：重建岩石后 transform 完全一致。
+- 症状：180 单位仅约 6 FPS。根因：每实体重复材质刷新/动画库、模型碎片多、单位阴影多、O(N²) 单位分离。修复：状态早退、共享动画库、静态网格合并、LOD/阴影策略、空间哈希分离。验证：约 98 FPS、1106 draw calls。
+- 症状：删除 GLB 抽取贴图后 Godot 重新生成。根因：glTF embedded_image_handling=1。修复：改为 0 保留内嵌资源并删除派生 PNG。验证：视觉/性能测试与导出运行通过。

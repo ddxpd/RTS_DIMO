@@ -1477,9 +1477,15 @@ func _sync_visuals() -> void:
     _sync_fog()
 
 
+func _set_visual_visible(visual: EntityVisual, next_visible: bool) -> void:
+    visual.visible = next_visible
+    if visual.animation_player != null:
+        visual.animation_player.active = next_visible
+
 func _sync_rocks() -> void:
     if rock_visuals.is_empty():
         # Tile rock clusters across each obstacle footprint.
+        var rock_index := 0
         for rock: Rect2 in sim.obstacles:
             var spacing := 72.0
             var cols := maxi(1, int(rock.size.x / spacing))
@@ -1490,13 +1496,15 @@ func _sync_rocks() -> void:
                         rock.position.x + (cx + 0.5) * rock.size.x / cols,
                         rock.position.y + (cy + 0.5) * rock.size.y / rows
                     )
-                    var jitter := Vector2(randf_range(-14, 14), randf_range(-14, 14))
-                    var scale_factor := randf_range(0.72, 1.1)
+                    var variation_key := "%d_%d_%d" % [rock_index, cx, cy]
+                    var jitter := _deterministic_rock_jitter(variation_key)
+                    var scale_factor := _deterministic_rock_scale(variation_key)
                     var visual := EntityVisual.new("rock", 1)
                     visual.set_position_2d(pos + jitter)
                     visual.scale = Vector3.ONE * scale_factor
                     add_child(visual)
                     rock_visuals.append(visual)
+            rock_index += 1
 
     # Fog: rocks only show in explored terrain (permanent reveal, like terrain).
     for visual: EntityVisual in rock_visuals:
@@ -1504,6 +1512,16 @@ func _sync_rocks() -> void:
         var index := cell.y * Simulation.GRID.x + cell.x
         var explored: PackedByteArray = sim.explored.get(local_slot, PackedByteArray())
         visual.visible = index >= 0 and index < explored.size() and explored[index] == 1
+
+
+func _deterministic_rock_jitter(variation_key: String) -> Vector2:
+    var x := float(absi(hash(variation_key + "_x")) % 29) - 14.0
+    var y := float(absi(hash(variation_key + "_y")) % 29) - 14.0
+    return Vector2(x, y)
+
+
+func _deterministic_rock_scale(variation_key: String) -> float:
+    return 0.72 + float(absi(hash(variation_key + "_scale")) % 39) / 100.0
 
 
 func _sync_ores() -> void:
@@ -1520,6 +1538,7 @@ func _sync_ores() -> void:
             label.font_size = 32
             label.pixel_size = 0.02
             label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+            label.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
             label.position = Vector3(0, visual.get_model_height() + 8, 0)
             visual.add_child(label)
             ore_visuals[id] = {"visual": visual, "label": label}
@@ -1527,10 +1546,12 @@ func _sync_ores() -> void:
         var visual: EntityVisual = vis.visual
 
         # Fog of war: only render ores the local player can currently see.
-        visual.visible = ore.amount > 0 and sim.can_see(local_slot, ore.pos)
+        _set_visual_visible(visual, ore.amount > 0 and sim.can_see(local_slot, ore.pos))
         visual.set_position_2d(ore.pos)
         var label: Label3D = vis.label
-        label.text = str(ore.amount)
+        if int(vis.get("last_amount", -1)) != ore.amount:
+            label.text = str(ore.amount)
+            vis["last_amount"] = ore.amount
         seen[id] = true
     for id: int in ore_visuals.keys():
         if not seen.has(id):
@@ -1555,9 +1576,8 @@ func _sync_buildings() -> void:
         var visual: EntityVisual = vis.visual
 
         # Fog: enemy buildings only render when currently visible.
-        visual.visible = b.owner == local_slot or sim.can_see(local_slot, b.pos)
+        _set_visual_visible(visual, b.owner == local_slot or sim.can_see(local_slot, b.pos))
         visual.set_position_2d(b.pos)
-        visual.set_faction(b.owner)
         visual.set_flash(b.flash > 0)
         visual.set_construction_tint(b.remaining > 0)
         if b.remaining > 0:
@@ -1601,11 +1621,10 @@ func _sync_units() -> void:
         var visual: EntityVisual = vis.visual
 
         # Fog: enemy units only render when currently visible.
-        visual.visible = u.owner == local_slot or sim.can_see(local_slot, u.pos)
+        _set_visual_visible(visual, u.owner == local_slot or sim.can_see(local_slot, u.pos))
         visual.set_position_2d(u.pos)
-        visual.set_faction(u.owner)
         visual.set_flash(u.flash > 0)
-        visual.set_heading(_unit_heading(u))
+        visual.set_heading(_unit_heading(u, id))
         visual.set_animation(_unit_animation_state(u))
         _update_status_bar(vis.hp_bar, float(u.hp) / Simulation.UNIT_TYPES[u.type].hp)
 
@@ -1618,8 +1637,9 @@ func _sync_units() -> void:
                     visual.add_child(cargo_bar)
                     vis["cargo_bar"] = cargo_bar
                 _update_status_bar(vis.cargo_bar, float(u.cargo) / 60.0)
+                vis.cargo_bar.visible = true
             elif vis.has("cargo_bar"):
-                _update_status_bar(vis.cargo_bar, 0.0)
+                vis.cargo_bar.visible = false
         seen[id] = true
     for id: int in unit_visuals.keys():
         if not seen.has(id):
@@ -1629,7 +1649,7 @@ func _sync_units() -> void:
 
 func _unit_animation_state(u: Dictionary) -> String:
     if u.order == "attack":
-        return "attack"
+        return "attack" if _unit_in_attack_range(u) else "move"
     if u.order in ["move", "attack_move"]:
         return "move"
     if u.type == "harvester" and u.order == "gather":
@@ -1667,14 +1687,28 @@ func _nearest_refinery_position(u: Dictionary) -> Vector2:
     return best_position
 
 
-func _unit_heading(u: Dictionary) -> Vector2:
+func _unit_in_attack_range(u: Dictionary) -> bool:
+    var target_position: Vector2 = u.pos
+    if u.attack_kind == "unit" and sim.units.has(int(u.attack_id)):
+        target_position = sim.units[int(u.attack_id)].pos
+    elif u.attack_kind == "building" and sim.buildings.has(int(u.attack_id)):
+        var footprint := sim.footprint(sim.buildings[int(u.attack_id)])
+        target_position = (u.pos as Vector2).clamp(footprint.position, footprint.end)
+    else:
+        return false
+    return (u.pos as Vector2).distance_to(target_position) <= float(Simulation.UNIT_TYPES[u.type].range)
+
+
+func _unit_heading(u: Dictionary, id: int) -> Vector2:
     var destination := _unit_destination(u)
     var heading := destination - (u.pos as Vector2)
     if heading.length_squared() > 1.0:
         return heading
-    if render_velocities.has(u.get("id", -1)):
-        return render_velocities[u.get("id", -1)]
+    if render_velocities.has(id):
+        return render_velocities[id]
     return Vector2.UP
+
+
 
 var _dot_texture: ImageTexture
 
@@ -1695,6 +1729,7 @@ func _make_status_bar(width: float, height: float, fill_color: Color) -> Node3D:
     bg.pixel_size = 1.0
     bg.billboard = BaseMaterial3D.BILLBOARD_ENABLED
     bg.shaded = false
+    bg.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     bg.modulate = Color("#182219")
     bg.scale = Vector3(width / 8.0, height / 8.0, 1)
     holder.add_child(bg)
@@ -1703,6 +1738,7 @@ func _make_status_bar(width: float, height: float, fill_color: Color) -> Node3D:
     fill.pixel_size = 1.0
     fill.billboard = BaseMaterial3D.BILLBOARD_ENABLED
     fill.shaded = false
+    fill.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     fill.modulate = fill_color
     fill.scale = Vector3(width / 8.0, height / 8.0, 1)
     fill.position.z = -0.5
@@ -1814,6 +1850,7 @@ func _sync_build_preview() -> void:
             surface.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
             build_preview_visual = MeshInstance3D.new()
             build_preview_visual.mesh = mesh
+            build_preview_visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
             build_preview_visual.material_override = surface
             add_child(build_preview_visual)
         build_preview_model.visible = true

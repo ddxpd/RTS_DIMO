@@ -41,3 +41,14 @@ See [README.md](../README.md) for controls, supported features and explicit prot
 - Godot 回归：visual_models、gameplay、features、camera、action_bar、presentation 全部退出码 0。
 - 导出：build/IronFront.exe，111,121,248 bytes，2026-09-22 12:32:16；headless 冒烟退出码 0，真实渲染进程 5 秒存活。
 - 限制：当前会话 Browser runtime 初始化成功但浏览器列表为空，未能自动执行上传/收藏/刷新持久化的真实浏览器 UI 测试。
+
+## 2026-09-23：3D 分支审查修正
+- 行为修复：空采集车货物条整体隐藏；士兵追击时 move、进入射程后 attack；岩石变换改为确定性哈希；guest 渲染速度回退修复。
+- 性能修复：EntityVisual 状态变化早退、共享 AnimationLibrary、隐藏实体暂停动画、单位远距小件 LOD、单位阴影关闭、状态条/预览无阴影。
+- 模型优化：Blender 源文件合并同材质静态网格，8 个模型 Mesh 对象 123→76；重导 GLB；glTF 内嵌贴图，删除 8 张重复 PNG。
+- 模拟优化：单位分离改为 64px 空间哈希，寻路重算按目标哈希错峰。
+- 核心回归：visual_models、visual_performance、gameplay、features、camera、action_bar、presentation 全部退出码 0。
+- 性能：180 单位真实渲染约 98 FPS、1106 draw calls、0.0254s/process；优化前约 6 FPS、5440 draw calls、0.218s/process。
+- 联网：完整 ENet 回归通过协议拒绝、观战权限、红方经济/生产/攻击/胜利、两轮完整快照一致、重开与主机退出。
+- 临时 EXE：build/IronFront3D-review.exe，109719480 bytes，SHA256 EC13B695119C7ECD9A251AA63F45C1B96B70FABB93755EDB771A5C36F04BC515；headless 退出码 0，真实渲染 5 秒存活。
+- Git 中跟踪的 build/IronFront.exe 未修改；临时 EXE 不提交。

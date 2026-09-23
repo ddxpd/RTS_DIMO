@@ -344,7 +344,7 @@ func move_towards(u: Dictionary, destination: Vector2, stop_distance: float = 4.
             u.path.pop_front()
         if position_free(destination, UNIT_TYPES[u.type].radius):
             u.path.append(destination)
-        u.repath = 20
+        u.repath = 20 + absi(hash(str(destination.x) + "_" + str(destination.y))) % 20
     if u.path.is_empty():
         # Final approach: same nav cell as the goal but the exact point is
         # still away — walk straight to it while terrain allows, instead of
@@ -607,32 +607,66 @@ func _unstick(u: Dictionary) -> void:
     u.stuck = 0
 
 func _separate_units() -> void:
-    var ids: Array = units.keys()
-    ids.sort()
-    for iteration in range(8):
-        for i in range(ids.size()):
-            for j in range(i + 1, ids.size()):
-                var a: Dictionary = units[ids[i]]
-                var b: Dictionary = units[ids[j]]
-                var delta: Vector2 = b.pos - a.pos
-                var minimum: float = UNIT_TYPES[a.type].radius + UNIT_TYPES[b.type].radius + 1
-                var distance := delta.length()
-                # Touching units let the move sidesteps form lanes; separation
-                # only resolves deeper overlaps so it cannot fight the path.
-                if distance >= minimum - 1.0:
+    # Spatial-hash unit separation keeps dense armies from becoming an O(N^2)
+    # scan every iteration. The maximum combined radius is below one cell.
+    var cell_size := 64.0
+    var grid: Dictionary = {}
+    for id: int in units:
+        var unit: Dictionary = units[id]
+        if unit.hp <= 0:
+            continue
+        var cell := Vector2i(((unit.pos as Vector2) / cell_size).floor())
+        if not grid.has(cell):
+            grid[cell] = []
+        grid[cell].append(id)
+
+    var offsets := [
+        Vector2i.ZERO,
+        Vector2i.RIGHT,
+        Vector2i.DOWN,
+        Vector2i(1, 1),
+        Vector2i(-1, 1)
+    ]
+    for iteration in range(3):
+        for cell: Vector2i in grid:
+            var cell_ids: Array = grid[cell]
+            for i in range(cell_ids.size()):
+                var a: Dictionary = units[cell_ids[i]]
+                if a.hp <= 0:
                     continue
-                var normal := Vector2.RIGHT if distance < 0.001 else delta / distance
-                var amount := (minimum - distance) / 2.0
-                # Slide tangentially as well so head-on units circle around each
-                # other instead of pushing straight back and stalling.
-                var tangent := normal.rotated(PI / 2.0)
-                var slide := amount * 0.6
-                var pa: Vector2 = a.pos - normal * amount + tangent * slide
-                var pb: Vector2 = b.pos + normal * amount + tangent * slide
-                if position_free(pa, UNIT_TYPES[a.type].radius):
-                    a.pos = pa
-                if position_free(pb, UNIT_TYPES[b.type].radius):
-                    b.pos = pb
+                for j in range(i + 1, cell_ids.size()):
+                    _separate_pair(a, units[cell_ids[j]])
+                for offset: Vector2i in offsets:
+                    if offset == Vector2i.ZERO:
+                        continue
+                    var neighbor_ids: Array = grid.get(cell + offset, [])
+                    for j in range(neighbor_ids.size()):
+                        _separate_pair(a, units[neighbor_ids[j]])
+
+
+func _separate_pair(a: Dictionary, b: Dictionary) -> void:
+    if a.hp <= 0 or b.hp <= 0:
+        return
+    var delta: Vector2 = b.pos - a.pos
+    var minimum: float = UNIT_TYPES[a.type].radius + UNIT_TYPES[b.type].radius + 1
+    var distance := delta.length()
+    # Touching units let move sidesteps form lanes; separation only resolves
+    # deeper overlaps so it cannot fight the path.
+    if distance >= minimum - 1.0:
+        return
+    var normal := Vector2.RIGHT if distance < 0.001 else delta / distance
+    var amount := (minimum - distance) / 2.0
+    # Slide tangentially as well so head-on units circle around each other
+    # instead of pushing straight back and stalling.
+    var tangent := normal.rotated(PI / 2.0)
+    var slide := amount * 0.6
+    var pa: Vector2 = a.pos - normal * amount + tangent * slide
+    var pb: Vector2 = b.pos + normal * amount + tangent * slide
+    if position_free(pa, UNIT_TYPES[a.type].radius):
+        a.pos = pa
+    if position_free(pb, UNIT_TYPES[b.type].radius):
+        b.pos = pb
+
 
 func _ai_step() -> void:
     var base := -1

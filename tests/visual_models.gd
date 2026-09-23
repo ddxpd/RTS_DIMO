@@ -42,6 +42,12 @@ func _visual_world_aabb(visual: EntityVisual) -> AABB:
 func _fits_footprint(box: AABB, footprint: Vector2, tolerance: float = 8.0) -> bool:
     return box.size.x <= footprint.x + tolerance and box.size.z <= footprint.y + tolerance
 
+
+func _check_track_count(visual: EntityVisual, animation_name: String, expected: int, message: String) -> void:
+    var animation := visual.animation_player.get_animation(animation_name)
+    check(animation != null and animation.get_track_count() == expected, message)
+
+
 func run() -> void:
     root.size = Vector2i(1280, 800)
     game = MAIN.instantiate()
@@ -57,6 +63,10 @@ func run() -> void:
     check(soldier_visual.kind == "soldier", "Soldier uses the 3D model visual")
     check(soldier_visual.owner_id == 1, "Soldier visual records blue ownership")
     check(_has_animations(soldier_visual.get_animation_names(), ["idle", "move", "attack"]), "Soldier exposes state animations")
+    _check_track_count(soldier_visual, "idle", 2, "Soldier idle animation keeps both tracks")
+    _check_track_count(soldier_visual, "move", 5, "Soldier move animation keeps all limb tracks")
+    _check_track_count(soldier_visual, "attack", 3, "Soldier attack animation keeps recoil tracks")
+    check(soldier_visual.model.find_children("*", "MeshInstance3D", true, false).size() <= 12, "Optimized soldier keeps at most 12 mesh nodes")
 
     game.sim.units[3].order = "move"
     game.sim.units[3].target = Vector2(800, 300)
@@ -67,7 +77,11 @@ func run() -> void:
     game.sim.units[3].attack_kind = "building"
     game.sim.units[3].attack_id = 2
     game._sync_units()
-    check(soldier_visual.animation_state == "attack", "Soldier attack order plays attack animation")
+    check(soldier_visual.animation_state == "move", "Soldier chasing a distant target plays move animation")
+
+    game.sim.units[3].pos = Vector2(4300, 2700)
+    game._sync_units()
+    check(soldier_visual.animation_state == "attack", "Soldier in building range plays attack animation")
 
     var ore_id := 1
     var harvester_id: int = game.sim.add_unit(1, "harvester", game.sim.ores[ore_id].pos)
@@ -76,6 +90,11 @@ func run() -> void:
     game._sync_units()
     var harvester_visual: EntityVisual = game.unit_visuals[harvester_id].visual
     check(_has_animations(harvester_visual.get_animation_names(), ["idle", "move", "mine", "unload"]), "Harvester exposes state animations")
+    _check_track_count(harvester_visual, "idle", 2, "Harvester idle animation keeps both tracks")
+    _check_track_count(harvester_visual, "move", 11, "Harvester move animation keeps wheel and hull tracks")
+    _check_track_count(harvester_visual, "mine", 3, "Harvester mine animation keeps drill tracks")
+    _check_track_count(harvester_visual, "unload", 3, "Harvester unload animation keeps cargo tracks")
+    check(harvester_visual.model.find_children("*", "MeshInstance3D", true, false).size() <= 22, "Optimized harvester keeps at most 22 mesh nodes")
     check(harvester_visual.animation_state == "mine", "Harvester at ore plays mine animation")
 
     var refinery_id: int = game.sim._add_building(1, "refinery", Vector2(960, 960), true)
@@ -83,6 +102,11 @@ func run() -> void:
     game.sim.units[harvester_id].cargo = 60
     game._sync_units()
     check(harvester_visual.animation_state == "unload", "Full harvester at refinery plays unload animation")
+    check(game.unit_visuals[harvester_id].cargo_bar.visible, "Cargo bar is visible while carrying ore")
+
+    game.sim.units[harvester_id].cargo = 0
+    game._sync_units()
+    check(not game.unit_visuals[harvester_id].cargo_bar.visible, "Cargo bar hides after unloading")
 
     var barracks_id: int = game.sim._add_building(1, "barracks", Vector2(960, 760), false)
     game._sync_buildings()
@@ -113,6 +137,18 @@ func run() -> void:
     game.sim.explored[1].fill(1)
     game._sync_rocks()
     check(game.rock_visuals.all(func(visual: EntityVisual) -> bool: return visual.visible), "Explored rocks become visible")
+
+    var rock_transforms: Array[Vector3] = []
+    for visual: EntityVisual in game.rock_visuals:
+        rock_transforms.append(Vector3(visual.position.x, visual.position.z, visual.scale.x))
+    for visual: EntityVisual in game.rock_visuals:
+        visual.free()
+    game.rock_visuals.clear()
+    game._sync_rocks()
+    var regenerated_transforms: Array[Vector3] = []
+    for visual: EntityVisual in game.rock_visuals:
+        regenerated_transforms.append(Vector3(visual.position.x, visual.position.z, visual.scale.x))
+    check(rock_transforms == regenerated_transforms, "Rock decoration transforms are deterministic")
 
     game._begin_build("barracks")
     game._sync_build_preview()

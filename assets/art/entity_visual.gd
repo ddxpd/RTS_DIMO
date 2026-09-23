@@ -1,4 +1,4 @@
-﻿class_name EntityVisual
+class_name EntityVisual
 extends Node3D
 
 const MODEL_SCENES := {
@@ -38,6 +38,9 @@ var construction_tint := false
 var _target_heading := 0.0
 var _model_scale := 1.0
 var _materials: Array[Dictionary] = []
+var _faction_applied := false
+
+static var _shared_animation_libraries: Dictionary = {}
 
 
 func _init(model_kind: String, model_owner: int = 1) -> void:
@@ -52,12 +55,15 @@ func _ready() -> void:
     add_child(model)
     model.scale = Vector3.ONE * _model_scale
     _instance_materials()
+    _apply_lod_and_shadow_policy()
     _create_animation_player()
     set_faction(owner_id)
     set_animation("idle")
 
 
 func _process(delta: float) -> void:
+    if absf(angle_difference(rotation.y, _target_heading)) < 0.001:
+        return
     rotation.y = lerp_angle(rotation.y, _target_heading, minf(delta * 10.0, 1.0))
 
 
@@ -87,17 +93,24 @@ func set_animation(next_state: String) -> void:
 
 
 func set_flash(enabled: bool) -> void:
+    if flash_enabled == enabled:
+        return
     flash_enabled = enabled
     _refresh_material_tint()
 
 
 func set_construction_tint(enabled: bool) -> void:
+    if construction_tint == enabled:
+        return
     construction_tint = enabled
     _refresh_material_tint()
 
 
 func set_faction(next_owner: int) -> void:
+    if _faction_applied and owner_id == next_owner:
+        return
     owner_id = next_owner
+    _faction_applied = true
     var team: Color = TEAM_COLORS.get(owner_id, Color("#8d8d8d"))
     for entry: Dictionary in _materials:
         if not bool(entry.faction):
@@ -140,6 +153,25 @@ func _instance_materials() -> void:
             })
 
 
+func _apply_lod_and_shadow_policy() -> void:
+    # Units contribute far more instances than buildings, so omit their shadow
+    # passes and fade small mechanical details at strategic zoom distances.
+    var unit_core: Dictionary = {}
+    if kind == "soldier":
+        unit_core = {"Body": true, "soldier_Static_Armor_FactionPaint": true, "Weapon": true}
+    elif kind == "harvester":
+        unit_core = {"Hull": true, "harvester_Static_Armor": true, "harvester_Static_Steel": true}
+
+    var is_unit := kind == "soldier" or kind == "harvester"
+    for mesh_instance: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
+        if is_unit:
+            mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            if not unit_core.has(mesh_instance.name):
+                mesh_instance.visibility_range_end = 1400.0
+        elif mesh_instance.name in ["FactionGlow", "FactionSensor", "FactionBeacon", "FactionLight"]:
+            mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
 func _refresh_material_tint() -> void:
     var tint := 1.0
     if construction_tint:
@@ -156,6 +188,13 @@ func _create_animation_player() -> void:
     animation_player.name = "StateAnimationPlayer"
     add_child(animation_player)
     animation_player.root_node = animation_player.get_path_to(model)
+    if not _shared_animation_libraries.has(kind):
+        _shared_animation_libraries[kind] = _build_animation_library()
+    animation_player.add_animation_library("", _shared_animation_libraries[kind])
+    animation_player.active = kind != "rock"
+
+
+func _build_animation_library() -> AnimationLibrary:
     var library := AnimationLibrary.new()
     match kind:
         "soldier":
@@ -183,8 +222,7 @@ func _create_animation_player() -> void:
             library.add_animation("construction", _construction_animation())
         "ore":
             library.add_animation("idle", _ore_idle())
-    animation_player.add_animation_library("", library)
-
+    return library
 
 func _make_animation(length: float) -> Animation:
     var animation := Animation.new()

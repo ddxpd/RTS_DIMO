@@ -53,3 +53,5 @@
 ## Current prototype branch
 
 Active development is tracked on `feature/3d-models`.
+
+The Git-tracked `build/IronFront.exe` on this branch is still the old 2D-v0.1 LFS object. It is intentionally not updated with every source commit; large binaries should be distributed through GitHub Releases. For source validation, run the test suites below. A temporary current-branch executable may be generated as `build/IronFront3D-review.exe`, but it is not committed.

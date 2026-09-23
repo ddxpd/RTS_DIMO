@@ -3,3 +3,4 @@ export_templates/
 *.tpz
 # Large binaries are published via Releases, not git history
 build/IronFront.exe
+build/IronFront3D-review.exe
