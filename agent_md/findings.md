@@ -81,3 +81,9 @@
 - The prior test only asserted Godot's generic local -Z basis and muzzle node position. It did not establish which side of the soldier mesh is the visible face, so it could pass while the body faced away.
 - Blender source inspection: the soldier's faction glow and original weapon/muzzle sit at Blender +Y, which exports to Godot local -Z. The visible soldier front is Blender -Y / Godot +Z. The harvester drill is genuinely Blender +Y / Godot -Z.
 - Correct design: use a per-model forward axis (soldier +Z, harvester -Z), and place the soldier weapon/muzzle on +Z so body and rifle both face the target.
+
+## Effect-gallery generation request (2026-09-23)
+- The gallery is intentionally a collection/import page, not an AI or procedural generator.
+- Browser runtime discovery returned no available browser, so the page cannot be remotely opened in this session. The local server can still be prepared and the URL reported.
+- Generated five local preview assets from the actual barracks GLB: one contact sheet plus blueprint, night-ops, module-family, and combat-ready variants. These are procedural concept overlays, not AI-generated images.
+- The generated files are served by the gallery server under `/generated/`; `tools/*` was added to the export exclude filter so the web-gallery assets do not inflate the game PCK.

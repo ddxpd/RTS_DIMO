@@ -122,3 +122,9 @@
 - [x] Strengthen tests to validate the visible soldier front and muzzle against all target directions and a real attack order.
 - [x] Run Godot regressions, real rendered gameplay validation, and export a fresh Windows EXE.
 - [x] Record bug/root cause/fix/verification together in the development log.
+
+# Task plan: tech-faction barracks effect concepts (2026-09-23)
+- [x] Start the effect-gallery local page and inspect its import behavior.
+- [x] Generate several deterministic high-tech human-faction barracks concept/effect images.
+- [x] Make the generated images easy to preview or import from the gallery page.
+- [x] Verify image files and record results/limitations.

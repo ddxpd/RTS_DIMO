@@ -591,3 +591,11 @@
 - 多人回归：协议不匹配拒绝、观战权限、红方采矿/建造/生产/攻击/胜利、两轮完整快照一致、重开与主机退出处理全部 PASS。
 - 实机截图：`build/verification/soldier_attack_facing_fixed.png`。
 - 导出：`build/IronFront.exe`，109,693,864 bytes，时间 2026-09-23 20:51:16，SHA256 `A6C302D03A0BEF09EBB9C54A1208DFEA7F20B0DA595EA9A58B349FCC0A0B369D`；导出后 headless 180 帧与真实渲染 300 帧进程退出码均为 0。
+
+## 2026-09-23：高科技人类阵营兵营效果图
+- 生成基础：从 `assets/models/source/ironfront_models.blend` 单独渲染兵营 GLB，再用 Pillow 制作四张 1600x1000 概念图和一张总览图。
+- 产物：`tools/effect-gallery/generated/00_contact_sheet.png`、`barracks_tech_blueprint.png`、`barracks_tech_night_ops.png`、`barracks_tech_modules.png`、`barracks_tech_combat_ready.png`。
+- 页面：本地服务 `http://127.0.0.1:8765/` 已启动并用系统默认浏览器打开；可直接访问 `/generated/00_contact_sheet.png` 预览，或在页面用文件夹导入 `tools/effect-gallery/generated`。
+- 限制：当前环境没有可用的内置浏览器控制接口；本批图为程序化概念图，不是 AI 生成图。若要 AI 生成风格，需要用户明确选择 CLI fallback 并配置 `OPENAI_API_KEY`。
+- 验证：五个图片 URL 均 HTTP 200；`visual_models` 0 failures、`gameplay` 57/0；导出 `build/IronFront.exe` 后 headless 180 帧与真实渲染 300 帧均退出码 0。
+- 补充验证限制：最后一次真实渲染 300 帧导出版进程在退出阶段出现一次间歇性 Windows access violation（`0xC0000005`），立即同参数复跑退出码 0；headless 180 帧退出码 0。本批改动仅涉及网页效果图资源与导出排除规则，未改游戏脚本。

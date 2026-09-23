@@ -137,3 +137,16 @@
 - [x] 完整 Godot 回归、ENet 两轮回归、实机 MCP 攻击探针与截图验证完成。
 - [x] 导出并运行新 build/IronFront.exe：109,693,864 bytes，SHA256 A6C302D03A0BEF09EBB9C54A1208DFEA7F20B0DA595EA9A58B349FCC0A0B369D；headless/真实渲染退出码 0。
 - 状态：完成
+
+# Progress: tech-faction barracks effect concepts (2026-09-23)
+- [x] Started local gallery server on port 8765.
+- [x] Browser runtime reported no available browser, so in-app/remote page control is unavailable in this session.
+- Status: generating local preview assets.
+- [x] Rendered the actual barracks GLB with Blender and generated four 1600x1000 procedural high-tech variants plus a contact sheet.
+- [x] Published generated files under `tools/effect-gallery/generated/` and verified all five HTTP responses are 200.
+- [x] Opened the local gallery page with the system default browser after in-app browser discovery reported no browser.
+- [x] Added `tools/*` to the Windows export exclude filter, rebuilt IronFront.exe, and ran headless/real-render smoke checks with exit code 0.
+- [x] Post-change regressions: visual_models failures=[]; gameplay 57 checks / 0 failures.
+- 状态：完成；效果图是程序化概念图，不是 AI 生成图。
+- [!] Final exported render smoke had one intermittent Windows access-violation exit (`0xC0000005`) before shutdown; an immediate identical retry exited 0. Headless exit remained 0. This is recorded as a shutdown-only instability, not a reproducible startup/render failure.
+- [x] Reproducibility scripts now derive project/output paths correctly and regenerate the four variants directly into `tools/effect-gallery/generated`; final re-export passed headless 180 frames and real render 300 frames, both exit code 0.
