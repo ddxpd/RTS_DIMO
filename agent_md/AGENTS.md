@@ -24,3 +24,5 @@
 - Leave a blank line between functions and between distinct logical code blocks.
 - Keep one primary operation per line and add concise comments at important control-flow boundaries.
 - Do not force alignment when it makes long expressions harder to read.
+
+- Local Git authorization rule: conversational confirmation is pre-granted for Git operations that do not intentionally change remote state, including status, log, diff, branch, switch, checkout, add, commit, merge, rebase, reset, clean, restore, stash, tag, and local-only history rewrite. Remote-changing operations (push, force-push, remote branch creation/deletion, or any upload) still require the user to actively request them. Network read operations and platform-enforced sandbox approvals remain subject to the environment approval mechanism.
