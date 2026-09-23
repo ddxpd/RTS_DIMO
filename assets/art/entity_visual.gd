@@ -74,6 +74,12 @@ func set_heading(heading: Vector2) -> void:
 func set_animation(next_state: String) -> void:
     if animation_state == next_state:
         return
+    # Construction scales the model inner root. Reset it when leaving that
+    # state so a stopped loop cannot leave a completed building double-scaled.
+    if animation_state == "construction":
+        var animated_root := model.get_node_or_null(NodePath(kind))
+        if animated_root != null:
+            animated_root.scale = Vector3.ONE
     animation_state = next_state
     if animation_player == null or not animation_player.has_animation(next_state):
         return
@@ -314,7 +320,8 @@ func _ore_idle() -> Animation:
 
 func _construction_animation() -> Animation:
     var animation := _make_animation(1.5)
-    var low := Vector3.ONE * _model_scale * Vector3(1, 0.2, 1)
-    var high := Vector3.ONE * _model_scale
-    _add_value_track(animation, kind, "scale", [low, high])
+    # The animated node is below `model`, which already carries MODEL_SETTINGS.scale.
+    # Keep this track normalized so completed buildings are not double-scaled.
+    var low := Vector3(1, 0.2, 1)
+    _add_value_track(animation, kind, "scale", [low, Vector3.ONE])
     return animation

@@ -1,6 +1,7 @@
 extends SceneTree
 
 const MAIN = preload("res://scenes/main.tscn")
+const Sim = preload("res://scripts/simulation.gd")
 
 var game: Node3D
 var failures: Array[String] = []
@@ -22,6 +23,24 @@ func _has_animations(available: Array[StringName], required: Array[String]) -> b
             return false
     return true
 
+
+func _visual_world_aabb(visual: EntityVisual) -> AABB:
+    var result := AABB()
+    var first := true
+    for node: Node in visual.model.find_children("*", "MeshInstance3D", true, false):
+        var mesh_instance := node as MeshInstance3D
+        if mesh_instance == null or mesh_instance.mesh == null:
+            continue
+        var box := mesh_instance.global_transform * mesh_instance.mesh.get_aabb()
+        if first:
+            result = box
+            first = false
+        else:
+            result = result.merge(box)
+    return result
+
+func _fits_footprint(box: AABB, footprint: Vector2, tolerance: float = 8.0) -> bool:
+    return box.size.x <= footprint.x + tolerance and box.size.z <= footprint.y + tolerance
 
 func run() -> void:
     root.size = Vector2i(1280, 800)
@@ -67,11 +86,20 @@ func run() -> void:
 
     var barracks_id: int = game.sim._add_building(1, "barracks", Vector2(960, 760), false)
     game._sync_buildings()
+    var refinery_visual: EntityVisual = game.building_visuals[refinery_id].visual
+    var refinery_box := _visual_world_aabb(refinery_visual)
+    check(_fits_footprint(refinery_box, Sim.BUILD_TYPES.refinery.size), "Completed refinery stays within its 80x80 visual footprint")
     var barracks_visual: EntityVisual = game.building_visuals[barracks_id].visual
+    barracks_visual.animation_player.seek(1.0, true)
+    await process_frame
+    var construction_box := _visual_world_aabb(barracks_visual)
+    check(_fits_footprint(construction_box, Sim.BUILD_TYPES.barracks.size), "Construction animation never double-scales the model")
     check(barracks_visual.animation_state == "construction", "Unfinished building plays construction animation")
     game.sim.buildings[barracks_id].remaining = 0
     game.sim.buildings[barracks_id].queue.append({"type": "soldier", "remaining": 1})
     game._sync_buildings()
+    var completed_barracks_box := _visual_world_aabb(barracks_visual)
+    check(_fits_footprint(completed_barracks_box, Sim.BUILD_TYPES.barracks.size), "Completed barracks stays within its 64x64 visual footprint")
     check(barracks_visual.animation_state == "active", "Building with queue plays active animation")
 
     var bunker_id: int = game.sim._add_building(1, "bunker", Vector2(1150, 760), true)
@@ -86,9 +114,17 @@ func run() -> void:
     game._sync_rocks()
     check(game.rock_visuals.all(func(visual: EntityVisual) -> bool: return visual.visible), "Explored rocks become visible")
 
+    game._begin_build("barracks")
+    game._sync_build_preview()
+    var barracks_size: Vector2 = Sim.BUILD_TYPES.barracks.size
+    check(game.build_preview_model != null and game.build_preview_model.kind == "barracks", "Build preview uses the barracks 3D model")
+    check(is_equal_approx(game.build_preview_visual.scale.x, barracks_size.x / 100.0) and is_equal_approx(game.build_preview_visual.scale.z, barracks_size.y / 100.0), "Barracks preview matches its 64x64 footprint")
+
     game._begin_build("refinery")
     game._sync_build_preview()
+    var refinery_size: Vector2 = Sim.BUILD_TYPES.refinery.size
     check(game.build_preview_model != null and game.build_preview_model.kind == "refinery", "Build preview uses the refinery 3D model")
+    check(is_equal_approx(game.build_preview_visual.scale.x, refinery_size.x / 100.0) and is_equal_approx(game.build_preview_visual.scale.z, refinery_size.y / 100.0), "Refinery preview matches its 80x80 footprint")
 
     print("VISUAL_MODELS_TEST failures=", failures)
     quit(0 if failures.is_empty() else 1)

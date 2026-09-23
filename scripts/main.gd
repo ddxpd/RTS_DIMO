@@ -1686,6 +1686,7 @@ func _white_dot() -> ImageTexture:
         _dot_texture = ImageTexture.create_from_image(img)
     return _dot_texture
 
+
 # Create a status bar (bg + fill) as billboarded Sprite3D pair above a unit.
 func _make_status_bar(width: float, height: float, fill_color: Color) -> Node3D:
     var holder := Node3D.new()
@@ -1820,7 +1821,7 @@ func _sync_build_preview() -> void:
         build_preview_model.set_animation("idle")
         build_preview_visual.visible = true
         build_preview_visual.position = Vector3(pos.x, 0.5, pos.y)
-        build_preview_visual.scale = Vector3((size.x + 32) / 100.0, 1, (size.y + 32) / 100.0)
+        build_preview_visual.scale = Vector3(size.x / 100.0, 1, size.y / 100.0)
         build_preview_visual.get_active_material(0).albedo_color = Color(0.45, 1, 0.45, 0.3) if valid else Color(1, 0.3, 0.3, 0.3)
     else:
         if build_preview_model != null:
