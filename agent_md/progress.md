@@ -154,3 +154,61 @@
 - [x] Added `import-generated` button, responsive preview grid, and stable server-file import logic.
 - [x] HTML validation: doctype/one generated section/import button/no unclosed tags; two inline scripts pass node --check; page HTTP 200.
 - [x] Final export smoke: headless exit 0; real render had one intermittent shutdown access violation and passed identical retry with exit 0.
+
+# Progress：效果图素材墙与垃圾桶（2026-09-24）
+- [x] 将图库交互扩展为全部效果图 / 中意收藏 / 垃圾桶三种状态。
+- [x] 新导入图片保存服务端副本；生成目录图片支持直接导入或移入垃圾桶。
+- [x] IndexedDB 升级到版本 2，增加垃圾桶记录、恢复和永久清除。
+- [x] 新增本地 `server.py` 文件 API，并修复 `start.ps1` 在 `python` 路径下的数组参数拼接问题。
+- [x] API 生命周期验证通过：导入、移入 `.trash`、恢复、再次移入、永久删除、路径穿越拦截。
+- [x] HTMLParser、两个 inline script、PowerShell parser、Python 编译检查通过；页面与 `/api/health`、`/api/generated` 返回 HTTP 200。
+- [x] Windows EXE 重新导出完成（2026-09-24 00:06），导出的 EXE 实机进程存活 5 秒检查通过。
+- [x] Godot `presentation` 0 failures、`gameplay` 57 checks / 0 failures。
+- [x] 默认端口 8765 的图库页面、健康接口、生成图列表接口和当前服务端文件生命周期再次验证通过。
+- [!] Git LFS 在读取/比较 `build/IronFront.exe` 时报告 `.git/lfs/tmp` access denied；本次网页源码与文档变更的 `git diff --check` 通过，未执行远程操作。
+
+# Progress: human barracks concept-art set (2026-09-24)
+- [x] Generated five AI raster concepts with the built-in imagegen skill.
+- [x] Saved all five PNGs to tools/effect-gallery/generated/.
+- [x] Verified each PNG is present and the local API returns all five generated paths.
+- [x] Verified the gallery page response contains the generated-concept preview section.
+- [x] Re-exported the Windows EXE and ran presentation, gameplay, and exported-process smoke checks.
+Status: complete. Asset generation, gallery verification, and required build checks passed.
+
+# Progress: remove generated-concepts preview section (2026-09-24)
+- [x] Removed the generated-concepts markup, styles, import button, and dedicated JavaScript discovery/rendering code from tools/effect-gallery/index.html.
+- [x] Preserved IndexedDB gallery import, favorites, trash, restore, and permanent-delete flows.
+- [x] Served page no longer contains the removed heading/button; two inline scripts pass node --check.
+- [x] Fresh build/IronFront.exe export completed; presentation and gameplay tests exited 0; exported EXE live check passed.
+Status: complete.
+
+# Progress: bunker model and runtime animation pass (2026-09-24)
+- [x] Rebuilt the bunker hierarchy in `assets/models/source/ironfront_models.blend` from the mobile-defense bunker reference, including armored shutters, stabilizers, twin barrels, muzzle flash, turret, sensor mast, and faction beacon.
+- [x] Exported the updated runtime asset to `assets/models/bunker.glb` and generated `build/verification/bunker_model_preview.png` for visual review.
+- [x] Added runtime `construction`, `idle`, and `fire` animation tracks in `assets/art/entity_visual.gd`; verified imported node paths and track counts through the live Godot game helper.
+- [x] Added bunker-specific hierarchy and animation assertions to `tests/visual_models.gd`.
+- [x] Corrected the fire recoil keyframes after checking the imported barrel coordinates (+Z); live evaluation now shows both barrels retracting from 0.60 to 0.48 and the muzzle flash scaling up.
+- [x] Live project smoke check completed with the game helper ready and no project errors; direct headless runs passed `visual_models` (`failures=[]`), `gameplay` (57 checks / 0 failures), and `presentation` (`failures=[]`). The editor MCP test discovery still reports 0 registered suites in this session.
+- [x] Follow-up orientation fix: the model was loading but its front-facing features were authored toward the rear of the gameplay camera, making the replacement look like the old low-profile bunker. Front plates/shutters now use Godot -Z and the turret/animation tracks use a π base rotation; runtime evaluation confirms the corrected orientation.
+
+# Progress: simplify gallery import copy (2026-09-24)
+- [x] Removed the IndexedDB persistence note from the uploader panel.
+- [x] Renamed the folder chooser to “选择图片文件夹” without changing its batch-import behavior.
+- [x] Updated README import instructions to describe supported image formats.
+- [x] Per user instruction, skipped Windows EXE export and game verification for this copy-only gallery text change.
+Status: complete.
+
+# Progress: architecture review and main runtime extraction (2026-09-24)
+
+- Recorded the review findings and remediation ownership in `agent_md/findings.md`.
+- Added a task plan for the first refactor: extract world presentation synchronization while preserving existing test-facing wrappers.
+- Added `scripts/world_visual_sync.gd` for entity, effect, selection, build-preview, and fog synchronization.
+- Reduced `scripts/main.gd` by 409 lines; kept compatibility properties and `_sync_*` wrappers used by existing tests.
+- `--check-only` passed after fixing the extracted helper's type/declaration errors.
+- `visual_models`, `gameplay` (57 checks), `presentation`, `features`, and `visual_performance` all passed; the 180-unit probe reported 0.67 ms unit sync and 7.19 ms full visual sync.
+- Full ENet regression passed with protocol mismatch, spectator permissions, both guest rounds, snapshot equality, reconnect, and host disconnect checks.
+- The network runner's default executable path was unavailable, so it was invoked with the installed Godot path override.
+- Fresh `build/IronFront.exe` export completed (110,191,584 bytes); exported headless process exited 0 after the smoke run.
+- The same exported EXE remained alive for five seconds in a non-headless render launch and was then stopped cleanly.
+
+Status: first refactor complete; the remaining architecture items stay recorded as unfixed follow-up work.

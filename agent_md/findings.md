@@ -91,3 +91,45 @@
 ## Refresh behavior finding (2026-09-23)
 - The main gallery grid intentionally renders only records in IndexedDB. Files placed under `tools/effect-gallery/generated/` are served by HTTP but are not automatically inserted into IndexedDB, so refreshing the page leaves the main grid empty unless the user imports them.
 - The updated page now has a dedicated generated-concepts section that renders server files on every refresh, independent of IndexedDB. The new import button fetches those files and stores them as normal gallery records.
+
+## Effect-gallery素材墙与垃圾桶（2026-09-24）
+- The gallery is used as a long-lived visual reference board for future generated game art, so the primary states are all images, favorites, and trash; generation itself remains outside the page.
+- A browser cannot delete an arbitrary original local file from a `File` object. New ordinary imports therefore receive a managed copy under `tools/effect-gallery/library/`; generated files retain their managed relative path.
+- The local Python service moves managed files to `tools/effect-gallery/.trash/` for removal, restores them to their original relative path, and permanently deletes them only from the explicit trash action.
+- IndexedDB schema version 2 adds a separate `trash` object store. Legacy browser-only records remain usable and are marked as browser-only when permanently cleared.
+- The page discovers available generated files through `/api/generated`, so a generated file removed from the file system disappears on refresh.
+
+## Human barracks concept-art set (2026-09-24)
+- Generated five new raster concept images with the built-in image generation tool: frontline, industrial, night operations, fortified, and mobile expeditionary barracks.
+- Saved stable project copies under tools/effect-gallery/generated/. The local gallery discovers these files through /api/generated, so they appear in the generated-concepts section after refresh.
+- The images are visual design references for future game-model discussions; they do not alter the Godot runtime or model assets.
+
+# Findings: architecture review (2026-09-24)
+
+This review is recorded as a work list. Each item includes the intended remediation or its current status so it is not treated as an unowned bug.
+
+## High priority
+
+1. `scripts/main.gd` is a large monolithic runtime owner for lifecycle, input, UI, networking, simulation stepping, audio, camera, and 3D presentation. **Fix:** extract presentation synchronization first, then incrementally separate networking/input/UI behind stable interfaces. **Status:** presentation extraction in progress.
+2. The project contains both dictionary-driven simulation state and legacy `scripts/entities/*` classes with unclear ownership. **Fix:** choose one authoritative domain model and remove or adapt the other after usage audit. **Status:** unfixed; audit required.
+3. Host networking sends deep-copied full snapshots at the simulation rate. **Fix:** introduce validated versioned snapshots first, then delta/relevancy/compression when entity scale requires it. **Status:** unfixed.
+4. `Simulation.apply_snapshot()` assigns remote dictionaries without schema, type, bounds, or size validation. **Fix:** add a snapshot validator and reject malformed/out-of-date state before applying it. **Status:** unfixed.
+5. Unit separation uses an incomplete neighbor-offset set. **Fix:** cover all adjacent spatial-hash cells and add dense-boundary regression cases. **Status:** unfixed.
+6. Test scripts are not registered as discoverable suites in the MCP test runner. **Fix:** add one documented test entry point and CI-friendly exit/result reporting. **Status:** unfixed.
+
+## Medium priority
+
+7. Simulation, pathfinding, visibility, AI, combat, and economy are coupled in one tick implementation. **Fix:** separate systems behind deterministic tick interfaces and add performance budgets. **Status:** unfixed.
+8. Core state is represented by untyped dictionaries and string keys. **Fix:** introduce typed state records/resources at subsystem boundaries. **Status:** unfixed.
+9. AI is hard-wired into `Simulation` and fixed to a narrow scenario. **Fix:** move behavior into a testable AI controller with configurable policies. **Status:** unfixed.
+10. Balance and map values are hard-coded in GDScript. **Fix:** move tunable data into validated resources/configuration. **Status:** unfixed.
+11. Blender/GLB/runtime animation contracts are implicit, so axis or node-name changes can produce a visually valid but incorrect model. **Fix:** add export metadata and automated hierarchy/orientation assertions. **Status:** partially mitigated by visual tests; pipeline remains unfixed.
+12. Documentation and some project/UI strings contain encoding corruption. **Fix:** normalize tracked text to UTF-8 and add an encoding check. **Status:** unfixed.
+13. Input, UI layout, and visual node creation remain heavily hard-coded in `main.gd`. **Fix:** extract input/UI controllers after presentation extraction. **Status:** unfixed.
+14. `godot_ai` is both an autoload/editor plugin and excluded by the export filter. **Fix:** define an explicit development-only/runtime packaging policy and verify release startup. **Status:** unfixed.
+15. Network scripts depend on a machine-specific Godot executable path. **Fix:** use an argument/environment override with portable discovery. **Status:** unfixed.
+
+## Verification baseline
+
+- Existing direct headless gameplay, presentation, and visual-model checks passed before this refactor.
+- The MCP suite discovery currently reports zero registered suites; this remains a test infrastructure limitation until item 6 is addressed.

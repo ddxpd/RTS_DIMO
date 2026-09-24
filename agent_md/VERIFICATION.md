@@ -2,6 +2,16 @@
 
 The earlier implementation only contained combat fields and decorative buildings. It has been replaced by an authoritative simulation with working economy, construction, production, combat, match lifecycle, and a separate presentation layer.
 
+## Bunker model and animation verification - 2026-09-24
+
+- Source model saved in `assets/models/source/ironfront_models.blend`; runtime GLB exported to `assets/models/bunker.glb` (390,848 bytes).
+- Godot runtime hierarchy resolves `bunker/Turret/Barrel_L`, `Barrel_R`, `MuzzleFlash`, `BlastShutter_L`, `Stabilizer_L`, `SensorMast`, and `FactionSensor`.
+- Runtime animation counts: construction 7 tracks, idle 3 tracks, fire 5 tracks.
+- Mid-animation evaluation: idle turret Y = 0.10 and sensor mast Y = 0.04; fire barrels Z = 0.48 with muzzle scale = (1.40, 0.75); construction shutter scale = 0.575 and stabilizer scale = 0.55.
+- Project launch reported the game helper live with no current or recent project errors.
+- Direct headless runs passed `tests/visual_models.gd` (`failures=[]`), `tests/gameplay.gd` (57 checks / 0 failures), and `tests/presentation.gd` (`failures=[]`). The editor MCP test runner independently discovered 0 registered suites in this session.
+- Orientation regression: symptom was a loaded new hierarchy that appeared like the old bunker from the gameplay camera; root cause was the Blender-to-Godot front axis on the new bunker. Fix moved front plates/shutters to Godot -Z and set the turret plus idle/fire tracks to a π base rotation. Runtime check reports turret Y ≈ 3.24 and shutter Z = -1.08.
+
 ## Passed
 
 - 47 simulation assertions: both factions' mining and delivery, finite ore, cargo capacity, construction cost/time/placement, production cost/time/spawn/cancel/limit, factory destruction and refunds, terrain/building navigation, circle separation, pursuit, cooldown, automatic target acquisition, death cleanup, victory freeze, snapshots, AI, fog exploration, friendly fire, and attack-move interception.

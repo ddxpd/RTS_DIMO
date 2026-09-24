@@ -2,13 +2,16 @@ param([int]$PreferredPort=8765)
 $ErrorActionPreference="Stop"
 $projectRoot=Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $galleryRoot=Join-Path $projectRoot "tools\effect-gallery"
+$serverScript=Join-Path $galleryRoot "server.py"
 $python=Get-Command python -ErrorAction SilentlyContinue
 $usingLauncher=$null -eq $python
 if($usingLauncher){
     $python=Get-Command py -ErrorAction SilentlyContinue
     if($null -eq $python){throw "Python 3 was not found. Install Python or serve tools/effect-gallery with another static file server."}
 }
-$arguments=if($usingLauncher){@("-3","-m","http.server")}else{@("-m","http.server")}
+$arguments=@()
+if($usingLauncher){$arguments += "-3"}
+$arguments += $serverScript
 function Get-FreePort([int]$StartPort){
     for($port=$StartPort;$port -lt ($StartPort+100);$port++){
         $listener=$null

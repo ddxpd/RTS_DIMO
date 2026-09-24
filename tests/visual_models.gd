@@ -48,6 +48,18 @@ func _check_track_count(visual: EntityVisual, animation_name: String, expected: 
     check(animation != null and animation.get_track_count() == expected, message)
 
 
+func _has_track(visual: EntityVisual, animation_name: String, expected_path: String, message: String) -> void:
+    var animation := visual.animation_player.get_animation(animation_name)
+    if animation == null:
+        check(false, message)
+        return
+    for track_index: int in range(animation.get_track_count()):
+        if String(animation.track_get_path(track_index)) == expected_path:
+            check(true, message)
+            return
+    check(false, message)
+
+
 func _check_visual_forward(visual: EntityVisual, heading: Vector2, message: String) -> void:
     visual.set_heading(heading)
     visual._process(1.0)
@@ -205,6 +217,16 @@ func run() -> void:
     game._sync_buildings()
     var bunker_visual: EntityVisual = game.building_visuals[bunker_id].visual
     check(bunker_visual.animation_state == "fire", "Bunker cooldown plays fire animation")
+    check(bunker_visual.model.get_node_or_null("bunker/Turret/Barrel_L") != null, "Bunker keeps the left barrel under the turret rig")
+    check(bunker_visual.model.get_node_or_null("bunker/Turret/Barrel_R") != null, "Bunker keeps the right barrel under the turret rig")
+    check(bunker_visual.model.get_node_or_null("bunker/Turret/MuzzleFlash") != null, "Bunker exposes a muzzle flash node")
+    _has_track(bunker_visual, "idle", "bunker/Turret:rotation", "Bunker idle scans the turret")
+    _has_track(bunker_visual, "idle", "bunker/FactionSensor:scale", "Bunker idle pulses the faction sensor")
+    _has_track(bunker_visual, "fire", "bunker/Turret/Barrel_L:position", "Bunker fire recoils the left barrel")
+    _has_track(bunker_visual, "fire", "bunker/Turret/Barrel_R:position", "Bunker fire recoils the right barrel")
+    _has_track(bunker_visual, "fire", "bunker/Turret/MuzzleFlash:scale", "Bunker fire pulses the muzzle flash")
+    _has_track(bunker_visual, "construction", "bunker/BlastShutter_L:scale", "Bunker construction deploys the left shutter")
+    _has_track(bunker_visual, "construction", "bunker/Stabilizer_L:scale", "Bunker construction deploys the left stabilizer")
 
     check(game.ore_visuals.size() == game.sim.ores.size(), "Every ore has a 3D visual")
     check(game.rock_visuals.size() > 0, "Rock obstacles use 3D rock models")

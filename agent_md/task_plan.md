@@ -138,3 +138,53 @@
 - [x] Added one-click import from server files into IndexedDB.
 - [x] HTMLParser and both inline scripts passed syntax checks; page and generated image URLs return HTTP 200.
 - [x] Rebuilt IronFront.exe; headless 180-frame smoke passed. Real-render 300-frame run hit the known intermittent shutdown access violation once, then an identical retry exited 0.
+
+# Task plan: effect-gallery recycle bin and filesystem deletion (2026-09-23)
+- [x] Add persistent trash-bin state and trash/restore/permanent-delete controls.
+- [x] Add a local gallery API that moves managed files to `.trash` and permanently deletes them.
+- [x] Connect imported/generated gallery records to managed filesystem paths where possible.
+- [x] Validate HTML/JavaScript/Python syntax, API behavior, and page HTTP responses.
+- [x] Record limitations for legacy IndexedDB-only records and finish game/export verification.
+Status: complete. The gallery server/API and page are implemented; web lifecycle checks, Windows export, exported EXE live check, and gameplay/presentation regressions passed.
+
+## Errors encountered
+- Initial export attempt could not access Godot's user export-template cache under AppData in the restricted shell. Re-ran with the required external filesystem permission; export completed and the EXE live check passed.
+
+# Task plan: human barracks concept-art set (2026-09-24)
+- [x] Generate five distinct human-faction barracks concepts for the gallery.
+- [x] Copy the generated PNGs into tools/effect-gallery/generated/ using stable filenames.
+- [x] Verify the gallery API exposes all five files and the page contains the generated-concept section.
+- [x] Re-export the Windows build and run the required game smoke checks after the asset update.
+
+Status: complete. The gallery now contains frontline, industrial, night-operations, fortified, and mobile human barracks concepts.
+
+# Task plan: remove generated-concepts preview section (2026-09-24)
+- [x] Remove the visible “high-tech human faction barracks” section and import button from the gallery page.
+- [x] Remove its client-side rendering and event-handler code while preserving the main gallery, favorites, and trash flows.
+- [x] Validate the served page and inline script syntax.
+- [x] Re-export and smoke-test the Windows build.
+
+Status: complete. The page no longer displays the generated-concepts section; generated files remain available on disk for explicit file selection if needed.
+
+# Task plan: review findings and split the main runtime (2026-09-24)
+
+## Goal
+- Record the project review findings in `agent_md/findings.md` with explicit fix status.
+- Resolve the first high-priority issue by extracting world presentation synchronization from `scripts/main.gd` into a dedicated controller without changing gameplay behavior.
+
+## Phases
+1. [x] Record review findings and define the first refactor boundary.
+2. [x] Extract 3D entity/fog/preview synchronization into `WorldVisualSync` and keep compatibility wrappers for existing tests.
+3. [x] Run script checks, gameplay/presentation/visual tests, and network regression.
+4. [x] Export a fresh Windows build, run it, and record verification.
+
+## Constraints
+- Preserve the current simulation, network protocol, input behavior, and public test helpers.
+- Do not touch third-party `addons/godot_ai` code.
+- Keep the existing `main.gd` wrapper methods/properties temporarily so tests and future incremental extraction remain compatible.
+
+## Errors encountered
+| Error | Attempt | Resolution |
+|---|---:|---|
+| `world_visual_sync.gd` initially failed to parse because the extracted body retained an internal `_dot_texture` declaration and dynamic host expressions lacked inferred types | 1 | Removed the duplicate declaration, added the missing helper, and added explicit local types; `--check-only` and all regressions then passed. |
+| `tests/run_network_guest.ps1` default Godot path was unavailable in this environment | 1 | Re-ran the same regression with the installed Godot executable passed through `-GodotPath`; all network rounds passed. |

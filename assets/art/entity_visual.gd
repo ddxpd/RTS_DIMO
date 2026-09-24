@@ -364,16 +364,20 @@ func _refinery_active() -> Animation:
 
 
 func _bunker_idle() -> Animation:
-    var animation := _make_animation(2.5)
-    _add_value_track(animation, "bunker/FactionSensor", "scale", [Vector3.ONE, Vector3(1.25, 1.25, 1.25), Vector3.ONE])
+    var animation := _make_animation(3.6)
+    _add_value_track(animation, "bunker/Turret", "rotation", [Vector3(0, PI - 0.10, 0), Vector3(0, PI + 0.10, 0), Vector3(0, PI - 0.10, 0)])
+    _add_value_track(animation, "bunker/SensorMast", "rotation", [Vector3(0, -0.04, 0), Vector3(0, 0.04, 0), Vector3(0, -0.04, 0)])
+    _add_value_track(animation, "bunker/FactionSensor", "scale", [Vector3.ONE, Vector3(1.18, 1.30, 1.18), Vector3.ONE])
     return animation
 
 
 func _bunker_fire() -> Animation:
     var animation := _make_animation(0.5)
-    _add_value_track(animation, "bunker/Barrel_L", "position", [Vector3(-0.24, 2, 0.92), Vector3(-0.24, 2, 0.75), Vector3(-0.24, 2, 0.92)])
-    _add_value_track(animation, "bunker/Barrel_R", "position", [Vector3(0.24, 2, 0.92), Vector3(0.24, 2, 0.75), Vector3(0.24, 2, 0.92)])
-    _add_value_track(animation, "bunker/Turret", "rotation", [Vector3.ZERO, Vector3(0, 0.18, 0), Vector3.ZERO])
+    _add_value_track(animation, "bunker/Turret/Barrel_L", "position", [Vector3(-0.22, 0.25, 0.60), Vector3(-0.22, 0.25, 0.48), Vector3(-0.22, 0.25, 0.60)])
+    _add_value_track(animation, "bunker/Turret/Barrel_R", "position", [Vector3(0.22, 0.25, 0.60), Vector3(0.22, 0.25, 0.48), Vector3(0.22, 0.25, 0.60)])
+    _add_value_track(animation, "bunker/Turret", "rotation", [Vector3(0, PI + 0.06, 0), Vector3(0, PI - 0.10, 0), Vector3(0, PI + 0.06, 0)])
+    _add_value_track(animation, "bunker/Turret/MuzzleFlash", "scale", [Vector3(0.04, 0.04, 0.04), Vector3(1.40, 0.75, 1.40), Vector3(0.04, 0.04, 0.04)])
+    _add_value_track(animation, "bunker/FactionSensor", "scale", [Vector3.ONE, Vector3(1.55, 1.55, 1.55), Vector3.ONE])
     return animation
 
 
@@ -390,4 +394,11 @@ func _construction_animation() -> Animation:
     var animation := _make_animation(1.0, false)
     var low := Vector3(1, 0.2, 1)
     _add_value_track(animation, kind, "scale", [low, Vector3.ONE])
+    if kind == "bunker":
+        _add_value_track(animation, "bunker/BlastShutter_L", "scale", [Vector3(0.15, 0.15, 0.15), Vector3.ONE])
+        _add_value_track(animation, "bunker/BlastShutter_R", "scale", [Vector3(0.15, 0.15, 0.15), Vector3.ONE])
+        _add_value_track(animation, "bunker/Stabilizer_L", "scale", [Vector3(0.10, 0.10, 0.10), Vector3.ONE])
+        _add_value_track(animation, "bunker/Stabilizer_R", "scale", [Vector3(0.10, 0.10, 0.10), Vector3.ONE])
+        _add_value_track(animation, "bunker/SensorMast", "scale", [Vector3(0.12, 0.12, 0.12), Vector3.ONE])
+        _add_value_track(animation, "bunker/FactionSensor", "scale", [Vector3(0.05, 0.05, 0.05), Vector3.ONE])
     return animation

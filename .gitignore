@@ -4,3 +4,8 @@ export_templates/
 # Large binaries are published via Releases, not git history
 build/IronFront.exe
 build/IronFront3D-review.exe
+
+# Local effect gallery data and runtime cache
+tools/effect-gallery/library/
+tools/effect-gallery/.trash/
+tools/effect-gallery/__pycache__/

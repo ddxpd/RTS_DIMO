@@ -602,3 +602,33 @@
 
 ## 2026-09-23：刷新不显示生成图片
 - 症状：刷新效果图页面后主网格仍为空。根因：主网格只渲染 IndexedDB 记录；`tools/effect-gallery/generated/` 中的文件只是静态 HTTP 资源，刷新不会自动写入 IndexedDB。修复：页面新增“高科技人类阵营：兵营概念图”静态预览区，刷新即显示；新增“导入这组概念图”按钮，将服务器文件获取为 File 并写入现有图库。验证：HTMLParser 无未闭合标签，两个 inline script 通过 node --check，页面和五个图片 URL HTTP 200；导出后 headless 180 帧退出码 0，真实渲染 300 帧一次遇到已知间歇性关闭崩溃、同参数复跑退出码 0。
+
+## 2026-09-24：效果图素材墙与垃圾桶
+- 症状：图库原先的“删除”只删除浏览器 IndexedDB 记录，无法保留待恢复状态，也不能按用户要求在永久清除时删除文件系统图片。根因：页面使用纯静态 HTTP 服务，浏览器没有任意本地文件删除权限。修复：新增 `tools/effect-gallery/server.py`，普通导入保存到 `library/`，移除先移动到 `.trash/`，垃圾桶提供恢复和永久清除；IndexedDB 升级为独立 `trash` 对象仓库，生成目录图片也接入相同流程。验证：本地 API 完成导入→移入垃圾桶→恢复→再次移入→永久删除全生命周期测试，并拦截路径穿越。
+- 症状：`start.ps1` 使用 `python` 时服务启动失败，Python 将脚本路径和参数视为一个字符串。根因：PowerShell `if` 表达式返回单元素数组后退化为字符串，`+=` 拼接了整条命令参数。修复：改为先创建空数组，再逐项追加 `-3`、脚本路径和服务参数。验证：PowerShell parser 通过，脚本在 18766 端口启动服务，页面/API 返回 200。
+
+## 2026-09-24: human barracks concept-art generation
+- Symptom: the gallery had no current generated human-barracks set after prior generated files were removed or moved to the recycle bin.
+- Root cause: the gallery is file-backed for generated concepts, so it needs fresh project files in tools/effect-gallery/generated/.
+- Fix: generated five new human-faction barracks concepts with the built-in imagegen workflow and copied stable PNGs into the generated directory.
+- Verification: all five PNG files are present; /api/health and /api/generated return successfully; the gallery HTML contains the generated-concepts section.
+- Build verification: fresh build/IronFront.exe export completed; tests/presentation.gd and tests/gameplay.gd exited 0; the exported EXE remained alive for the five-second headless smoke check.
+
+## 2026-09-24: remove generated-concepts preview section
+- Symptom: the gallery showed a dedicated “high-tech human faction barracks” panel that was not needed in the user's workflow.
+- Root cause: the earlier gallery enhancement added a server-file preview area and import control for generated concepts.
+- Fix: removed that section and its client-side generated-file discovery/rendering handlers; kept ordinary file/folder import and all gallery management features intact. The generated PNG files were not deleted.
+- Verification: served HTML no longer contains the section or import button; inline scripts pass syntax checks; fresh EXE export, presentation test, gameplay test, and five-second exported-process check all passed.
+
+## 2026-09-24: simplify gallery import copy
+- Symptom: the uploader exposed browser-storage implementation details and a project-specific folder name.
+- Root cause: the original copy described IndexedDB persistence and named `build/verification` even though the folder chooser accepts any directory.
+- Fix: removed the persistence note, renamed the button to “选择图片文件夹”, and documented PNG/JPG/JPEG/WebP folder import in README.
+- Verification: static page checks and script syntax checks follow; EXE/game verification was intentionally skipped per user instruction.
+
+## 2026-09-24: extract world presentation from main runtime
+### Bug and fix (paired record)
+- Symptom: `scripts/main.gd` owned simulation orchestration, network callbacks, input, UI, audio, camera, and all 3D entity/fog/preview synchronization in one 1,900-line script, making presentation changes high-risk and difficult to test in isolation.
+- Root cause: the 3D presentation subsystem had no independent owner; its state dictionaries and helper functions were embedded in the root gameplay node.
+- Fix: added `scripts/world_visual_sync.gd` as a dedicated `Node3D` controller for rocks, ore, units, buildings, effects, selection overlays, build previews, status bars, animations, and fog. `main.gd` now creates/configures the controller and exposes temporary compatibility properties/wrappers for existing tests and callers.
+- Verification: `--check-only`, `visual_models`, `gameplay` (57 checks), `presentation`, `features`, `visual_performance`, and the full ENet regression all passed. A fresh `build/IronFront.exe` export (110,191,584 bytes) launched and exited cleanly in the exported headless smoke run, and the non-headless render process remained alive for five seconds.
