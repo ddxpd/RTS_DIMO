@@ -1,148 +1,43 @@
-# Findings：coding style 全量整改（2026-09-19）
+# 架构发现与决策
 
-## 违规分布（整改前）
-- scripts/main.gd：707 处（tab 缩进为主）
-- scripts/simulation.gd：443 处
-- tests/gameplay.gd：142 处；network_probe.gd：134 处；presentation.gd：92 处
-- tests/network_guest.gd：18 处；assets/art/pixel_art.gd：33 处
-- soldier/harvester entity：单行函数、缺空行、int=100、逗号无空格
-- camera_controller.gd / barracks / base / building / combat / game_entity：基本合规
+更新时间：2026-09-25
 
-## 整改方式
-- Node 脚本批量处理：tab→4空格、CRLF→LF、BOM 清除、逗号后加空格、
-  赋值/比较运算符两侧加空格（字符串/注释感知）、行尾空白清理、
-  文件尾单换行、函数定义前保证空行
-- 两个 entity 小文件手工重写（拆分单行函数、补空行）
+本文件只记录当前仍有价值的架构风险、决策和限制。历史实现细节见 [dev_log.md](dev_log.md)，测试证据见 [VERIFICATION.md](VERIFICATION.md)。
 
-## 质量护栏
-- 修复器的字符串切分器曾有一个 bug，污染了 gameplay.gd 的一个字符串
-  （" checks; failures=" → " checks; failures ="）
-- 通过 git HEAD 逐文件比对全部字符串字面量发现并已修复
-- 最终校验：15/15 文件字符串与 HEAD 完全一致
+## 已解决
 
-## 验证
-- gameplay.gd headless：47 checks; failures=[]，退出码 0
-- presentation.gd headless：failures=[]，退出码 0
-- 编辑器 filesystem scan：无脚本错误
-- project_run 实机验证：菜单→SOLO 对局→AI 建兵营产兵（红方 600→130 消费、
-  8 士兵+2 采集车），game log 无错误
-- 导出模板 4.7.2 曾缺失，已从 %TEMP% 缓存安装到 AppData 后成功导出
-- build/IronFront.exe：109,188,184 字节，2026-09-19 22:25，PCK 内嵌
+1. `main.gd` 的世界表现、会话、命令、网络、输入、HUD 和音频职责已拆到独立控制器；兼容 wrapper 暂时保留。
+2. `Simulation.apply_snapshot()` 已加入版本、类型、边界、数量和字段校验，并在验证后深拷贝应用。
+3. 匹配版本的非法网络快照会拒绝、断开并提示；过期或版本不匹配的 world 包仍按设计忽略。
+4. GLB 静态网格、材质缓存、单位朝向、施工动画和性能热点已完成第一轮修正。
 
-# Findings：Blender 3D 模型替换（2026-09-22）
-- 现项目无外部模型资源；8 类实体均由 `assets/art/pixel_art.gd` 动态生成纹理并经 `Sprite3D` 显示。
-- 模拟状态足以驱动动画：士兵 idle/move/attack，采集车 move/mine/unload，建筑 construction/active/fire，不需要改协议。
-- `main.gd` 视觉同步与选择逻辑解耦，替换 Node3D 表现层不会影响框选、点击或网络状态。
-- Blender 当前连接可用，可执行 bpy 程序化建模与 glTF 导出。
-- Blender 5.2 中文界面下 Principled 节点名称为本地化文本，必须按 `ShaderNodeBsdfPrincipled` 类型查找。
-- 程序化 bmesh 细分比临时对象 + modifier_apply 更稳定。
-- glTF 导出器可用 `use_selection=True + export_apply=True` 导出每个模型根及其子层级。
-- EntityVisual 在运行时复制 StandardMaterial3D，避免不同阵营/受击状态污染共享 GLB 材质。
-- 动画由 AnimationPlayer 动态库生成，直接引用 GLB 保留节点名（Leg_L、Drill、RadarDish 等）。
-- presentation.gd 原本仍访问旧 2D 相机 camera.zoom，并要求反投影浮点坐标完全相等；已更新为 3D 相机状态和容差断言。
-- 框选重复按下 bug：headless root.push_input 路径不一定完整经过 _input；在 _unhandled_input 幂等维护 left_button_held 与 last_mouse_event_msec 后修复。
-- 实机画面确认：新 DirectionalLight + WorldEnvironment 后，战场截图不再全黑；模型、阵营色、矿石与迷雾同时存在。
-- 协议握手失败/观战阶段 local_slot 可能为 0，视觉层必须容忍 explored 字典缺项。
-- 网络测试的 50 秒 guest 等待对 3D 资产加载与完整经济流程偏紧；110 秒可稳定覆盖。
-- round2 原测试固定移动单位 6（蓝方）却由红方 guest 下令，会被主机正确拒绝；应动态选择红方单位。
+## 未完成架构项
 
-# Findings：本地效果图收藏网页（2026-09-22）
-- 项目当前没有网页结构；现有效果图集中在 build/verification，包含 visual_models、demo_move、demo_build_preview、demo_build_construction 等 PNG。
-- 用户确认：第一版做本地网页、本地上传、浏览器 IndexedDB 保存；后续可再静态部署。
-- 采用零依赖单文件静态页面 + Python HTTP 本地启动脚本，避免引入 Node 或构建链。
-- Windows PowerShell 5 的 Set-Content 管道会把部分中文字符写成损坏字节；网页内容经 Node UTF-8 读取确认正常，start.ps1 改为 ASCII，README 用 Node fs UTF-8 重写。
-- 浏览器技能运行时初始化成功但 agent.browsers.list() 为空，因此本轮无法进行真实浏览器 UI 测试；已记录为验证限制。
-- 静态页面通过 HTTP 200、Node 语法检查、HTML Parser 标签/ID 检查和 PowerShell Parser 检查。
-- start.ps1 最终采用 ASCII 错误/提示文案，避免 Windows PowerShell 管道编码损坏；README 和页面保持 UTF-8。
-- py 启动路径参数顺序已修正为 `py -3 -m http.server ...`；直接 python 路径保持 `python -m http.server ...`。
-- 本地 HTTP 服务已停止，端口 8765 未占用。
+| 优先级 | 发现 | 当前状态 | 下一步 |
+| --- | --- | --- | --- |
+| P0 | 字典驱动 `Simulation` 与 `scripts/entities/*` 并存，所有权不清 | unfixed | 完成调用审计，确定唯一权威模型 |
+| P0 | 单位分离未覆盖全部相邻空间哈希单元 | unfixed | 补齐邻居偏移和密集边界回归 |
+| P0 | MCP 测试发现没有已注册 suite | unfixed | 建立统一入口、退出码和机器可读结果 |
+| P0 | `main.gd` 仍有兼容 wrapper 和 `_create_ui_legacy()` | mitigated | 下游测试迁移后删除兼容层 |
+| P1 | 路径、可见性、AI、战斗、经济耦合在同一 tick | unfixed | 按固定顺序拆成 deterministic systems |
+| P1 | 核心状态大量使用裸 Dictionary/string key | unfixed | 逐步引入 typed records/resources |
+| P1 | AI 仍硬编码在 `Simulation`，策略不可配置 | unfixed | 抽出可测试 AI controller/policy |
+| P1 | 平衡与地图参数硬编码在 GDScript | unfixed | 迁移到经过校验的 Resource/config |
+| P2 | 主机按模拟频率发送完整快照 | unfixed | 在规模需要时加入 delta/relevancy/compression |
+| P2 | Blender/GLB 节点、轴向和动画合约隐式 | partially mitigated | 增加导出元数据与自动断言 |
+| P2 | `godot_ai` 开发态/发布态边界不明确 | unfixed | 明确 export policy 并验证 release 启动 |
+| P2 | 网络脚本默认 Godot 路径依赖机器环境 | mitigated | 保留 override，同时加入自动发现 |
+| P3 | 项目文档/UI 文本存在历史编码损坏 | unfixed | 统一 UTF-8 并加入检查 |
 
-# Findings：3D 分支审查（2026-09-23）
-- 六套 headless 回归与完整 ENet 回归均通过。
-- cargo=0 时货物条背景仍可见；确认是 `_update_status_bar(..., 0)` 只隐藏填充未隐藏 holder。
-- 士兵 order=attack 时无论是否在射程内都播放 attack；追击阶段应播放 move。
-- 岩石 jitter/scale 使用全局随机，多人客户端装饰布局可能不一致。
-- 180 单位真实渲染压力探针：约 6 FPS、5440 draw calls、5653 render objects、0.218s/process；每个士兵复制 16 个材质，动画库逐实体构建。
-- 8 张 `assets/models/*_IF_Steel_Metallic-IF_Steel_Roughness.png` 及 import 未被 GLB 导入场景引用，可删除。
-- Blender 静态网格合并后，8 个模型的可渲染 Mesh 对象从 123 降到 76；单位关闭阴影并对远距小件使用 1400 单位 visibility range。
-- Godot glTF `embedded_image_handling=1` 会持续从 GLB 抽取金属/粗糙贴图；改为 0 后可删除 8 张重复 PNG，测试仍通过。
-- 180 单位真实渲染优化后约 98 FPS、1106 draw calls、0.0254s/process；优化前约 6 FPS、5440 draw calls、0.218s/process。
-- 剩余性能瓶颈曾位于 simulation：O(N²) 分离循环。改为 64px 空间哈希并 3 次迭代后，逻辑 tick 从约 61ms 降到约 14ms。
+## 不变约束
 
+- 继续保持 `Simulation.VERSION`、RPC 名称、快照字段形状和确定性 tick 顺序兼容。
+- 不修改第三方 `addons/godot_ai` 源码。
+- 任何重构必须保留 gameplay、presentation、视觉和 ENet 回归证据。
+- 未完成项必须在计划中有明确 owner/验收标准，不能只留下无主的 TODO。
 
-# Findings：施工动画与单位朝向修正（2026-09-23）
-- 建筑真实时长：兵营 4 秒、精炼厂 5 秒、地堡 6 秒、基地 7 秒；此前施工动画固定 1.5 秒且循环。
-- 导出后的士兵正面位于局部 -Z：Weapon z=-0.52、Muzzle z=-0.98；采集车钻头同样位于局部 -Z。
-- 旧朝向公式把 +Z 当正面，导致模型背对前进方向；正确公式为 atan2(-heading.x, -heading.y)。
-- 施工动画改为归一化 1 秒、LOOP_NONE，并通过 AnimationPlayer speed_scale 与 seek 精确映射模拟进度。
+## 已知限制
 
-## Soldier facing correction investigation (2026-09-23)
-
-- The prior test only asserted Godot's generic local -Z basis and muzzle node position. It did not establish which side of the soldier mesh is the visible face, so it could pass while the body faced away.
-- Blender source inspection: the soldier's faction glow and original weapon/muzzle sit at Blender +Y, which exports to Godot local -Z. The visible soldier front is Blender -Y / Godot +Z. The harvester drill is genuinely Blender +Y / Godot -Z.
-- Correct design: use a per-model forward axis (soldier +Z, harvester -Z), and place the soldier weapon/muzzle on +Z so body and rifle both face the target.
-
-## Effect-gallery generation request (2026-09-23)
-- The gallery is intentionally a collection/import page, not an AI or procedural generator.
-- Browser runtime discovery returned no available browser, so the page cannot be remotely opened in this session. The local server can still be prepared and the URL reported.
-- Generated five local preview assets from the actual barracks GLB: one contact sheet plus blueprint, night-ops, module-family, and combat-ready variants. These are procedural concept overlays, not AI-generated images.
-- The generated files are served by the gallery server under `/generated/`; `tools/*` was added to the export exclude filter so the web-gallery assets do not inflate the game PCK.
-
-## Refresh behavior finding (2026-09-23)
-- The main gallery grid intentionally renders only records in IndexedDB. Files placed under `tools/effect-gallery/generated/` are served by HTTP but are not automatically inserted into IndexedDB, so refreshing the page leaves the main grid empty unless the user imports them.
-- The updated page now has a dedicated generated-concepts section that renders server files on every refresh, independent of IndexedDB. The new import button fetches those files and stores them as normal gallery records.
-
-## Effect-gallery素材墙与垃圾桶（2026-09-24）
-- The gallery is used as a long-lived visual reference board for future generated game art, so the primary states are all images, favorites, and trash; generation itself remains outside the page.
-- A browser cannot delete an arbitrary original local file from a `File` object. New ordinary imports therefore receive a managed copy under `tools/effect-gallery/library/`; generated files retain their managed relative path.
-- The local Python service moves managed files to `tools/effect-gallery/.trash/` for removal, restores them to their original relative path, and permanently deletes them only from the explicit trash action.
-- IndexedDB schema version 2 adds a separate `trash` object store. Legacy browser-only records remain usable and are marked as browser-only when permanently cleared.
-- The page discovers available generated files through `/api/generated`, so a generated file removed from the file system disappears on refresh.
-
-## Human barracks concept-art set (2026-09-24)
-- Generated five new raster concept images with the built-in image generation tool: frontline, industrial, night operations, fortified, and mobile expeditionary barracks.
-- Saved stable project copies under tools/effect-gallery/generated/. The local gallery discovers these files through /api/generated, so they appear in the generated-concepts section after refresh.
-- The images are visual design references for future game-model discussions; they do not alter the Godot runtime or model assets.
-
-# Findings: architecture review (2026-09-24)
-
-This review is recorded as a work list. Each item includes the intended remediation or its current status so it is not treated as an unowned bug.
-
-## High priority
-
-1. `scripts/main.gd` was a large monolithic runtime owner for lifecycle, input, UI, networking, simulation stepping, audio, camera, and 3D presentation. **Fix:** extracted presentation, session stepping, command routing, networking, input, HUD, and audio behind dedicated controllers while retaining narrow compatibility wrappers. **Status:** completed for the planned runtime boundaries; wrapper cleanup remains incremental follow-up work.
-2. The project contains both dictionary-driven simulation state and legacy `scripts/entities/*` classes with unclear ownership. **Fix:** choose one authoritative domain model and remove or adapt the other after usage audit. **Status:** unfixed; audit required.
-3. Host networking sends deep-copied full snapshots at the simulation rate. **Fix:** introduce validated versioned snapshots first, then delta/relevancy/compression when entity scale requires it. **Status:** unfixed.
-4. `Simulation.apply_snapshot()` assigned remote dictionaries without schema, type, bounds, or size validation. **Fix:** added complete snapshot schema/type/bounds/size validation, strict Variant checks, deep-copy application, focused malformed-state regressions, and network disconnect/notification handling on rejection. **Status:** fixed 2026-09-25.
-5. Unit separation uses an incomplete neighbor-offset set. **Fix:** cover all adjacent spatial-hash cells and add dense-boundary regression cases. **Status:** unfixed.
-6. Test scripts are not registered as discoverable suites in the MCP test runner. **Fix:** add one documented test entry point and CI-friendly exit/result reporting. **Status:** unfixed.
-
-## Medium priority
-
-7. Simulation, pathfinding, visibility, AI, combat, and economy are coupled in one tick implementation. **Fix:** separate systems behind deterministic tick interfaces and add performance budgets. **Status:** unfixed.
-8. Core state is represented by untyped dictionaries and string keys. **Fix:** introduce typed state records/resources at subsystem boundaries. **Status:** unfixed.
-9. AI is hard-wired into `Simulation` and fixed to a narrow scenario. **Fix:** move behavior into a testable AI controller with configurable policies. **Status:** unfixed.
-10. Balance and map values are hard-coded in GDScript. **Fix:** move tunable data into validated resources/configuration. **Status:** unfixed.
-11. Blender/GLB/runtime animation contracts are implicit, so axis or node-name changes can produce a visually valid but incorrect model. **Fix:** add export metadata and automated hierarchy/orientation assertions. **Status:** partially mitigated by visual tests; pipeline remains unfixed.
-12. Documentation and some project/UI strings contain encoding corruption. **Fix:** normalize tracked text to UTF-8 and add an encoding check. **Status:** unfixed.
-13. Input, UI layout, and visual node creation remain heavily hard-coded in `main.gd`. **Fix:** input and selection now live behind `InputController`; HUD construction and refresh now live behind `HudController`, while `_create_ui_legacy()` remains only as a compatibility fallback. **Status:** mitigated; legacy fallback can be removed after downstream probes stop calling it.
-14. `godot_ai` is both an autoload/editor plugin and excluded by the export filter. **Fix:** define an explicit development-only/runtime packaging policy and verify release startup. **Status:** unfixed.
-15. Network scripts previously depended on a machine-specific Godot executable path. **Fix:** `tests/run_network_guest.ps1` already accepts a `-GodotPath` override; the final regression used the installed executable through that argument. **Status:** mitigated; default discovery remains machine-specific.
-
-## Verification baseline
-
-- Existing direct headless gameplay, presentation, and visual-model checks passed before this refactor.
-- The MCP suite discovery currently reports zero registered suites; this remains a test infrastructure limitation until item 6 is addressed.
-
-## Snapshot-boundary continuation audit (2026-09-25)
-
-- The uncommitted `scripts/simulation.gd` already contains an initial `validate_snapshot()` implementation and changes `apply_snapshot()` to return `bool`; this is the recovered unfinished refactor, not a new implementation boundary.
-- Existing gameplay coverage only round-trips a valid snapshot. There are no focused malformed/version/size/schema rejection cases yet.
-- The current RPC receive paths call `apply_snapshot()` without handling failure, so malformed authoritative state can be rejected internally without a clear connection/session response.
-- The validator currently checks top-level tables and selected entity fields. A complete audit of every runtime-read unit/building/ore/effect field is required before treating the snapshot boundary as safe.
-- Field audit gaps include required unit order/target/path plus attack, ore, cargo, cooldown, work, repath, flash, auto, and stuck state; building flash/cooldown state; effect life/owner/frame; and exact owner buffers for money/visibility/exploration.
-- The initial validator coerced values with `int(...)` before checking their type, so malformed strings could pass numeric validation; the completed validator now checks Variant types before conversion, with a focused string-owner regression.
-- The continuation completed the strict checks: required top-level keys; typed ids, enums, vectors, timers, queues, effects, money, visibility buffers; per-table count caps; and deep-copy assignment after validation.
-- Network receive paths now distinguish stale/version-mismatched world packets (ignored) from matching malformed packets (rejected, disconnected, and reported to the user).
-- Verification after the boundary fix: gameplay 64 checks / 0 failures; presentation, visual models, features, camera, action bar, and ENet regression all passed; visual performance passed on retry at 7.2757ms.
-- Fresh `build/IronFront.exe` export size is 110,233,632 bytes (embedded resources). Exported headless process exited 0; a rendered launch stayed alive for five seconds before clean termination.
+- MCP suite discovery 当前为 0，测试脚本仍通过直接 Godot 入口运行。
+- 受限环境访问 `.git/lfs/tmp` 偶发失败，包含 LFS 二进制的 diff 可能不完整。
+- 浏览器控制通道不可用时，效果图库只能做静态 HTTP/API 验证。

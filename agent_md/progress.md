@@ -1,250 +1,58 @@
-# Progress：coding style 全量整改（2026-09-19）
+# 最近进度
 
-- [x] 读取规范与全量扫描（160 个 .gd，自有 15 个，插件 145 个排除）
-- [x] 批量整改 13 个文件 + 手工重写 2 个 entity 文件
-- [x] 字符串完整性比对（发现并修复 1 处污染）
-- [x] 风格复审：15/15 零违规
-- [x] 编辑器扫描 + gameplay(47/0) + presentation(0 failures)
-- [x] 实机运行验证（SOLO 对局 + AI 行为）
-- [x] 安装导出模板并重新导出 EXE
-- [x] 记录归档：task_plan.md / findings.md / progress.md
+更新时间：2026-09-25
 
-状态：完成
+## 当前阶段
 
-# Progress：等号对齐规则（2026-09-19 追加）
+文档整理与架构路线收口。运行时控制器拆分和快照边界阶段已完成，下一阶段从 `task_plan.md` 的 P0 项开始。
 
-- [x] agent_md/AGENTS.md 新增指导：连续赋值左侧长度相近（差异约 <=9 字符）时对齐 = 号；个别特别长或导致过长的行不强制
-- [x] 全量扫描 15 个自有脚本，识别 40+ 连续赋值块
-- [x] 对齐 26 个块（main.gd 16 处、simulation.gd 6 处、game_entity.gd 1 处、tests 6 处）；差异过大的块跳过
-- [x] 验证：字符串 15/15 与 HEAD 一致；风格审计通过；gameplay 47/0、presentation 0 failures
-- [x] 重新导出 EXE（22:34:44）并启动游戏验证无错误
+## 最近完成
 
-状态：完成
+- 完成 `WorldVisualSync`、`GameSession`、`CommandBus`、`NetworkSession`、`InputController`、`HudController`、`AudioController` 的职责提取。
+- 完成快照 schema/type/bounds/size 校验，非法网络状态不会部分写入本地模拟。
+- 完成视觉模型、朝向、施工/攻击表现和 180 单位性能回归。
+- 完成本地效果图库、IndexedDB、垃圾桶和文件 API 的静态验证。
+- 建立 `agent_md/README.md` 文档目录，并清理旧计划中的过时未完成标记。
 
-# Progress：底部操作栏可点击化（2026-09-19 追加）
+## 当前验证基线
 
-## 实现
-- [x] 修复 _refresh_ui 顺序 bug：原来单位分支设置按钮后又被整体重置为"—"，选中单位永远看不到操作
-- [x] 16 个操作按钮连接 pressed 信号到 _action_clicked(index)
-- [x] 标签改为括号快捷键格式：STOP (S) / MOVE (RMB) / ATTACK (A) / GATHER (RMB)、
-      SOLDIER ($100) / HARVESTER ($200) / BARRACKS (B) / BASE ($500) / CANCEL (Refund)
-- [x] 新增待定命令模式：点 MOVE/GATHER 后左键点地图/矿脉下发指令；Esc/右键取消
-- [x] 建筑按钮：生产、建造、取消队列全部可点
-- [x] 修复按钮信号被吞 bug：每帧整体 disabled 切换会清掉 Button 按下状态，改为只重置未用槽位
-- [x] 顺手修复两处 UI 字符串乱码（鈥? → —）
+- gameplay：64 checks / 0 failures。
+- presentation、visual_models、features、camera、action_bar：通过。
+- ENet：协议不匹配、观战权限、双 guest、快照一致性、重连、主机退出：通过。
+- visual performance：独立重跑低于 8ms 阈值。
+- Windows 导出：headless 退出码 0；渲染进程存活检查通过。
 
-## 验证
-- [x] 新增 tests/action_bar.gd headless 测试：标签/启用状态/MOVE 待定流程/STOP 生效 全部通过
-- [x] gameplay 47/0、presentation 0 failures 回归通过
-- [x] 实机运行：选中士兵显示 STOP (S) / MOVE (RMB) / ATTACK (A)，截图确认
-- [x] 导出 build/IronFront.exe（22:49:03）
+## 当前未完成
 
-状态：完成
+- 统一 Simulation 与旧实体模型所有权。
+- 补齐空间分离邻居检查和密集边界回归。
+- 注册 MCP/CI 可发现测试入口。
+- 删除不再需要的 `main.gd` 兼容 wrapper。
+- 后续 typed state、tick 子系统、AI controller、配置外置、增量快照和 GLB 契约重构。
 
-# Progress：RTS 操作增强四件套（2026-09-19 追加）
+## 限制与注意事项
 
-- [x] 双击同类全屏选择（0.4s 判定 + 相机视野矩形）
-- [x] 底部生产进度条 + 队列显示（HBox 重构）
-- [x] 编队 Ctrl/Shift/数字 召回（1-9 组，死亡单位自动过滤）
-- [x] 建筑集结点：右键设置、网格吸附、新单位自动移动、选中时绘制标记
-- [x] tests/features.gd 全过 + 全套回归 + 实机验证 + EXE 导出
-- [x] 开发日志 agent_md/dev_log.md 建立
+- MCP suite discovery 仍报告 0 个 suite。
+- Git LFS 临时目录在受限环境可能拒绝访问；没有执行远程上传。
+- 浏览器控制通道不可用时，图库只执行静态 HTTP/API 检查。
 
-状态：完成
+## 下一步
 
-# Progress：Blender 3D 模型替换（2026-09-22）
-- [x] 确认现有视觉架构、模拟状态与测试耦合点
-- [x] 确认美术决策：务实写实机械风、实体+资源替换、状态动画、机械灰+阵营色、清晰战场光
-- [ ] Blender 源资产与 GLB 导出
-状态：进行中
-- [x] 生成并保存 assets/models/source/ironfront_models.blend：8 模型 / 142 对象 / 128 网格 / 11 材质
-- [x] 导出 soldier、harvester、base、barracks、refinery、bunker、ore、rock 独立 GLB
-- 遇到并解决：Blender MCP 禁止 read_factory_settings、Principled 节点本地化命名、修改器上下文、构建器参数签名混用、旧版 glTF 参数 export_colors
-状态：Blender 资产阶段完成，准备 Godot 导入
-- [x] Godot 导入 8 个 GLB；新增 EntityVisual 统一模型缩放、阵营材质、受击/施工染色、朝向与状态动画
-- [x] main.gd 替换单位/建筑/矿石/岩石视觉、建筑预览，并新增战场阳光与环境光
-- [x] 新增 tests/visual_models.gd：模型/动画/施工/生产/开火/资源迷雾/预览全通过
-- [x] 回归 visual_models / gameplay / features / camera / action_bar / presentation 全部 0 failures
-- [x] 修复并记录：重复按下在 headless 注入路径可能重启框选；_unhandled_input 同步维护按钮状态和 motion 时间戳
-状态：Godot 表现层与回归测试完成，进入实机验证
-- [x] 实机 SOLO 启动并保存 1920x1080 战场截图；像素统计确认绿色地面约 67%、机械灰约 11%、迷雾/阴影约 14%，存在蓝色阵营与黄色矿石像素
-- [x] 完整多进程网络验证通过：协议不匹配拒绝、观战权限、红方采矿/建造/生产/攻击/胜利、两轮快照一致、重开与主机退出处理
-- [x] 修复迷雾边界 bug：local_slot 无 explored 数组时岩石直接隐藏，避免空数组越界
-- [x] 修复建筑单选 bug：直接设置合法 selected_building 时自动同步 selected_buildings，生产回调不再被清理
-- [x] 修复网络测试假设：round2 动态选择红方单位并用近距目标验证重开后命令与冻结快照
-状态：实机与联机验证完成，待最终回归/导出
-- [x] 移除临时截图/重置热键；保留 build/verification/visual_models.png 作为实机证据
-- [x] 全套回归最终结果：visual_models=0、gameplay=57/0、features=0、camera=0、action_bar=0、presentation=0
-- [x] 导出 build/IronFront.exe：111,121,248 字节（PCK 内嵌）
-- [x] 导出版 headless 冒烟：退出码 0，无游戏脚本错误
-- [x] 导出版真实渲染进程运行 5 秒存活后自动关闭：alive_after_5s=true
-状态：完成
+先完成实体所有权审计，记录调用关系和迁移边界，再修改运行时代码；每个代码阶段必须补齐核心、多人和导出验证。
 
-# Progress：本地效果图收藏网页（2026-09-22）
-- [x] 确认现有网页为空、效果图位置与用户交付偏好
-状态：进行中
-- [x] 遇到 Windows CreateProcess 206 命令长度限制；改为分块写入静态页面
-- [x] 新增 tools/effect-gallery/index.html：两个标签、上传/拖拽/文件夹导入、IndexedDB、搜索排序、卡片、预览、下载、删除、清空
-- [x] 新增 tools/effect-gallery/start.ps1 与 README.md；启动脚本支持 python/py、自动空闲端口、静态服务和打开浏览器
-- [x] 修复一次 PowerShell 写入导致的 start.ps1/README 中文编码损坏；start.ps1 改为 ASCII，README 用 UTF-8 重写
-- [x] 修复 py launcher 参数顺序问题：-3 必须位于 -m http.server 之前
-- [x] 静态验证：HTML 标签/doctype/重复 ID 检查通过；2 个 script 块 node --check 通过；start.ps1 Parser 通过；HTTP 200
-状态：页面实现完成；浏览器控制通道不可用，待项目回归与导出
-- [x] HTTP 验证：本地静态服务返回 200，页面 23,420 bytes
-- [x] HTML Parser：doctype、标签闭合、重复 ID 检查通过
-- [x] Node --check：2 个脚本块语法通过
-- [x] PowerShell Parser：start.ps1 语法通过，python/py 参数顺序正确
-- [x] Godot 回归：visual_models/gameplay/features/camera/action_bar/presentation 全部退出码 0
-- [x] 导出 build/IronFront.exe：111,121,248 bytes，时间 2026-09-22 12:32:16
-- [x] 导出版 headless 冒烟退出码 0；真实渲染进程 5 秒存活后关闭
-- [!] 真实浏览器 UI 测试限制：Browser runtime 可初始化但浏览器列表为空
-状态：实现完成，待提交
-- [x] 本地提交完成：70708b2 Add local effect image gallery
-状态：完成
+## 2026-09-25：Markdown 文档整理
 
-# Progress：3D 分支审查修正（2026-09-23）
-- [x] 完成当前分支静态审查、六套核心回归、完整 ENet 回归和 180 单位压力探针
-- [x] 清理审查测试触碰的 import/log 状态与临时性能探针
-状态：进行中
-- [x] 修复空 cargo 背景条、追击/开火动画状态、guest 渲染速度回退和岩石确定性
-- [x] EntityVisual 增加状态早退、共享动画库、LOD/阴影策略；隐藏实体暂停 AnimationPlayer
-- [x] 合并 Blender 静态网格并重导 8 个 GLB；删除 8 张重复抽取贴图
-- [x] simulation 单位分离改为空间哈希；寻路重算间隔按目标哈希错峰
-- [x] 核心七套测试全部通过；完整多进程 ENet 回归两轮全部 PASS
-- [x] 180 单位真实渲染：约 98 FPS、1106 draw calls、0.0254s/process
-- [x] 导出临时 build/IronFront3D-review.exe：109719480 bytes；headless 0，真实渲染 5 秒存活
-状态：最终记录中
-- [x] 最终复跑：核心七套退出码 0；完整 ENet 回归两轮快照一致全部 PASS
-状态：完成
+- [x] 新增 `agent_md/README.md`，明确文档职责和推荐阅读顺序。
+- [x] 重写 `task_plan.md` 为当前路线图，清除历史计划中的过时未完成项。
+- [x] 精简 `findings.md`、`progress.md`、`VERIFICATION.md`、`dev_log.md`、`authorization_log.md`、规则文档和工具 README。
+- [x] 更新根 `README.md`，加入文档入口和当前项目边界。
+- [x] Markdown 链接检查、`git diff --check`、Godot 核心回归、ENet 回归、Windows 导出和导出进程检查通过。
+- [!] 渲染导出进程存活 5 秒后由验证脚本主动停止，退出码 `-1` 属于预期清理结果；headless 退出码为 0。
 
+状态：完成；MCP suite discovery 仍为 0，属于既有测试基础设施限制。
 
-# Progress：施工动画与单位朝向修正（2026-09-23）
-- [x] construction 动画改为一次性播放，速度匹配 4/5/6/7 秒真实建造时间
-- [x] 基地新增施工动画；guest 中途加入按 remaining 进度 seek
-- [x] 士兵与采集车正面 -Z 朝向运动/目标方向
-- [x] visual_models 覆盖东南西北和四种建筑时长/50% 进度
-- [x] 核心七套测试全部退出码 0；完整 ENet 回归全部 PASS
-- [x] 临时 EXE：109720184 bytes，SHA256 AA0E0C873C84A22FCBC1EB0C29F290D38C46DC89AF9E165C9ADBAF9F43AEE316；headless 0，真实渲染 5 秒存活
-状态：完成
+## 2026-09-25：Esc 菜单修复
 
-# Progress: soldier visible facing correction (2026-09-23)
-
-- [x] Confirmed prior verification was insufficient: it tested an assumed -Z front rather than the visible body face.
-- [x] Inspected Blender source transforms and identified soldier front as +Z while harvester remains -Z.
-- Status: implementing the correction.
-- [x] 修正 soldier 源模型/GLB 的 Weapon/Muzzle 方向，EntityVisual 按 kind 使用 +Z/-Z 正面轴。
-- [x] 强化 visual_models：东南西北身体与枪口、真实建筑攻击方向全部通过。
-- [x] 完整 Godot 回归、ENet 两轮回归、实机 MCP 攻击探针与截图验证完成。
-- [x] 导出并运行新 build/IronFront.exe：109,693,864 bytes，SHA256 A6C302D03A0BEF09EBB9C54A1208DFEA7F20B0DA595EA9A58B349FCC0A0B369D；headless/真实渲染退出码 0。
-- 状态：完成
-
-# Progress: tech-faction barracks effect concepts (2026-09-23)
-- [x] Started local gallery server on port 8765.
-- [x] Browser runtime reported no available browser, so in-app/remote page control is unavailable in this session.
-- Status: generating local preview assets.
-- [x] Rendered the actual barracks GLB with Blender and generated four 1600x1000 procedural high-tech variants plus a contact sheet.
-- [x] Published generated files under `tools/effect-gallery/generated/` and verified all five HTTP responses are 200.
-- [x] Opened the local gallery page with the system default browser after in-app browser discovery reported no browser.
-- [x] Added `tools/*` to the Windows export exclude filter, rebuilt IronFront.exe, and ran headless/real-render smoke checks with exit code 0.
-- [x] Post-change regressions: visual_models failures=[]; gameplay 57 checks / 0 failures.
-- 状态：完成；效果图是程序化概念图，不是 AI 生成图。
-- [!] Final exported render smoke had one intermittent Windows access-violation exit (`0xC0000005`) before shutdown; an immediate identical retry exited 0. Headless exit remained 0. This is recorded as a shutdown-only instability, not a reproducible startup/render failure.
-- [x] Reproducibility scripts now derive project/output paths correctly and regenerate the four variants directly into `tools/effect-gallery/generated`; final re-export passed headless 180 frames and real render 300 frames, both exit code 0.
-- [x] Explained and fixed refresh behavior: generated files now appear in a dedicated section immediately; the main IndexedDB grid remains empty until import.
-- [x] Added `import-generated` button, responsive preview grid, and stable server-file import logic.
-- [x] HTML validation: doctype/one generated section/import button/no unclosed tags; two inline scripts pass node --check; page HTTP 200.
-- [x] Final export smoke: headless exit 0; real render had one intermittent shutdown access violation and passed identical retry with exit 0.
-
-# Progress：效果图素材墙与垃圾桶（2026-09-24）
-- [x] 将图库交互扩展为全部效果图 / 中意收藏 / 垃圾桶三种状态。
-- [x] 新导入图片保存服务端副本；生成目录图片支持直接导入或移入垃圾桶。
-- [x] IndexedDB 升级到版本 2，增加垃圾桶记录、恢复和永久清除。
-- [x] 新增本地 `server.py` 文件 API，并修复 `start.ps1` 在 `python` 路径下的数组参数拼接问题。
-- [x] API 生命周期验证通过：导入、移入 `.trash`、恢复、再次移入、永久删除、路径穿越拦截。
-- [x] HTMLParser、两个 inline script、PowerShell parser、Python 编译检查通过；页面与 `/api/health`、`/api/generated` 返回 HTTP 200。
-- [x] Windows EXE 重新导出完成（2026-09-24 00:06），导出的 EXE 实机进程存活 5 秒检查通过。
-- [x] Godot `presentation` 0 failures、`gameplay` 57 checks / 0 failures。
-- [x] 默认端口 8765 的图库页面、健康接口、生成图列表接口和当前服务端文件生命周期再次验证通过。
-- [!] Git LFS 在读取/比较 `build/IronFront.exe` 时报告 `.git/lfs/tmp` access denied；本次网页源码与文档变更的 `git diff --check` 通过，未执行远程操作。
-
-# Progress: human barracks concept-art set (2026-09-24)
-- [x] Generated five AI raster concepts with the built-in imagegen skill.
-- [x] Saved all five PNGs to tools/effect-gallery/generated/.
-- [x] Verified each PNG is present and the local API returns all five generated paths.
-- [x] Verified the gallery page response contains the generated-concept preview section.
-- [x] Re-exported the Windows EXE and ran presentation, gameplay, and exported-process smoke checks.
-Status: complete. Asset generation, gallery verification, and required build checks passed.
-
-# Progress: remove generated-concepts preview section (2026-09-24)
-- [x] Removed the generated-concepts markup, styles, import button, and dedicated JavaScript discovery/rendering code from tools/effect-gallery/index.html.
-- [x] Preserved IndexedDB gallery import, favorites, trash, restore, and permanent-delete flows.
-- [x] Served page no longer contains the removed heading/button; two inline scripts pass node --check.
-- [x] Fresh build/IronFront.exe export completed; presentation and gameplay tests exited 0; exported EXE live check passed.
-Status: complete.
-
-# Progress: bunker model and runtime animation pass (2026-09-24)
-- [x] Rebuilt the bunker hierarchy in `assets/models/source/ironfront_models.blend` from the mobile-defense bunker reference, including armored shutters, stabilizers, twin barrels, muzzle flash, turret, sensor mast, and faction beacon.
-- [x] Exported the updated runtime asset to `assets/models/bunker.glb` and generated `build/verification/bunker_model_preview.png` for visual review.
-- [x] Added runtime `construction`, `idle`, and `fire` animation tracks in `assets/art/entity_visual.gd`; verified imported node paths and track counts through the live Godot game helper.
-- [x] Added bunker-specific hierarchy and animation assertions to `tests/visual_models.gd`.
-- [x] Corrected the fire recoil keyframes after checking the imported barrel coordinates (+Z); live evaluation now shows both barrels retracting from 0.60 to 0.48 and the muzzle flash scaling up.
-- [x] Live project smoke check completed with the game helper ready and no project errors; direct headless runs passed `visual_models` (`failures=[]`), `gameplay` (57 checks / 0 failures), and `presentation` (`failures=[]`). The editor MCP test discovery still reports 0 registered suites in this session.
-- [x] Follow-up orientation fix: the model was loading but its front-facing features were authored toward the rear of the gameplay camera, making the replacement look like the old low-profile bunker. Front plates/shutters now use Godot -Z and the turret/animation tracks use a π base rotation; runtime evaluation confirms the corrected orientation.
-
-# Progress: simplify gallery import copy (2026-09-24)
-- [x] Removed the IndexedDB persistence note from the uploader panel.
-- [x] Renamed the folder chooser to “选择图片文件夹” without changing its batch-import behavior.
-- [x] Updated README import instructions to describe supported image formats.
-- [x] Per user instruction, skipped Windows EXE export and game verification for this copy-only gallery text change.
-Status: complete.
-
-# Progress: architecture review and main runtime extraction (2026-09-24)
-
-- Recorded the review findings and remediation ownership in `agent_md/findings.md`.
-- Added a task plan for the first refactor: extract world presentation synchronization while preserving existing test-facing wrappers.
-- Added `scripts/world_visual_sync.gd` for entity, effect, selection, build-preview, and fog synchronization.
-- Reduced `scripts/main.gd` by 409 lines; kept compatibility properties and `_sync_*` wrappers used by existing tests.
-- `--check-only` passed after fixing the extracted helper's type/declaration errors.
-- `visual_models`, `gameplay` (57 checks), `presentation`, `features`, and `visual_performance` all passed; the 180-unit probe reported 0.67 ms unit sync and 7.19 ms full visual sync.
-- Full ENet regression passed with protocol mismatch, spectator permissions, both guest rounds, snapshot equality, reconnect, and host disconnect checks.
-- The network runner's default executable path was unavailable, so it was invoked with the installed Godot path override.
-- Fresh `build/IronFront.exe` export completed (110,191,584 bytes); exported headless process exited 0 after the smoke run.
-- The same exported EXE remained alive for five seconds in a non-headless render launch and was then stopped cleanly.
-
-Status: first refactor complete; the remaining architecture items stay recorded as unfixed follow-up work.
-
-# Progress: session/network/input/HUD refactor continuation (2026-09-24)
-
-- Added `scripts/runtime/game_session.gd` and routed fixed-step simulation ownership through it while preserving the 20 Hz tick and snapshot dictionaries.
-- Added `scripts/runtime/command_bus.gd`; `issue()` now remains a compatibility entry point while validated orders pass through the command boundary.
-- Added `scripts/audio/audio_controller.gd`; generated tones and simulation effects are now owned by a child controller with main-node wrappers retained.
-- Added `scripts/controllers/input_controller.gd`; keyboard, mouse, drag selection, attack mode, control groups, and camera-wheel handling are delegated from compatibility wrappers.
-- Added `scripts/runtime/network_session.gd`; ENet lifecycle, RPC handlers, order rate limiting, snapshot broadcast, reconnect promotion, and version handshake are owned by a child node. Main RPC wrappers remain for existing probes.
-- Added `scripts/ui/hud_controller.gd`; HUD refresh now runs through the controller while the existing creation routine remains behind the compatibility boundary for the next cleanup pass.
-- Regression results after these changes: `gameplay` 57/0, `presentation` 0, `visual_models` 0, `features` 0, `camera` 0, `action_bar` 0, and `visual_performance` 180 units with failures=[].
-- Full ENet regression passed protocol mismatch, spectator permissions, both guest rounds, snapshot equality, reconnect, and host-disconnect handling using the installed Godot executable override.
-- Completed `HudController.build()` migration; `main.gd` now calls the controller for HUD construction and keeps `_create_ui_legacy()` only as a compatibility fallback.
-- Final verification: the serial gameplay/visual/features/camera/action-bar/presentation suites passed; the visual-performance probe passed on a dedicated run (`sync_visuals_ms=7.72`, 180 units). Full ENet regression passed again after HUD construction migration.
-- Fresh final export completed as `build/IronFront.exe` (110,225,344 bytes, 2026-09-24 23:57). The exported executable passed headless startup and remained alive for a five-second rendered smoke run before clean shutdown.
-
-Status: complete for the planned session/network/input/HUD/audio boundary extraction; typed simulation state and other review items remain separate follow-up work.
-
-# Progress: refactor continuation (2026-09-25)
-
-- Resumed from the completed session/network/input/HUD/audio extraction phase.
-- The working tree still contains the uncommitted controller/runtime split plus its verification logs and exported build.
-- The next refactor scope will be selected from the recorded unresolved architecture findings after reviewing the source-only diff; tracked large binaries are excluded from that review because the Git LFS clean filter cannot access `.git/lfs/tmp` in the restricted shell.
-
-Status: in progress.
-
-# Progress: validated simulation snapshot boundary (2026-09-25)
-
-- Audited the recovered partial validator in `scripts/simulation.gd` and the four network receive paths.
-- Completed strict snapshot validation for required top-level keys, version/frame/winner, typed entity ids, units, buildings, production queues, ores, money, effects, visibility/exploration buffers, bounds, timers, and table sizes.
-- Changed `apply_snapshot()` to deep-copy validated state before replacing local simulation state, so rejected or later-mutated RPC dictionaries cannot partially mutate the simulation.
-- Added focused gameplay checks for valid schema acceptance, missing tables, type coercion, out-of-bounds positions, incomplete effects, incomplete visibility, and oversized unit tables; gameplay now reports 64 checks / 0 failures.
-- Routed `NetworkSession` and main compatibility RPC wrappers through checked application. Matching malformed world/final/new-match/accepted state disconnects and reports the validation error; stale or mismatched world packets remain ignored.
-- Regression baseline after the final code change: gameplay 64/0, presentation 0, visual models 0, features 0, camera 0, action bar 0, ENet protocol/spectator/two guest rounds/snapshot equality/reconnect/host disconnect all PASS. Visual-performance first runs crossed the 8ms threshold at 8.08645ms and 8.1944ms, while independent retries passed at 7.57705ms and 7.2757ms.
-- Fresh embedded-resource export completed: `build/IronFront.exe` is 110,233,632 bytes. Exported headless process exited 0; rendered export stayed alive for five seconds and was then stopped cleanly.
-
-Status: complete for the validated snapshot-boundary phase; typed domain records, delta snapshots, spatial-separation completeness, MCP suite registration, and legacy entity ownership remain separate follow-up findings.
+- [x] 将 Escape 处理前移到 `InputController._input()`，避免 HUD 控件吞掉快捷键。
+- [x] 修复攻击键重绑状态按 Escape 后未清除的问题，并兼容 physical keycode。
+- [x] 增加 presentation 菜单开关和重绑取消回归；测试退出码 0。

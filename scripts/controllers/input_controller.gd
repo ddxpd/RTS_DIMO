@@ -6,27 +6,42 @@ var host
 func configure(owner) -> void:
     host = owner
 
+
+func _is_escape(event: InputEventKey) -> bool:
+    return event.keycode == KEY_ESCAPE or event.physical_keycode == KEY_ESCAPE
+
+
+func _handle_escape(event: InputEventKey) -> bool:
+    if not _is_escape(event):
+        return false
+    if host.rebinding_attack:
+        host.rebinding_attack = false
+        host._notify("Attack key rebind canceled.")
+    elif not host.build_mode.is_empty() or not host.pending_command.is_empty():
+        host.build_mode = ""
+        host.pending_command = ""
+    else:
+        host._toggle_menu()
+    return true
+
+
 func _unhandled_input(event: InputEvent) -> void:
     # _input and _unhandled_input can receive different subsets of injected or
     # platform events, so keep the anti-duplicate timestamp accurate in both.
     if event is InputEventMouseMotion:
         host.last_mouse_event_msec = Time.get_ticks_msec()
     if event is InputEventKey and event.pressed and not event.echo:
-        if host.rebinding_attack:
-            if event.keycode != KEY_ESCAPE:
-                host.attack_keycode = event.keycode
-                host.rebinding_attack = false
-                host.attack_rebind_button.text = "Rebind attack key (current: %s)" % OS.get_keycode_string(host.attack_keycode)
-                host._notify("Attack key set to %s." % OS.get_keycode_string(host.attack_keycode))
+        if _handle_escape(event):
             get_viewport().set_input_as_handled()
             return
-        if event.keycode == KEY_ESCAPE:
-            if not host.build_mode.is_empty() or not host.pending_command.is_empty():
-                host.build_mode = ""
-                host.pending_command = ""
-            else:
-                host._toggle_menu()
-        elif host.active and not host.menu_visible and event.keycode == host.attack_keycode:
+        if host.rebinding_attack:
+            host.attack_keycode = event.keycode
+            host.rebinding_attack = false
+            host.attack_rebind_button.text = "Rebind attack key (current: %s)" % OS.get_keycode_string(host.attack_keycode)
+            host._notify("Attack key set to %s." % OS.get_keycode_string(host.attack_keycode))
+            get_viewport().set_input_as_handled()
+            return
+        if host.active and not host.menu_visible and event.keycode == host.attack_keycode:
             host.attack_mode = not host.attack_mode
             host._notify("Attack mode %s. Left-click a target or ground." % ("ON" if host.attack_mode else "OFF"))
         elif host.active and not host.menu_visible and event.keycode == KEY_B:
@@ -94,6 +109,10 @@ func _unhandled_input(event: InputEvent) -> void:
 func _input(event: InputEvent) -> void:
     # _input runs before the HUD consumes events, so an host.active drag keeps
     # tracking (and can complete) even while the cursor is over HUD panels.
+    if event is InputEventKey and event.pressed and not event.echo:
+        if _handle_escape(event):
+            get_viewport().set_input_as_handled()
+            return
     if event is InputEventMouseMotion:
         host.last_mouse_event_msec = Time.get_ticks_msec()
         if host.selection_dragging:

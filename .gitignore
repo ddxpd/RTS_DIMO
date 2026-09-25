@@ -9,3 +9,6 @@ build/IronFront3D-review.exe
 tools/effect-gallery/library/
 tools/effect-gallery/.trash/
 tools/effect-gallery/__pycache__/
+
+# Project-local Codex process ledger
+.codex/runtime/

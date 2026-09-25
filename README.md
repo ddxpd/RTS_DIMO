@@ -1,57 +1,34 @@
-# Iron Front — RTS 可玩原型
+# Iron Front
 
-新版为 **build/IronFront.exe**，资源嵌入 EXE，可单独复制运行。旧的 RTS_Host_P2P_Prototype.exe / .pck 是此前版本，不要用它们测试本次功能。
+Iron Front 是一个 Godot 4 RTS 主机对等联机原型，当前分支包含 3D 实体表现、基础 AI、LAN 联机、资源采集、建造、生产、战斗、迷雾和快照同步。
 
-## 开始游戏
+## 运行
 
-- New solo match (vs AI)：单机对抗基础 AI。AI 会采矿、建兵营、训练士兵，约一分钟后进攻。
-- Create LAN Host：创建双人局域网对战；另一台电脑填写主机 IP 后选择 Join Host。
-- 第一位加入者控制红方，其余为观战者。双方必须运行相同版本；使用 UDP 24560。
-- 红方断线时保留其军队，重连可以接管；主机退出则比赛停止。菜单不暂停进行中的比赛。
-- 摧毁敌方全部基地获胜。结束后通过 Esc 菜单重新开始或返回标题。
+- Windows 构建：`build/IronFront.exe`（当前导出使用嵌入资源）。
+- 源码验证：使用 `tools/codex/run-godot.ps1` 和 `tools/codex/run-network.ps1`，不要直接调用未固定路径的 Godot/Python。
+- 局域网：主机使用 `Create LAN Host`，客户端输入主机 IP 后选择 `Join Host`；默认 UDP 端口为 `24560`。
+- 效果图库：在项目根目录运行 `tools/effect-gallery/start.ps1`。
 
-## 第一局怎么操作
+## 基本操作
 
-1. 左键选中带黄色货厢的矿车，右键附近的黄色矿石。采满 60 矿后会自动回基地交款并继续采集。
-2. 按 B 或点击 Build Barracks $250，在基地附近的绿色预览位置左键放下兵营，等待 4 秒施工。
-3. 左键选中完成的兵营，点击 Train Soldier $100。每个士兵生产需 2.5 秒，队列最多 5 个。
-4. 框选士兵，右键地面移动，右键可见敌人/建筑攻击。士兵会追击目标，空闲时自动攻击附近敌人。
-5. 摧毁对方全部基地获胜。可以建额外基地，选中基地后可生产矿车。
+- 左键选择、拖框选择、选择己方建筑；右键移动、采集或攻击可见敌人。
+- `A` 进入攻击模式，`S` 停止，`R` 设置集结点，鼠标滚轮缩放，中键/方向键移动镜头。
+- `B` 建造兵营；选中建筑后使用生产按钮；`Esc` 取消当前模式或返回菜单。
+- 胜利条件是摧毁敌方全部基地；主机退出会结束对局，红方客户端断线可重连。
 
-## 操作
+## 文档
 
-- 左键：单选己方单位 / 拖拽框选 / 空白处取消全部选择 / 选择己方建筑。
-- 右键：地面移动 / 攻击可见敌人 / 矿车采集。移动目标带扩散环反馈。
-- A（默认）：进入攻击模式；再左键单位/建筑会强制攻击目标（包括己方，允许误伤），左键地面会执行攻击移动，路上遇到敌方单位会停下攻击。A 再按一次退出模式。
-- 菜单中的 Rebind attack key 可以改为其他键；Esc 会取消正在等待的改键。
-- 建造模式：左键确认，右键或 Esc 取消。
-- S 停止选中单位；B 放置兵营；中键拖动或方向键平移镜头；滚轮缩放。
-- Cancel last job / refund：取消选中建筑最后一个生产任务并全额退款。
-- Restart match：仅单机玩家或主机可重开；Return to title / disconnect：退出对局。
+项目文档入口是 [agent_md/README.md](agent_md/README.md)。推荐先看：
 
-## 实现与边界
+1. [当前任务计划](agent_md/task_plan.md)
+2. [架构发现](agent_md/findings.md)
+3. [验证索引](agent_md/VERIFICATION.md)
+4. [游戏规则](agent_md/game_rules_zh.md)
 
-- TileMapLayer 地图、程序生成的原创像素图形、地形障碍、镜头边界及缩放。
-- 单位圆形碰撞范围、建筑矩形占地、A* 绕障碍和单位分离，由统一模拟计算，不使用动态刚体推挤。
-- 有限矿藏、采集运输、资源扣费、建筑预览施工、生产队列和退款。出口堵塞时等待。
-- 生命值、自动索敌、追击、射程、冷却、伤害、死亡清理、弹道/受击/爆炸反馈。
-- 基础迷雾：己方视野、已探索地形记忆、隐藏视野外敌人。当前发送完整状态，迷雾为玩法显示层，不提供竞技级信息隔离。
-- 基础 AI、胜负、重开、断线提示、观战、协议版本检查、指令所有权校验。
-- 主机以 20 Hz 独占资源/伤害/移动模拟；客户端以 10 Hz 接收可靠状态快照。客户端不独立计算伤害，不使用跨机器确定性锁步。
-- 本版是一张地图、单套兵种配置的双阵营原型。不包含战役、科技树、坦克、完整音乐系统、地图编辑器、公网中继、NAT 穿透或主机迁移。战斗和指令音效由程序实时生成，士兵回答以文字气泡和短提示音呈现。
+第三方插件说明位于 `addons/godot_ai/README.md`，不属于项目文档维护范围。
 
-## 验证
+## 项目边界
 
-- tests/gameplay.gd：经济、建造、生产、导航、碰撞、战斗、胜负、AI 和迷雾断言。
-- tests/presentation.gd：视口鼠标事件验证，附 --screenshot 参数可生成真实画面截图。
-- tests/run_network_guest.ps1：启动真实主机/客户端进程，验证协议拒绝、观战权限、红方采矿/建造/生产/攻击/胜利、完整状态一致、重新接管、重开及主机退出。
-- 测试专用 NetworkProbe 仅由测试场景加载，发行版排除 tests 目录。
-- 默认 Godot 路径为 D:/application/Godot_v4.7.2/Godot_v4.7.2-stable_win64_console.exe。
-
-项目内常规查看、修改、脚本运行及导出无需重复确认的用户偏好记录于 [agent_md/AGENTS.md](agent_md/AGENTS.md)；平台强制审批依然适用。
-
-## Current prototype branch
-
-Active development is tracked on `feature/3d-models`.
-
-The Git-tracked `build/IronFront.exe` on this branch is still the old 2D-v0.1 LFS object. It is intentionally not updated with every source commit; large binaries should be distributed through GitHub Releases. For source validation, run the test suites below. A temporary current-branch executable may be generated as `build/IronFront3D-review.exe`, but it is not committed.
+- 主机以 20 Hz 运行权威模拟；客户端接收快照并负责表现同步。
+- 当前原型不包含战役、科技树、坦克、完整音乐系统、地图编辑器、NAT 穿透或主机迁移。
+- 修改代码后必须按 `agent_md/AGENTS.md` 完成回归、导出和进程清理；不要执行未明确授权的远程 push。

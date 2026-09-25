@@ -1,243 +1,64 @@
-# 任务计划：全项目 Coding Style 整改
+# 当前任务计划
 
-## 范围
-- 自有代码：scripts/（含 entities）、tests/、assets/art/ 共 15 个 .gd 文件
-- 排除：addons/godot_ai/（第三方插件，不改动）
+更新时间：2026-09-25
 
-## 步骤
-1. [x] 读取 agent_md/AGENTS.md 的 coding style 规范
-2. [x] 全量扫描自有脚本，输出违规清单
-3. [x] 修复：tab→4空格、运算符/逗号空格、单行函数拆分、函数间空行、文件尾空行、CRLF→LF
-4. [x] 复审：重跑审计脚本直到 0 违规
-5. [x] 验证：Godot 编辑器扫描 + 测试套件 + 游戏运行验证 + Windows 导出
-6. [x] 记录结果
+## 已完成里程碑
 
-## 结果
-- 15/15 文件通过风格审计（tab、行尾空白、逗号/运算符空格、分号、函数空行）
-- 字符串字面量 15/15 与 git HEAD 完全一致（零内容改动）
-- gameplay 测试：47 checks / 0 failures；presentation 测试：0 failures
-- 运行时验证：SOLO 对局启动，AI 建兵营并产兵，无运行时错误
-- 导出：build/IronFront.exe 已更新（2026-09-19 22:25，PCK 内嵌，单文件分发）
+- [x] 全项目自有 GDScript coding style 整改与回归。
+- [x] Blender/GLB 实体视觉替换、动画、朝向、光照和性能优化。
+- [x] 本地图像收藏页、IndexedDB、垃圾桶和本地文件 API。
+- [x] 从 `main.gd` 提取 `WorldVisualSync`、`GameSession`、`CommandBus`、`NetworkSession`、`InputController`、`HudController` 和 `AudioController`。
+- [x] 快照版本、类型、边界、数量校验，深拷贝应用，以及异常网络快照处理。
+- [x] 现有 gameplay、presentation、visual、features、camera、action-bar、性能和 ENet 回归；Windows 导出与运行检查。
 
-# 任务计划：Blender 3D 实体模型替换像素贴图（2026-09-22）
+## 当前重构路线
 
-## 目标
-- 使用 Blender 制作务实写实机械风 3D 模型，替换士兵、采集车、4 种建筑、矿石与岩石的 Sprite3D 像素表现。
-- 接入状态动画、蓝/红阵营标识、清晰战场光照，并保留现有玩法、迷雾、HUD 与网络同步。
+### P0：收口现有边界
 
-## 阶段
-1. [in_progress] 建立 Blender 源文件与 8 个可导出 GLB 资产
-2. [ ] 重构 Godot 实体视觉层、状态动画与光照
-3. [ ] 新增视觉回归测试并运行全套既有测试
-4. [ ] 实机 SOLO/联机验证与截图检查
-5. [ ] 导出并运行 Windows EXE，更新 agent_md 记录
+- [ ] **统一实体所有权**：审计 `Simulation` 字典状态与 `scripts/entities/*` 的实际调用，选择一个权威模型，迁移或删除另一套。
+  - 验收：运行时只有一个权威实体状态源；旧类有明确保留理由或被移除；核心回归不变。
+- [ ] **补齐空间分离**：覆盖空间哈希的全部相邻单元，并增加密集边界回归。
+  - 验收：边界、角落和高密度单位场景均不穿模、不死锁，性能预算不退化。
+- [ ] **注册统一测试入口**：让 MCP/CI 能发现并执行现有 Godot 测试脚本。
+  - 验收：suite discovery 不再为 0；结果有稳定的退出码和机器可读摘要。
+- [ ] **删除兼容层**：确认下游测试不再调用 `main.gd` wrapper 后，移除 `_create_ui_legacy()` 和不再需要的转发方法。
+  - 验收：`main.gd` 只保留组装和生命周期协调职责。
 
-## 约定
-- 不改模拟数值、网络协议、选择逻辑和存档格式。
-- 地面纹理第一阶段保留。
-- 原像素生成器保留为回退资源。
-## 阶段更新（2026-09-22）
-1. [x] Blender 源资产与 8 个 GLB 完成
-2. [x] Godot EntityVisual / 状态动画 / 光照 / 建筑预览完成
-3. [x] visual_models 与全部既有回归完成
-4. [x] SOLO 实机截图与完整多进程联机验证完成
-5. [in_progress] 最终回归、Windows 导出与导出版运行验证
-## 最终状态（2026-09-22）
-5. [x] 最终回归、Windows 导出与导出版运行验证完成
-状态：完成
+### P1：拆分核心模拟
 
-# 任务计划：本地效果图收藏网页（2026-09-22）
+- [ ] **拆分 deterministic tick**：将路径、可见性、AI、战斗、经济拆为独立系统接口，并保留固定 tick 顺序。
+- [ ] **类型化状态边界**：为单位、建筑、资源、效果、可见性和命令引入 typed records/resources，逐步替代裸 Dictionary/string key。
+- [ ] **AI controller 化**：将 AI 从 `Simulation` 移到可测试 controller，策略和节奏可配置。
+- [ ] **配置外置**：将平衡和地图参数迁移到经过校验的 Resource/config，并保留默认值兼容。
 
-## 目标
-- 新增零依赖本地静态网页，用于导入、保存、预览和管理效果图。
-- 使用浏览器 IndexedDB 持久保存图片 Blob 与收藏状态。
-- 提供“全部效果图 / 中意收藏”两个标签，并支持搜索、排序、下载和删除。
+### P2：网络与资产契约
 
-## 阶段
-1. [in_progress] 创建静态图馆页面与本地启动脚本
-2. [ ] 浏览器端实现 IndexedDB、上传、缩略图、标签、搜索和排序
-3. [ ] 执行真实浏览器端功能与持久化验证
-4. [ ] 记录验证结果并提交本地 Git commit
+- [ ] **增量网络状态**：在当前已校验的完整快照之上，根据实体规模加入 delta、相关性和压缩策略；保持 RPC 和版本兼容。
+- [ ] **GLB 导出契约**：为节点命名、朝向、动画轨道和材质添加元数据及自动化层级/方向断言。
+- [ ] **发布策略明确化**：记录 `godot_ai` 的开发态/发布态边界，验证 release 不依赖编辑器插件。
+- [ ] **工具路径可移植**：为测试脚本提供统一 Godot 自动发现和显式覆盖机制，去除机器特定默认路径。
 
-## 约定
-- 不新增后端、账号或外部依赖。
-- 不修改 Godot 游戏逻辑。
-- 后续可静态部署；数据仍按浏览器源隔离。
-## 阶段更新（2026-09-22）
-1. [x] 静态图馆页面与启动脚本完成
-2. [x] IndexedDB、上传、缩略图、标签、搜索、排序、预览、下载、删除完成
-3. [x] 静态/HTTP 验证完成；真实浏览器控制通道不可用，已记录限制
-4. [in_progress] 最终记录与本地 Git 提交
-## 最终状态（2026-09-22）
-4. [x] 最终记录与本地 Git 提交完成
-状态：完成
+### P3：文档质量
 
-# 任务计划：3D 分支审查修正与性能优化（2026-09-23）
+- [x] 统一项目自有 Markdown 为 UTF-8，并完成链接/空白/NUL 基础检查。
+- [ ] 统一运行时 UI 文本为 UTF-8，并加入持续编码检查。
+- [x] 建立本目录索引，明确计划、发现、进度、验证和历史文档的职责边界。
 
-## 目标
-- 修复 cargo 空条、追击动画、岩石多人一致性问题。
-- 消除每帧重复材质刷新、缓存动画库、关闭装饰阴影。
-- 优化 Blender 模型静态网格与材质实例，降低高单位数 draw calls。
-- 删除未使用重复贴图，扩展视觉/性能测试，导出临时 3D EXE 验证。
+## 约束与不变项
 
-## 阶段
-1. [in_progress] 清理审查副作用并修复运行时行为/性能问题
-2. [ ] 优化 Blender 模型、重导 GLB、清理重复资产
-3. [ ] 扩展视觉与性能测试，运行核心和多人回归
-4. [ ] 导出 build/IronFront3D-review.exe 并运行验证
-5. [ ] 更新文档与 agent_md，本地提交；不推送
+- 不改变现有 `Simulation.VERSION`、RPC 名称、快照字段形状和确定性 tick 行为，除非单独建立兼容迁移方案。
+- 不修改第三方 `addons/godot_ai` 源码。
+- 每个代码阶段必须运行核心回归、多人回归和导出运行检查；文档阶段至少运行 Markdown/编码/链接检查。
+- 不主动推送远程仓库；大二进制继续按项目发布规则处理。
 
-## 约定
-- 不修改跟踪的 build/IronFront.exe。
-- 不提交新的 111MB LFS EXE。
-- 不合并 main，未收到明确请求不推送。
-## 阶段更新（2026-09-23）
-1. [x] 运行时行为/性能修复完成
-2. [x] Blender 静态网格合并、GLB 重导与重复贴图清理完成
-3. [x] 视觉/性能/核心/多人回归完成
-4. [x] build/IronFront3D-review.exe 导出与运行验证完成
-5. [in_progress] 最终记录与本地提交
-## 最终状态（2026-09-23）
-5. [x] 最终记录与本地提交完成
-状态：完成
+## 当前阻塞与限制
 
+- MCP suite discovery 当前报告 0 个 suite，需要先完成统一入口注册。
+- Git LFS 在受限环境读取 `.git/lfs/tmp` 偶发 `Access is denied`；不影响源文件文档整理，但会限制包含 LFS 二进制的完整 diff。
+- 浏览器控制通道不可用时，只能执行图库的静态 HTTP/API 验证。
 
-# 任务计划：施工动画与单位朝向修正（2026-09-23）
+## 本阶段验收
 
-## 目标
-- 建筑施工动画一次播放，并精确匹配每种建筑的真实建造时长。
-- 士兵和采集车模型正面朝向运动/目标方向。
-
-## 阶段
-1. [x] 修正 EntityVisual 施工动画、进度映射和 -Z 朝向
-2. [x] main.gd 传入模拟施工比例与真实建造时长
-3. [x] 扩展 visual_models 覆盖四个朝向和四种建筑时长
-4. [x] 核心、联网、实机与导出验证完成
-状态：完成
-
-# Task plan: fix visible soldier attack facing (2026-09-23)
-
-- [x] Reproduce the visible body-facing failure and identify the authoritative model front axis.
-- [x] Correct the soldier source model/weapon direction and runtime per-model heading logic.
-- [x] Strengthen tests to validate the visible soldier front and muzzle against all target directions and a real attack order.
-- [x] Run Godot regressions, real rendered gameplay validation, and export a fresh Windows EXE.
-- [x] Record bug/root cause/fix/verification together in the development log.
-
-# Task plan: tech-faction barracks effect concepts (2026-09-23)
-- [x] Start the effect-gallery local page and inspect its import behavior.
-- [x] Generate several deterministic high-tech human-faction barracks concept/effect images.
-- [x] Make the generated images easy to preview or import from the gallery page.
-- [x] Verify image files and record results/limitations.
-
-# Task plan: make generated barracks concepts visible on refresh (2026-09-23)
-- [ ] Add a persistent server-file preview section to the effect-gallery page.
-- [ ] Add one-click import of those generated files into IndexedDB.
-- [ ] Validate HTML/script syntax and image URLs.
-- [ ] Rebuild and smoke-test the game export, then record the result.
-- [x] Added persistent generated-concept previews directly to the page.
-- [x] Added one-click import from server files into IndexedDB.
-- [x] HTMLParser and both inline scripts passed syntax checks; page and generated image URLs return HTTP 200.
-- [x] Rebuilt IronFront.exe; headless 180-frame smoke passed. Real-render 300-frame run hit the known intermittent shutdown access violation once, then an identical retry exited 0.
-
-# Task plan: effect-gallery recycle bin and filesystem deletion (2026-09-23)
-- [x] Add persistent trash-bin state and trash/restore/permanent-delete controls.
-- [x] Add a local gallery API that moves managed files to `.trash` and permanently deletes them.
-- [x] Connect imported/generated gallery records to managed filesystem paths where possible.
-- [x] Validate HTML/JavaScript/Python syntax, API behavior, and page HTTP responses.
-- [x] Record limitations for legacy IndexedDB-only records and finish game/export verification.
-Status: complete. The gallery server/API and page are implemented; web lifecycle checks, Windows export, exported EXE live check, and gameplay/presentation regressions passed.
-
-## Errors encountered
-- Initial export attempt could not access Godot's user export-template cache under AppData in the restricted shell. Re-ran with the required external filesystem permission; export completed and the EXE live check passed.
-
-# Task plan: human barracks concept-art set (2026-09-24)
-- [x] Generate five distinct human-faction barracks concepts for the gallery.
-- [x] Copy the generated PNGs into tools/effect-gallery/generated/ using stable filenames.
-- [x] Verify the gallery API exposes all five files and the page contains the generated-concept section.
-- [x] Re-export the Windows build and run the required game smoke checks after the asset update.
-
-Status: complete. The gallery now contains frontline, industrial, night-operations, fortified, and mobile human barracks concepts.
-
-# Task plan: remove generated-concepts preview section (2026-09-24)
-- [x] Remove the visible “high-tech human faction barracks” section and import button from the gallery page.
-- [x] Remove its client-side rendering and event-handler code while preserving the main gallery, favorites, and trash flows.
-- [x] Validate the served page and inline script syntax.
-- [x] Re-export and smoke-test the Windows build.
-
-Status: complete. The page no longer displays the generated-concepts section; generated files remain available on disk for explicit file selection if needed.
-
-# Task plan: review findings and split the main runtime (2026-09-24)
-
-## Goal
-- Record the project review findings in `agent_md/findings.md` with explicit fix status.
-- Resolve the first high-priority issue by extracting world presentation synchronization from `scripts/main.gd` into a dedicated controller without changing gameplay behavior.
-
-## Phases
-1. [x] Record review findings and define the first refactor boundary.
-2. [x] Extract 3D entity/fog/preview synchronization into `WorldVisualSync` and keep compatibility wrappers for existing tests.
-3. [x] Run script checks, gameplay/presentation/visual tests, and network regression.
-4. [x] Export a fresh Windows build, run it, and record verification.
-
-## Constraints
-- Preserve the current simulation, network protocol, input behavior, and public test helpers.
-- Do not touch third-party `addons/godot_ai` code.
-- Keep the existing `main.gd` wrapper methods/properties temporarily so tests and future incremental extraction remain compatible.
-
-## Errors encountered
-| Error | Attempt | Resolution |
-|---|---:|---|
-| `world_visual_sync.gd` initially failed to parse because the extracted body retained an internal `_dot_texture` declaration and dynamic host expressions lacked inferred types | 1 | Removed the duplicate declaration, added the missing helper, and added explicit local types; `--check-only` and all regressions then passed. |
-| `tests/run_network_guest.ps1` default Godot path was unavailable in this environment | 1 | Re-ran the same regression with the installed Godot executable passed through `-GodotPath`; all network rounds passed. |
-
-# Task plan: decouple session, network, input, UI, and audio (2026-09-24)
-
-## Goal
-- Migrate the remaining runtime responsibilities out of `scripts/main.gd` while preserving current behavior and network wire compatibility.
-
-## Phases
-1. [x] Add `GameSession`, `CommandBus`, and `AudioController` interfaces; route simulation ticks and audio effects through them.
-2. [x] Extract ENet/RPC ownership into `NetworkSession` with main-node compatibility wrappers.
-3. [x] Extract input and selection handling into `InputController`.
-4. [x] Extract HUD creation/refresh into `HudController`; main keeps only compatibility wrappers and the legacy fallback routine.
-5. [x] Run all regressions, network tests, export, and real-process verification.
-
-## Compatibility decisions
-- Keep `Simulation` state and snapshot dictionaries unchanged.
-- Keep current RPC names and `Simulation.VERSION` unchanged.
-- Keep temporary wrappers in `main.gd` until all tests use the new controllers.
-- Use signals and `Callable` sinks instead of direct controller-to-controller references.
-
-## Errors encountered
-| Error | Attempt | Resolution |
-|---|---:|---|
-| `network_session.gd` inferred `error` as Variant because the owner is intentionally untyped | 1 | Added explicit `String` annotations for both local and remote command validation; the full ENet regression then passed. |
-| The first HUD extraction copied mojibake placeholder strings and retained the wrapper body | 1 | Rebuilt the controller with ASCII-safe placeholders, routed `_refresh_ui` through it, and verified presentation plus network tests. |
-| The first final export attempt could not access the Godot user export-template directory inside the sandbox | 1 | Re-ran the same export with the approved escalated command; fresh `build/IronFront.exe` (110,225,344 bytes) exported and both headless and five-second rendered smoke checks passed. |
-
-# Task plan: continue simulation-state refactor (2026-09-25)
-
-## Goal
-- Continue the architecture refactor from the completed runtime-controller split.
-- Establish a validated simulation snapshot boundary before introducing deeper typed state records, without changing the network wire format or deterministic gameplay behavior.
-
-## Phases
-1. [x] Audit the current `Simulation`/network snapshot flow, legacy entity ownership, and existing tests.
-2. [x] Add schema/version/type/bounds/size validation at the snapshot boundary with focused regressions.
-3. [x] Route network snapshot application through the validated boundary and update architecture records.
-4. [x] Run script, gameplay, presentation, visual, and full ENet regression checks.
-5. [x] Export a fresh Windows EXE, run headless and rendered smoke checks, and record verification.
-
-## Constraints
-- Preserve `Simulation.VERSION`, snapshot dictionary shape, RPC names, save/network compatibility, and deterministic tick behavior.
-- Do not change third-party `addons/godot_ai` code.
-- Treat typed domain records and legacy `scripts/entities/*` cleanup as later stages unless the audit proves they are required for safe validation.
-
-## Errors encountered
-| Error | Attempt | Resolution |
-|---|---:|---|
-| `--check-only` launched the project loop and did not terminate | 1 | Stopped the dedicated process; used direct headless regression scripts and export parsing instead. |
-| Visual-performance probe measured `sync_visuals_ms=8.08645` against an 8ms threshold while all functional suites passed | 1 | Treat as a near-threshold timing fluctuation and rerun the probe independently before deciding whether any code change is warranted. |
-| Snapshot regression fixture used unit id `1`, but reset reserves ids `1` and `2` for bases | 1 | Changed the focused test to use the first real unit id `3`; 64 gameplay checks then passed. |
-| Exported EXE `--log-file build/verification/exported.log` resolved through `user://` and reported `user://D:` / log-open errors | 1 | Re-ran the exported binary without a relative log path via `Start-Process`; headless exit code 0 and five-second rendered process survival passed. |
-
-Status: complete. The snapshot boundary now rejects malformed state before mutation, network receive paths handle rejection, and the fresh export passed both process checks.
+- 文档索引中的项目自有 Markdown 均有明确用途，链接有效。
+- 不再存在“历史计划显示未完成、但后续记录已完成”的冲突复选框。
+- `findings.md`、`progress.md`、`VERIFICATION.md` 与本文件的当前状态一致。

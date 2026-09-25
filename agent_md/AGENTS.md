@@ -16,6 +16,10 @@
 
 - Build and validation rule: after every project modification, unless the user explicitly requests otherwise, generate a fresh Windows EXE and verify the game by running it. Export success alone is insufficient; use the project MCP for gameplay validation when available.
 
+- Trusted tool wrapper rule: invoke Godot, Blender, project MCP services, and their Python runtimes through the fixed entry points under `tools/codex/`. For Codex execpolicy matching, use `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <absolute-wrapper-path> ...`; do not replace this with a broad raw `powershell`, `python`, Godot, or Blender allow rule.
+- Local-network rule: wrapper-managed MCP/Python services may bind only to `127.0.0.1`/`localhost`. External network access remains approval-gated.
+- Process cleanup rule: before finishing any task that starts Godot, Blender, an exported game, MCP, or Python services, run `tools/codex/cleanup-project-processes.ps1 -StopTracked -StopUntracked`, then run it again with `-ReportOnly`. Do not claim completion while project-owned processes or ports remain. Do not stop unrelated or shared infrastructure processes; when ownership is ambiguous, report the PID and command line instead.
+
 ## Coding style
 - Use four-space indentation consistently within new or reformatted GDScript blocks.
 - Put spaces around assignment and comparison operators, and after commas in argument lists.

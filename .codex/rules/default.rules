@@ -1,0 +1,113 @@
+# Project-local rules for the trusted Godot/Blender development toolchain.
+#
+# Only the fixed PowerShell wrapper entry points are allowed outside the
+# sandbox. Raw interpreters, arbitrary executables, GUI launches, and commands
+# that are not listed here remain approval-gated.
+
+prefix_rule(
+    pattern = ["powershell.exe", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\run-godot.ps1"],
+    decision = "allow",
+    justification = "Run the project-pinned Godot wrapper with a fixed project root.",
+)
+
+prefix_rule(
+    pattern = ["powershell", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\run-godot.ps1"],
+    decision = "allow",
+    justification = "Run the project-pinned Godot wrapper with a fixed project root.",
+)
+
+prefix_rule(
+    pattern = ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\run-godot.ps1"],
+    decision = "allow",
+    justification = "Run the project-pinned Godot wrapper with a fixed project root.",
+)
+
+prefix_rule(
+    pattern = ["powershell.exe", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\run-network.ps1"],
+    decision = "allow",
+    justification = "Run the project network verification through the pinned Godot wrapper.",
+)
+
+prefix_rule(
+    pattern = ["powershell", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\run-network.ps1"],
+    decision = "allow",
+    justification = "Run the project network verification through the pinned Godot wrapper.",
+)
+
+prefix_rule(
+    pattern = ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\run-network.ps1"],
+    decision = "allow",
+    justification = "Run the project network verification through the pinned Godot wrapper.",
+)
+
+prefix_rule(
+    pattern = ["powershell.exe", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\run-blender.ps1"],
+    decision = "allow",
+    justification = "Run Blender only through the project-pinned background wrapper.",
+)
+
+prefix_rule(
+    pattern = ["powershell", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\run-blender.ps1"],
+    decision = "allow",
+    justification = "Run Blender only through the project-pinned background wrapper.",
+)
+
+prefix_rule(
+    pattern = ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\run-blender.ps1"],
+    decision = "allow",
+    justification = "Run Blender only through the project-pinned background wrapper.",
+)
+
+prefix_rule(
+    pattern = ["powershell.exe", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\run-mcp.ps1"],
+    decision = "allow",
+    justification = "Start or stop the approved local MCP services on loopback only.",
+)
+
+prefix_rule(
+    pattern = ["powershell", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\run-mcp.ps1"],
+    decision = "allow",
+    justification = "Start or stop the approved local MCP services on loopback only.",
+)
+
+prefix_rule(
+    pattern = ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\run-mcp.ps1"],
+    decision = "allow",
+    justification = "Start or stop the approved local MCP services on loopback only.",
+)
+
+prefix_rule(
+    pattern = ["powershell.exe", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\cleanup-project-processes.ps1"],
+    decision = "allow",
+    justification = "Clean up processes and ports owned by this project after a task.",
+)
+
+prefix_rule(
+    pattern = ["powershell", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\cleanup-project-processes.ps1"],
+    decision = "allow",
+    justification = "Clean up processes and ports owned by this project after a task.",
+)
+
+prefix_rule(
+    pattern = ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\cleanup-project-processes.ps1"],
+    decision = "allow",
+    justification = "Clean up processes and ports owned by this project after a task.",
+)
+
+prefix_rule(
+    pattern = ["powershell.exe", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\verify-permissions.ps1"],
+    decision = "allow",
+    justification = "Verify the project-local Codex rules and trusted tool entry points.",
+)
+
+prefix_rule(
+    pattern = ["powershell", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\verify-permissions.ps1"],
+    decision = "allow",
+    justification = "Verify the project-local Codex rules and trusted tool entry points.",
+)
+
+prefix_rule(
+    pattern = ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\verify-permissions.ps1"],
+    decision = "allow",
+    justification = "Verify the project-local Codex rules and trusted tool entry points.",
+)

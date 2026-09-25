@@ -1,0 +1,11 @@
+# Project-scoped Codex configuration.
+# This file is loaded only after this repository is trusted.
+
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[windows]
+# Keep approved tools inside the native Windows sandbox instead of escalating
+# the entire project to unrestricted access.
+sandbox = "elevated"
+

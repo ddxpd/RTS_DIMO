@@ -32,6 +32,14 @@ func run() -> void:
     game.sim.ai_enabled = false
     await process_frame
     await process_frame
+    var escape_open := InputEventKey.new()
+    escape_open.keycode = KEY_ESCAPE
+    escape_open.pressed = true
+    root.push_input(escape_open, true)
+    check(game.menu_visible and game.menu.visible, "Escape opens the menu before HUD controls can consume it")
+    var escape_close := escape_open.duplicate()
+    root.push_input(escape_close, true)
+    check(not game.menu_visible and not game.menu.visible, "Escape closes the menu")
     game.camera_controller.focus = Vector2(640, 300)
     game._update_camera_transform()
     click(game.sim.units[3].pos)
@@ -179,6 +187,12 @@ func run() -> void:
     game._attack_click(Vector2(600, 160))
     game._attack_click(Vector2(600, 160))
     check(game.sim.units[3].order == "attack_move", "Attack mode ground click creates attack-move")
+    game._begin_rebind()
+    var cancel_rebind := InputEventKey.new()
+    cancel_rebind.keycode = KEY_ESCAPE
+    cancel_rebind.pressed = true
+    root.push_input(cancel_rebind, true)
+    check(not game.rebinding_attack and not game.menu_visible, "Escape cancels attack-key rebinding without opening the menu")
     game._begin_rebind()
     var key_event := InputEventKey.new()
     key_event.pressed = true

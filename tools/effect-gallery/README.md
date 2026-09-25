@@ -1,38 +1,24 @@
-# Iron Front 效果图收藏
+# Iron Front 效果图库
 
-本地效果图素材墙，用于导入、预览、收藏和管理游戏效果图。收藏、图库记录和垃圾桶状态保存在当前浏览器的 IndexedDB 中；新导入的图片同时会由本地服务保存一份副本，刷新后仍会保留。
+本地图片导入、预览、收藏和垃圾桶工具。图片记录保存在浏览器 IndexedDB；普通导入会同时复制到 `library/`，生成图片来自 `generated/`。
 
 ## 启动
 
-在项目根目录执行：
+在项目根目录运行：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File tools/effect-gallery/start.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/effect-gallery/start.ps1
 ```
 
-脚本会自动选择本地端口、启动带文件管理 API 的服务并打开浏览器。在 PowerShell 窗口按 `Ctrl+C` 停止服务。
+脚本会选择本地端口，启动 `server.py`，并尝试打开浏览器。按 `Ctrl+C` 停止服务。
 
-## 导入
+## 功能
 
-- 点击“选择图片文件”导入单个或多个图片。
-- 点击“选择图片文件夹”批量导入所选文件夹中的 PNG、JPG/JPEG 和 WebP 图片。
-- 拖拽图片或文件夹到上传区。
+- 支持 PNG、JPG/JPEG、WebP 的单文件、文件夹和拖放导入。
+- 卡片可收藏、搜索、排序、预览和下载。
+- 垃圾桶支持恢复和永久删除；永久删除只作用于图库管理的副本。
+- 早期只有 IndexedDB 记录、没有文件系统路径的项目，永久删除时只清理浏览器副本。
 
-支持 PNG、JPG/JPEG、WebP。普通导入图片会保存到 `tools/effect-gallery/library/`；生成目录中的图片可以直接导入或管理。
+## 部署限制
 
-## 收藏
-
-- 点击卡片右上角星标收藏或取消收藏。
-- “中意收藏”标签只显示收藏图片。
-- 收藏状态保存在 IndexedDB，刷新后不会丢失。
-
-## 垃圾桶
-
-- “移入垃圾桶”不会立即删除图片，图片会进入垃圾桶标签。
-- 垃圾桶中的图片可以恢复。
-- “永久清除”会删除图库管理的文件系统副本；操作不可恢复。
-- 早期只存在浏览器 IndexedDB 中的图片没有文件系统路径，永久清除时只会删除浏览器副本，不会误删原始文件。
-
-## 后续部署
-
-`index.html` 可以作为静态页面展示，但要使用文件导入、垃圾桶和永久删除功能，应通过 `start.ps1` 启动本地服务。IndexedDB 按浏览器和域名隔离，部署到新地址后本地图片不会自动迁移；`library/` 和 `.trash/` 是本地运行时目录，不应提交到 Git。
+`index.html` 可以静态展示，但导入、垃圾桶和永久删除必须通过本地服务运行。`library/` 和 `.trash/` 是运行时目录，不应提交到 Git。浏览器 IndexedDB 按浏览器和域名隔离，部署到新地址不会自动迁移记录。
