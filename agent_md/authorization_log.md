@@ -20,6 +20,8 @@
 
 ## 持续规则
 
+- 2026-09-25 | commit `b1f2883` and push `origin/feature/3d-models` | remote upload | User selected source/docs/tools only; current EXE excluded from the new commit | Push also uploaded 3 historical LFS objects (about 330 MB) because the remote branch lacked objects referenced by earlier commits; current EXE remains local.
+
 - 本地读写、测试、导出和 commit 属于项目授权范围；远程 push、远程分支和大文件上传必须由用户在当前请求中主动提出。
 - 涉及 EXE/PCK 的远程上传必须先确认是否包含大文件，并提供 Release 方案。
 - 启动 Godot、Blender、MCP 或 Python 服务后，结束前必须执行项目进程清理并报告残留。
