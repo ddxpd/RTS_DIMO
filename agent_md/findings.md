@@ -110,10 +110,10 @@ This review is recorded as a work list. Each item includes the intended remediat
 
 ## High priority
 
-1. `scripts/main.gd` is a large monolithic runtime owner for lifecycle, input, UI, networking, simulation stepping, audio, camera, and 3D presentation. **Fix:** extract presentation synchronization first, then incrementally separate networking/input/UI behind stable interfaces. **Status:** presentation extraction in progress.
+1. `scripts/main.gd` was a large monolithic runtime owner for lifecycle, input, UI, networking, simulation stepping, audio, camera, and 3D presentation. **Fix:** extracted presentation, session stepping, command routing, networking, input, HUD, and audio behind dedicated controllers while retaining narrow compatibility wrappers. **Status:** completed for the planned runtime boundaries; wrapper cleanup remains incremental follow-up work.
 2. The project contains both dictionary-driven simulation state and legacy `scripts/entities/*` classes with unclear ownership. **Fix:** choose one authoritative domain model and remove or adapt the other after usage audit. **Status:** unfixed; audit required.
 3. Host networking sends deep-copied full snapshots at the simulation rate. **Fix:** introduce validated versioned snapshots first, then delta/relevancy/compression when entity scale requires it. **Status:** unfixed.
-4. `Simulation.apply_snapshot()` assigns remote dictionaries without schema, type, bounds, or size validation. **Fix:** add a snapshot validator and reject malformed/out-of-date state before applying it. **Status:** unfixed.
+4. `Simulation.apply_snapshot()` assigned remote dictionaries without schema, type, bounds, or size validation. **Fix:** added complete snapshot schema/type/bounds/size validation, strict Variant checks, deep-copy application, focused malformed-state regressions, and network disconnect/notification handling on rejection. **Status:** fixed 2026-09-25.
 5. Unit separation uses an incomplete neighbor-offset set. **Fix:** cover all adjacent spatial-hash cells and add dense-boundary regression cases. **Status:** unfixed.
 6. Test scripts are not registered as discoverable suites in the MCP test runner. **Fix:** add one documented test entry point and CI-friendly exit/result reporting. **Status:** unfixed.
 
@@ -125,11 +125,24 @@ This review is recorded as a work list. Each item includes the intended remediat
 10. Balance and map values are hard-coded in GDScript. **Fix:** move tunable data into validated resources/configuration. **Status:** unfixed.
 11. Blender/GLB/runtime animation contracts are implicit, so axis or node-name changes can produce a visually valid but incorrect model. **Fix:** add export metadata and automated hierarchy/orientation assertions. **Status:** partially mitigated by visual tests; pipeline remains unfixed.
 12. Documentation and some project/UI strings contain encoding corruption. **Fix:** normalize tracked text to UTF-8 and add an encoding check. **Status:** unfixed.
-13. Input, UI layout, and visual node creation remain heavily hard-coded in `main.gd`. **Fix:** extract input/UI controllers after presentation extraction. **Status:** unfixed.
+13. Input, UI layout, and visual node creation remain heavily hard-coded in `main.gd`. **Fix:** input and selection now live behind `InputController`; HUD construction and refresh now live behind `HudController`, while `_create_ui_legacy()` remains only as a compatibility fallback. **Status:** mitigated; legacy fallback can be removed after downstream probes stop calling it.
 14. `godot_ai` is both an autoload/editor plugin and excluded by the export filter. **Fix:** define an explicit development-only/runtime packaging policy and verify release startup. **Status:** unfixed.
-15. Network scripts depend on a machine-specific Godot executable path. **Fix:** use an argument/environment override with portable discovery. **Status:** unfixed.
+15. Network scripts previously depended on a machine-specific Godot executable path. **Fix:** `tests/run_network_guest.ps1` already accepts a `-GodotPath` override; the final regression used the installed executable through that argument. **Status:** mitigated; default discovery remains machine-specific.
 
 ## Verification baseline
 
 - Existing direct headless gameplay, presentation, and visual-model checks passed before this refactor.
 - The MCP suite discovery currently reports zero registered suites; this remains a test infrastructure limitation until item 6 is addressed.
+
+## Snapshot-boundary continuation audit (2026-09-25)
+
+- The uncommitted `scripts/simulation.gd` already contains an initial `validate_snapshot()` implementation and changes `apply_snapshot()` to return `bool`; this is the recovered unfinished refactor, not a new implementation boundary.
+- Existing gameplay coverage only round-trips a valid snapshot. There are no focused malformed/version/size/schema rejection cases yet.
+- The current RPC receive paths call `apply_snapshot()` without handling failure, so malformed authoritative state can be rejected internally without a clear connection/session response.
+- The validator currently checks top-level tables and selected entity fields. A complete audit of every runtime-read unit/building/ore/effect field is required before treating the snapshot boundary as safe.
+- Field audit gaps include required unit order/target/path plus attack, ore, cargo, cooldown, work, repath, flash, auto, and stuck state; building flash/cooldown state; effect life/owner/frame; and exact owner buffers for money/visibility/exploration.
+- The initial validator coerced values with `int(...)` before checking their type, so malformed strings could pass numeric validation; the completed validator now checks Variant types before conversion, with a focused string-owner regression.
+- The continuation completed the strict checks: required top-level keys; typed ids, enums, vectors, timers, queues, effects, money, visibility buffers; per-table count caps; and deep-copy assignment after validation.
+- Network receive paths now distinguish stale/version-mismatched world packets (ignored) from matching malformed packets (rejected, disconnected, and reported to the user).
+- Verification after the boundary fix: gameplay 64 checks / 0 failures; presentation, visual models, features, camera, action bar, and ENet regression all passed; visual performance passed on retry at 7.2757ms.
+- Fresh `build/IronFront.exe` export size is 110,233,632 bytes (embedded resources). Exported headless process exited 0; a rendered launch stayed alive for five seconds before clean termination.

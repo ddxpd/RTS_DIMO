@@ -188,3 +188,56 @@ Status: complete. The page no longer displays the generated-concepts section; ge
 |---|---:|---|
 | `world_visual_sync.gd` initially failed to parse because the extracted body retained an internal `_dot_texture` declaration and dynamic host expressions lacked inferred types | 1 | Removed the duplicate declaration, added the missing helper, and added explicit local types; `--check-only` and all regressions then passed. |
 | `tests/run_network_guest.ps1` default Godot path was unavailable in this environment | 1 | Re-ran the same regression with the installed Godot executable passed through `-GodotPath`; all network rounds passed. |
+
+# Task plan: decouple session, network, input, UI, and audio (2026-09-24)
+
+## Goal
+- Migrate the remaining runtime responsibilities out of `scripts/main.gd` while preserving current behavior and network wire compatibility.
+
+## Phases
+1. [x] Add `GameSession`, `CommandBus`, and `AudioController` interfaces; route simulation ticks and audio effects through them.
+2. [x] Extract ENet/RPC ownership into `NetworkSession` with main-node compatibility wrappers.
+3. [x] Extract input and selection handling into `InputController`.
+4. [x] Extract HUD creation/refresh into `HudController`; main keeps only compatibility wrappers and the legacy fallback routine.
+5. [x] Run all regressions, network tests, export, and real-process verification.
+
+## Compatibility decisions
+- Keep `Simulation` state and snapshot dictionaries unchanged.
+- Keep current RPC names and `Simulation.VERSION` unchanged.
+- Keep temporary wrappers in `main.gd` until all tests use the new controllers.
+- Use signals and `Callable` sinks instead of direct controller-to-controller references.
+
+## Errors encountered
+| Error | Attempt | Resolution |
+|---|---:|---|
+| `network_session.gd` inferred `error` as Variant because the owner is intentionally untyped | 1 | Added explicit `String` annotations for both local and remote command validation; the full ENet regression then passed. |
+| The first HUD extraction copied mojibake placeholder strings and retained the wrapper body | 1 | Rebuilt the controller with ASCII-safe placeholders, routed `_refresh_ui` through it, and verified presentation plus network tests. |
+| The first final export attempt could not access the Godot user export-template directory inside the sandbox | 1 | Re-ran the same export with the approved escalated command; fresh `build/IronFront.exe` (110,225,344 bytes) exported and both headless and five-second rendered smoke checks passed. |
+
+# Task plan: continue simulation-state refactor (2026-09-25)
+
+## Goal
+- Continue the architecture refactor from the completed runtime-controller split.
+- Establish a validated simulation snapshot boundary before introducing deeper typed state records, without changing the network wire format or deterministic gameplay behavior.
+
+## Phases
+1. [x] Audit the current `Simulation`/network snapshot flow, legacy entity ownership, and existing tests.
+2. [x] Add schema/version/type/bounds/size validation at the snapshot boundary with focused regressions.
+3. [x] Route network snapshot application through the validated boundary and update architecture records.
+4. [x] Run script, gameplay, presentation, visual, and full ENet regression checks.
+5. [x] Export a fresh Windows EXE, run headless and rendered smoke checks, and record verification.
+
+## Constraints
+- Preserve `Simulation.VERSION`, snapshot dictionary shape, RPC names, save/network compatibility, and deterministic tick behavior.
+- Do not change third-party `addons/godot_ai` code.
+- Treat typed domain records and legacy `scripts/entities/*` cleanup as later stages unless the audit proves they are required for safe validation.
+
+## Errors encountered
+| Error | Attempt | Resolution |
+|---|---:|---|
+| `--check-only` launched the project loop and did not terminate | 1 | Stopped the dedicated process; used direct headless regression scripts and export parsing instead. |
+| Visual-performance probe measured `sync_visuals_ms=8.08645` against an 8ms threshold while all functional suites passed | 1 | Treat as a near-threshold timing fluctuation and rerun the probe independently before deciding whether any code change is warranted. |
+| Snapshot regression fixture used unit id `1`, but reset reserves ids `1` and `2` for bases | 1 | Changed the focused test to use the first real unit id `3`; 64 gameplay checks then passed. |
+| Exported EXE `--log-file build/verification/exported.log` resolved through `user://` and reported `user://D:` / log-open errors | 1 | Re-ran the exported binary without a relative log path via `Start-Process`; headless exit code 0 and five-second rendered process survival passed. |
+
+Status: complete. The snapshot boundary now rejects malformed state before mutation, network receive paths handle rejection, and the fresh export passed both process checks.

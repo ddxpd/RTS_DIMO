@@ -6,6 +6,11 @@ const CELL := 32
 const WORLD := Vector2(4800, 3200)
 const GRID := Vector2i(150, 100)
 const GRID_CELLS := GRID.x * GRID.y
+const MAX_SNAPSHOT_UNITS := 4096
+const MAX_SNAPSHOT_BUILDINGS := 1024
+const MAX_SNAPSHOT_ORES := 256
+const MAX_SNAPSHOT_EFFECTS := 4096
+const MAX_SNAPSHOT_ORE_AMOUNT := 100000
 const UNIT_TYPES := {
     "soldier": {"hp": 100, "speed": 100.0, "range": 125.0, "damage": 16, "cooldown": 12, "radius": 11.0, "cost": 100, "time": 50},
     "harvester": {"hp": 160, "speed": 75.0, "range": 0.0, "damage": 0, "cooldown": 20, "radius": 14.0, "cost": 200, "time": 70}
@@ -30,6 +35,7 @@ var obstacles: Array[Rect2] = []
 var visible: Dictionary = {}
 var explored: Dictionary = {}
 var nav := AStarGrid2D.new()
+var last_snapshot_error := ""
 
 func reset(with_ai: bool = false) -> void:
     match_id += 1
@@ -768,14 +774,241 @@ func snapshot() -> Dictionary:
         "ores": ores.duplicate(true), "money": money.duplicate(true), "winner": winner, "effects": effects.duplicate(true),
         "visible": visible.duplicate(true), "explored": explored.duplicate(true)}
 
-func apply_snapshot(state: Dictionary) -> void:
+func validate_snapshot(state: Dictionary) -> bool:
+    last_snapshot_error = ""
+    for field in ["version", "match", "frame", "units", "buildings", "ores", "money", "winner", "effects", "visible", "explored"]:
+        if not state.has(field):
+            last_snapshot_error = "Snapshot is missing %s." % field
+            return false
+    if typeof(state.version) != TYPE_STRING or state.version != VERSION:
+        last_snapshot_error = "Snapshot version mismatch."
+        return false
+    if typeof(state.match) != TYPE_INT or int(state.match) < 0:
+        last_snapshot_error = "Snapshot match id is invalid."
+        return false
+    if typeof(state.frame) != TYPE_INT or int(state.frame) < 0:
+        last_snapshot_error = "Snapshot frame is invalid."
+        return false
+    if typeof(state.winner) != TYPE_INT or int(state.winner) not in [0, 1, 2, 3]:
+        last_snapshot_error = "Snapshot winner is invalid."
+        return false
+    if not _validate_snapshot_dictionary(state.units, MAX_SNAPSHOT_UNITS, "units", true):
+        return false
+    if not _validate_snapshot_dictionary(state.buildings, MAX_SNAPSHOT_BUILDINGS, "buildings", false):
+        return false
+    if not _validate_snapshot_dictionary(state.ores, MAX_SNAPSHOT_ORES, "ores", false):
+        return false
+    if not _validate_money(state.money):
+        return false
+    if not _validate_effects(state.effects, int(state.frame)):
+        return false
+    if not _validate_visibility(state.visible, "visible"):
+        return false
+    if not _validate_visibility(state.explored, "explored"):
+        return false
+    return true
+
+
+func _validate_snapshot_dictionary(value: Variant, limit: int, label: String, units_table: bool) -> bool:
+    if not (value is Dictionary):
+        last_snapshot_error = "Snapshot %s table is not a dictionary." % label
+        return false
+    var table: Dictionary = value
+    if table.size() > limit:
+        last_snapshot_error = "Snapshot %s table is too large." % label
+        return false
+    for raw_id: Variant in table.keys():
+        if typeof(raw_id) != TYPE_INT or int(raw_id) <= 0:
+            last_snapshot_error = "Snapshot %s id is invalid." % label
+            return false
+        var entry: Variant = table[raw_id]
+        if units_table:
+            if not _validate_unit_entry(entry):
+                return false
+        elif label == "buildings":
+            if not _validate_building_entry(entry):
+                return false
+        else:
+            if not _validate_ore_entry(entry):
+                return false
+    return true
+
+
+func _validate_unit_entry(value: Variant) -> bool:
+    if not (value is Dictionary):
+        last_snapshot_error = "Snapshot unit entry is not a dictionary."
+        return false
+    var unit: Dictionary = value
+    for field in ["owner", "type", "pos", "hp", "order", "target", "attack_kind", "attack_id", "ore", "cargo", "cooldown", "work", "path", "repath", "flash", "auto", "stuck"]:
+        if not unit.has(field):
+            last_snapshot_error = "Snapshot unit is missing %s." % field
+            return false
+    if typeof(unit.owner) != TYPE_INT or int(unit.owner) not in [1, 2] or typeof(unit.type) != TYPE_STRING or not UNIT_TYPES.has(unit.type):
+        last_snapshot_error = "Snapshot unit owner or type is invalid."
+        return false
+    var kind: String = str(unit.type)
+    if not _validate_vector2(unit.pos, WORLD, "unit position") or not _validate_vector2(unit.target, WORLD * 2.0, "unit target"):
+        return false
+    var max_hp: int = int(UNIT_TYPES[kind].hp)
+    if typeof(unit.hp) != TYPE_INT or int(unit.hp) < 0 or int(unit.hp) > max_hp:
+        last_snapshot_error = "Snapshot unit hp is invalid."
+        return false
+    if typeof(unit.order) != TYPE_STRING or unit.order not in ["idle", "move", "attack", "attack_move", "gather"]:
+        last_snapshot_error = "Snapshot unit order is invalid."
+        return false
+    if typeof(unit.attack_kind) != TYPE_STRING or unit.attack_kind not in ["", "unit", "building"]:
+        last_snapshot_error = "Snapshot unit attack kind is invalid."
+        return false
+    if typeof(unit.attack_id) != TYPE_INT or int(unit.attack_id) < -1 or int(unit.attack_id) > 1000000:
+        last_snapshot_error = "Snapshot unit attack id is invalid."
+        return false
+    if typeof(unit.ore) != TYPE_INT or int(unit.ore) < -1 or int(unit.ore) > MAX_SNAPSHOT_ORES:
+        last_snapshot_error = "Snapshot unit ore id is invalid."
+        return false
+    if typeof(unit.cargo) != TYPE_INT or int(unit.cargo) < 0 or int(unit.cargo) > 60:
+        last_snapshot_error = "Snapshot unit cargo is invalid."
+        return false
+    if typeof(unit.cooldown) != TYPE_INT or int(unit.cooldown) < 0 or int(unit.cooldown) > int(UNIT_TYPES[kind].cooldown):
+        last_snapshot_error = "Snapshot unit cooldown is invalid."
+        return false
+    if typeof(unit.work) != TYPE_INT or int(unit.work) < 0 or int(unit.work) > 20:
+        last_snapshot_error = "Snapshot unit work timer is invalid."
+        return false
+    if typeof(unit.path) != TYPE_ARRAY or unit.path.size() > 2048:
+        last_snapshot_error = "Snapshot unit path is invalid."
+        return false
+    for point: Variant in unit.path:
+        if not _validate_vector2(point, WORLD * 2.0, "unit path point"):
+            return false
+    if typeof(unit.repath) != TYPE_INT or int(unit.repath) < -100 or int(unit.repath) > 10000:
+        last_snapshot_error = "Snapshot unit repath timer is invalid."
+        return false
+    if typeof(unit.flash) != TYPE_INT or int(unit.flash) < 0 or int(unit.flash) > 10:
+        last_snapshot_error = "Snapshot unit flash timer is invalid."
+        return false
+    if typeof(unit.auto) != TYPE_BOOL:
+        last_snapshot_error = "Snapshot unit auto flag is invalid."
+        return false
+    if typeof(unit.stuck) != TYPE_INT or int(unit.stuck) < 0 or int(unit.stuck) > 10000:
+        last_snapshot_error = "Snapshot unit stuck timer is invalid."
+        return false
+    return true
+
+
+func _validate_building_entry(value: Variant) -> bool:
+    if not (value is Dictionary):
+        last_snapshot_error = "Snapshot building entry is not a dictionary."
+        return false
+    var building: Dictionary = value
+    for field in ["owner", "type", "pos", "hp", "remaining", "queue", "flash", "rally", "cooldown"]:
+        if not building.has(field):
+            last_snapshot_error = "Snapshot building is missing %s." % field
+            return false
+    if typeof(building.owner) != TYPE_INT or int(building.owner) not in [1, 2] or typeof(building.type) != TYPE_STRING or not BUILD_TYPES.has(building.type):
+        last_snapshot_error = "Snapshot building owner or type is invalid."
+        return false
+    var kind: String = str(building.type)
+    if not _validate_vector2(building.pos, WORLD, "building position") or not _validate_vector2(building.rally, WORLD * 2.0, "building rally"):
+        return false
+    var max_hp: int = int(BUILD_TYPES[kind].hp)
+    var max_remaining: int = int(BUILD_TYPES[kind].time)
+    if typeof(building.hp) != TYPE_INT or int(building.hp) < 0 or int(building.hp) > max_hp:
+        last_snapshot_error = "Snapshot building hp is invalid."
+        return false
+    if typeof(building.remaining) != TYPE_INT or int(building.remaining) < 0 or int(building.remaining) > max_remaining:
+        last_snapshot_error = "Snapshot construction timer is invalid."
+        return false
+    if typeof(building.queue) != TYPE_ARRAY or building.queue.size() > 5:
+        last_snapshot_error = "Snapshot production queue is invalid."
+        return false
+    for job: Variant in building.queue:
+        if not (job is Dictionary) or not job.has("type") or not job.has("remaining") or typeof(job.type) != TYPE_STRING or not UNIT_TYPES.has(job.type) or typeof(job.remaining) != TYPE_INT:
+            last_snapshot_error = "Snapshot production job is invalid."
+            return false
+        if int(job.remaining) < 0 or int(job.remaining) > int(UNIT_TYPES[job.type].time):
+            last_snapshot_error = "Snapshot production timer is invalid."
+            return false
+    if typeof(building.flash) != TYPE_INT or int(building.flash) < 0 or int(building.flash) > 10:
+        last_snapshot_error = "Snapshot building flash timer is invalid."
+        return false
+    var max_cooldown := int(BUILD_TYPES.bunker.cooldown)
+    if typeof(building.cooldown) != TYPE_INT or int(building.cooldown) < 0 or int(building.cooldown) > max_cooldown:
+        last_snapshot_error = "Snapshot building cooldown is invalid."
+        return false
+    return true
+
+
+func _validate_ore_entry(value: Variant) -> bool:
+    if not (value is Dictionary):
+        last_snapshot_error = "Snapshot ore entry is not a dictionary."
+        return false
+    var ore: Dictionary = value
+    if not ore.has("pos") or not ore.has("amount") or not _validate_vector2(ore.pos, WORLD, "ore position") or typeof(ore.amount) != TYPE_INT or int(ore.amount) < 0 or int(ore.amount) > MAX_SNAPSHOT_ORE_AMOUNT:
+        last_snapshot_error = "Snapshot ore entry is invalid."
+        return false
+    return true
+
+
+func _validate_money(value: Variant) -> bool:
+    if not (value is Dictionary) or value.size() != 2 or not value.has(1) or not value.has(2):
+        last_snapshot_error = "Snapshot money table is invalid."
+        return false
+    for owner: Variant in value.keys():
+        if typeof(owner) != TYPE_INT or int(owner) not in [1, 2] or typeof(value[owner]) != TYPE_INT or int(value[owner]) < 0 or int(value[owner]) > 1000000000:
+            last_snapshot_error = "Snapshot money entry is invalid."
+            return false
+    return true
+
+
+func _validate_effects(value: Variant, snapshot_frame: int) -> bool:
+    if not (value is Array) or value.size() > MAX_SNAPSHOT_EFFECTS:
+        last_snapshot_error = "Snapshot effects are invalid."
+        return false
+    for effect: Variant in value:
+        if not (effect is Dictionary) or not effect.has("kind") or not effect.has("from") or not effect.has("to") or not effect.has("life") or not effect.has("owner") or not effect.has("frame"):
+            last_snapshot_error = "Snapshot effect entry is invalid."
+            return false
+        if typeof(effect.kind) != TYPE_STRING or effect.kind not in ["shot", "death"] or not _validate_vector2(effect.from, WORLD * 2.0, "effect origin") or not _validate_vector2(effect.to, WORLD * 2.0, "effect target"):
+            return false
+        if typeof(effect.life) != TYPE_INT or int(effect.life) < 0 or int(effect.life) > 60 or typeof(effect.owner) != TYPE_INT or int(effect.owner) not in [1, 2] or typeof(effect.frame) != TYPE_INT or int(effect.frame) < 0 or int(effect.frame) > snapshot_frame:
+            last_snapshot_error = "Snapshot effect metadata is invalid."
+            return false
+    return true
+
+
+func _validate_visibility(value: Variant, label: String) -> bool:
+    if not (value is Dictionary) or value.size() != 2 or not value.has(1) or not value.has(2):
+        last_snapshot_error = "Snapshot %s table is invalid." % label
+        return false
+    for owner: Variant in value.keys():
+        if typeof(owner) != TYPE_INT or int(owner) not in [1, 2] or not (value[owner] is PackedByteArray) or value[owner].size() != GRID_CELLS:
+            last_snapshot_error = "Snapshot %s buffer is invalid." % label
+            return false
+    return true
+
+
+func _validate_vector2(value: Variant, bounds: Vector2, label: String) -> bool:
+    if not (value is Vector2):
+        last_snapshot_error = "Snapshot %s is not a Vector2." % label
+        return false
+    var point: Vector2 = value
+    if not is_finite(point.x) or not is_finite(point.y) or absf(point.x) > bounds.x or absf(point.y) > bounds.y:
+        last_snapshot_error = "Snapshot %s is out of bounds." % label
+        return false
+    return true
+
+
+func apply_snapshot(state: Dictionary) -> bool:
+    if not validate_snapshot(state):
+        return false
     match_id  = state.match
     frame     = state.frame
-    units     = state.units
-    buildings = state.buildings
-    ores      = state.ores
-    money     = state.money
+    units     = state.units.duplicate(true)
+    buildings = state.buildings.duplicate(true)
+    ores      = state.ores.duplicate(true)
+    money     = state.money.duplicate(true)
     winner    = state.winner
-    effects   = state.effects
-    visible   = state.visible
-    explored  = state.explored
+    effects   = state.effects.duplicate(true)
+    visible   = state.visible.duplicate(true)
+    explored  = state.explored.duplicate(true)
+    return true

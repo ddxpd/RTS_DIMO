@@ -632,3 +632,17 @@
 - Root cause: the 3D presentation subsystem had no independent owner; its state dictionaries and helper functions were embedded in the root gameplay node.
 - Fix: added `scripts/world_visual_sync.gd` as a dedicated `Node3D` controller for rocks, ore, units, buildings, effects, selection overlays, build previews, status bars, animations, and fog. `main.gd` now creates/configures the controller and exposes temporary compatibility properties/wrappers for existing tests and callers.
 - Verification: `--check-only`, `visual_models`, `gameplay` (57 checks), `presentation`, `features`, `visual_performance`, and the full ENet regression all passed. A fresh `build/IronFront.exe` export (110,191,584 bytes) launched and exited cleanly in the exported headless smoke run, and the non-headless render process remained alive for five seconds.
+
+## 2026-09-25：快照边界校验与网络接收重构
+
+### Bug 与修复（成对记录）
+
+- 症状：`Simulation.apply_snapshot()` 直接接收远端字典，缺少字段、错误类型、越界坐标、过大表或不完整效果记录可能在后续 tick/渲染阶段触发错误；网络 RPC 也忽略了应用失败结果。根因：快照只有版本字符串和少量帧序判断，没有统一 schema 边界。修复：增加严格 `validate_snapshot()`，覆盖必需键、Variant 类型、枚举、坐标/计时器/资源上限、单位/建筑/矿石/效果/视野表大小；应用前验证并对所有表深拷贝；`NetworkSession` 与 main 兼容 wrapper 对匹配但损坏的包断开并提示原因，旧帧/错比赛包仍忽略。验证：`tests/gameplay.gd` 新增缺表、字符串强转、越界坐标、不完整效果、不完整视野、超量单位表回归，64 checks / 0 failures；完整 ENet 两次均通过。
+- 症状：快照校验器初版用 `int(...)` 先转换再判断，字符串形式的数字可能绕过类型边界。根因：Variant 类型检查顺序错误。修复：所有整数/布尔/字符串字段先检查 `typeof`，再做范围转换；增加 owner="1" 负例。验证：gameplay 64/0。
+
+### 验证
+
+- 核心：gameplay 64/0；presentation、visual_models、features、camera、action_bar 全部 failures=[]。
+- 性能：探针两次近阈值超 8ms（8.08645、8.1944），独立重跑两次通过（7.57705、7.2757）；未改变性能实现。
+- 多人：协议不匹配、观战权限、两轮红方流程、快照一致、重连与主机断开全部 PASS。
+- 导出：`build/IronFront.exe` 110,233,632 bytes，嵌入资源；`Start-Process` headless `--quit-after 180` ExitCode=0；真实渲染启动存活 5 秒后按计划停止。

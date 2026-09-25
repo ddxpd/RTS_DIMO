@@ -21,6 +21,16 @@ The earlier implementation only contained combat fields and decorative buildings
 - Windows release export with embedded resources. Launching IronFront.exe from the build directory without a project.godot or adjacent IronFront.pck completed a 30-frame startup smoke check without logged errors.
 - Runtime-generated AudioStreamGenerator cues are wired for shots, hits, build/production actions and soldier responses; the audio player initializes in a release build without external files.
 
+## 2026-09-25：validated simulation snapshot boundary
+
+- `Simulation.validate_snapshot()` now requires the complete snapshot top-level schema and validates strict Variant types, enum values, world/vector bounds, HP/timers/cargo/work/cooldowns, production queues, effect metadata, money owners, visibility/exploration buffers, and per-table size caps.
+- `Simulation.apply_snapshot()` rejects before mutation and deep-copies all accepted tables.
+- `NetworkSession` and main compatibility RPC wrappers handle rejected matching snapshots by disconnecting and reporting the validator error; stale or mismatched world packets remain ignored.
+- Focused regression coverage in `tests/gameplay.gd`: valid acceptance, missing tables, numeric-string coercion, out-of-bounds unit position, incomplete effect, incomplete visibility, and oversized unit table. Result: `GAMEPLAY_TEST 64 checks; failures=[]`.
+- Final source regressions: `presentation`, `visual_models`, `features`, `camera`, and `action_bar` all `failures=[]`; full ENet host/guest/spectator regression passed protocol mismatch, permissions, both rounds, snapshot equality, reconnect, and host disconnect.
+- Visual-performance probe had two near-threshold samples above 8ms (8.08645 and 8.1944) and two independent passing retries (7.57705 and 7.2757); no gameplay or rendering code change was made for this timing noise.
+- Fresh export: `build/IronFront.exe`, 110,233,632 bytes, embedded resources. Exported headless process exited 0 after `--quit-after 180`; a rendered exported process stayed alive for five seconds before clean termination.
+
 ## Evidence and reproduction
 
 - tests/gameplay.gd — GAMEPLAY_TEST 43 checks; failures=[]

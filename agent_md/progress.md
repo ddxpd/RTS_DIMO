@@ -212,3 +212,39 @@ Status: complete.
 - The same exported EXE remained alive for five seconds in a non-headless render launch and was then stopped cleanly.
 
 Status: first refactor complete; the remaining architecture items stay recorded as unfixed follow-up work.
+
+# Progress: session/network/input/HUD refactor continuation (2026-09-24)
+
+- Added `scripts/runtime/game_session.gd` and routed fixed-step simulation ownership through it while preserving the 20 Hz tick and snapshot dictionaries.
+- Added `scripts/runtime/command_bus.gd`; `issue()` now remains a compatibility entry point while validated orders pass through the command boundary.
+- Added `scripts/audio/audio_controller.gd`; generated tones and simulation effects are now owned by a child controller with main-node wrappers retained.
+- Added `scripts/controllers/input_controller.gd`; keyboard, mouse, drag selection, attack mode, control groups, and camera-wheel handling are delegated from compatibility wrappers.
+- Added `scripts/runtime/network_session.gd`; ENet lifecycle, RPC handlers, order rate limiting, snapshot broadcast, reconnect promotion, and version handshake are owned by a child node. Main RPC wrappers remain for existing probes.
+- Added `scripts/ui/hud_controller.gd`; HUD refresh now runs through the controller while the existing creation routine remains behind the compatibility boundary for the next cleanup pass.
+- Regression results after these changes: `gameplay` 57/0, `presentation` 0, `visual_models` 0, `features` 0, `camera` 0, `action_bar` 0, and `visual_performance` 180 units with failures=[].
+- Full ENet regression passed protocol mismatch, spectator permissions, both guest rounds, snapshot equality, reconnect, and host-disconnect handling using the installed Godot executable override.
+- Completed `HudController.build()` migration; `main.gd` now calls the controller for HUD construction and keeps `_create_ui_legacy()` only as a compatibility fallback.
+- Final verification: the serial gameplay/visual/features/camera/action-bar/presentation suites passed; the visual-performance probe passed on a dedicated run (`sync_visuals_ms=7.72`, 180 units). Full ENet regression passed again after HUD construction migration.
+- Fresh final export completed as `build/IronFront.exe` (110,225,344 bytes, 2026-09-24 23:57). The exported executable passed headless startup and remained alive for a five-second rendered smoke run before clean shutdown.
+
+Status: complete for the planned session/network/input/HUD/audio boundary extraction; typed simulation state and other review items remain separate follow-up work.
+
+# Progress: refactor continuation (2026-09-25)
+
+- Resumed from the completed session/network/input/HUD/audio extraction phase.
+- The working tree still contains the uncommitted controller/runtime split plus its verification logs and exported build.
+- The next refactor scope will be selected from the recorded unresolved architecture findings after reviewing the source-only diff; tracked large binaries are excluded from that review because the Git LFS clean filter cannot access `.git/lfs/tmp` in the restricted shell.
+
+Status: in progress.
+
+# Progress: validated simulation snapshot boundary (2026-09-25)
+
+- Audited the recovered partial validator in `scripts/simulation.gd` and the four network receive paths.
+- Completed strict snapshot validation for required top-level keys, version/frame/winner, typed entity ids, units, buildings, production queues, ores, money, effects, visibility/exploration buffers, bounds, timers, and table sizes.
+- Changed `apply_snapshot()` to deep-copy validated state before replacing local simulation state, so rejected or later-mutated RPC dictionaries cannot partially mutate the simulation.
+- Added focused gameplay checks for valid schema acceptance, missing tables, type coercion, out-of-bounds positions, incomplete effects, incomplete visibility, and oversized unit tables; gameplay now reports 64 checks / 0 failures.
+- Routed `NetworkSession` and main compatibility RPC wrappers through checked application. Matching malformed world/final/new-match/accepted state disconnects and reports the validation error; stale or mismatched world packets remain ignored.
+- Regression baseline after the final code change: gameplay 64/0, presentation 0, visual models 0, features 0, camera 0, action bar 0, ENet protocol/spectator/two guest rounds/snapshot equality/reconnect/host disconnect all PASS. Visual-performance first runs crossed the 8ms threshold at 8.08645ms and 8.1944ms, while independent retries passed at 7.57705ms and 7.2757ms.
+- Fresh embedded-resource export completed: `build/IronFront.exe` is 110,233,632 bytes. Exported headless process exited 0; rendered export stayed alive for five seconds and was then stopped cleanly.
+
+Status: complete for the validated snapshot-boundary phase; typed domain records, delta snapshots, spatial-separation completeness, MCP suite registration, and legacy entity ownership remain separate follow-up findings.

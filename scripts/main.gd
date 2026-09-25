@@ -3,9 +3,21 @@ const Simulation = preload("res://scripts/simulation.gd")
 const Art = preload("res://assets/art/pixel_art.gd")
 const CameraController = preload("res://scripts/camera_controller.gd")
 const WorldVisualSync = preload("res://scripts/world_visual_sync.gd")
+const GameSession = preload("res://scripts/runtime/game_session.gd")
+const CommandBus = preload("res://scripts/runtime/command_bus.gd")
+const AudioController = preload("res://scripts/audio/audio_controller.gd")
+const InputController = preload("res://scripts/controllers/input_controller.gd")
+const NetworkSession = preload("res://scripts/runtime/network_session.gd")
+const HudController = preload("res://scripts/ui/hud_controller.gd")
 const PORT := 24560
 const MAX_CLIENTS := 4
 var sim := Simulation.new()
+var session: GameSession
+var command_bus: CommandBus
+var audio_controller: AudioController
+var input_controller: InputController
+var network_session: NetworkSession
+var hud_controller: HudController
 var peer: ENetMultiplayerPeer
 var is_host := false
 var connected := false
@@ -235,6 +247,21 @@ func _make_billboard(tex: Texture2D, size: Vector2, pos2d: Vector2) -> Sprite3D:
 
 func _ready() -> void:
     _load_settings()
+    session = GameSession.new()
+    session.configure(sim)
+    session.simulation_tick.connect(_on_session_tick)
+    add_child(session)
+    command_bus = CommandBus.new()
+    command_bus.configure(_execute_order)
+    command_bus.command_rejected.connect(_notify)
+    input_controller = InputController.new()
+    input_controller.name = "InputController"
+    input_controller.configure(self)
+    add_child(input_controller)
+    network_session = NetworkSession.new()
+    network_session.name = "NetworkSession"
+    network_session.configure(self)
+    add_child(network_session)
     sim.reset(false)
     _create_terrain()
     _create_lighting()
@@ -251,7 +278,14 @@ func _ready() -> void:
     camera_controller.speed_multiplier = camera_speed_multiplier
     camera_controller.focus = Vector2(900, 700)
     _update_camera_transform()
+    hud_controller = HudController.new()
+    hud_controller.name = "HudController"
+    hud_controller.configure(self)
+    add_child(hud_controller)
     _create_ui()
+    audio_controller = AudioController.new()
+    audio_controller.configure(sim, local_slot)
+    add_child(audio_controller)
     _create_audio()
     visual_sync = WorldVisualSync.new()
     visual_sync.name = "WorldVisualSync"
@@ -286,7 +320,7 @@ func _exit_tree() -> void:
     Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 # Build the HUD in code so the exported scene stays lightweight.
-func _create_ui() -> void:
+func _create_ui_legacy() -> void:
     hud = CanvasLayer.new()
     add_child(hud)
     var theme := Theme.new()
@@ -493,32 +527,31 @@ func _create_ui() -> void:
     speed_row.add_child(camera_speed_value_label)
     _button(menu_buttons, "Quit", get_tree().quit)
 
+func _create_ui() -> void:
+    if hud_controller != null:
+        hud_controller.build()
+    else:
+        _create_ui_legacy()
+
+
 func _create_audio() -> void:
-    var stream := AudioStreamGenerator.new()
-    stream.mix_rate      = 44100
-    stream.buffer_length = 1.0
-    audio_player         = AudioStreamPlayer.new()
-    audio_player.stream  = stream
-    add_child(audio_player)
-    audio_player.play()
-    audio_playback = audio_player.get_stream_playback() as AudioStreamGeneratorPlayback
+    if audio_controller == null:
+        return
+    audio_controller.initialize()
+    audio_player = audio_controller.audio_player
+    audio_playback = audio_controller.audio_playback
 
 func _play_tone(frequency: float, duration: float, volume: float = 0.16, slide: float = 0.0) -> void:
-    if audio_playback == null:
-        return
-    var frames := mini(int(duration * 44100.0), 16000)
-    for i in range(frames):
-        var t := float(i) / 44100.0
-        var envelope := minf(1.0, float(i) / 220.0) * minf(1.0, float(frames - i) / 900.0)
-        var phase := TAU * (frequency * t + slide * t * t * 0.5)
-        var sample := sin(phase) * volume * envelope
-        audio_playback.push_frame(Vector2(sample, sample))
+    if audio_controller != null:
+        audio_controller.play_tone(frequency, duration, volume, slide)
 
 func _play_attack_sound() -> void:
-    _play_tone(180.0, 0.055, 0.16, 420.0)
+    if audio_controller != null:
+        audio_controller.play_attack_sound()
 
 func _play_hit_sound() -> void:
-    _play_tone(78.0, 0.10, 0.20, -25.0)
+    if audio_controller != null:
+        audio_controller.play_hit_sound()
 
 func _respond(unit_id: int, words: String) -> void:
     if not sim.units.has(unit_id) or sim.units[unit_id].owner != local_slot:
@@ -570,12 +603,24 @@ func _disconnect() -> void:
     handshakes.clear()
     rates.clear()
 
+func _apply_snapshot_checked(state: Dictionary, context: String) -> bool:
+    if sim.apply_snapshot(state):
+        return true
+    var detail: String = sim.last_snapshot_error
+    _disconnect.call_deferred()
+    active = false
+    connected = false
+    _notify("Invalid %s snapshot%s" % [context, ": " + detail if not detail.is_empty() else ""])
+    return false
+
 func play_solo() -> void:
     _disconnect()
     sim.reset(true)
     active      = true
     local_slot  = 1
     accumulator = 0.0
+    if session != null:
+        session.reset_clock()
     _reset_view()
     Input.mouse_mode = Input.MOUSE_MODE_CONFINED
     _notify("Select the harvester, then right-click yellow ore. Build a barracks to train soldiers.")
@@ -593,6 +638,8 @@ func create_host() -> void:
     connected = true
     active = true
     local_slot = 1
+    if session != null:
+        session.reset_clock()
     sim.reset(false)
     _reset_view()
     _notify("LAN host ready on UDP 24560. Waiting for the red player.")
@@ -610,12 +657,12 @@ func join_host() -> void:
     _notify("Connecting to " + host_ip + "...")
 
 func _peer_joined(id: int) -> void:
-    if is_host:
-        handshakes[id] = Time.get_ticks_msec()
+    if network_session != null:
+        network_session.peer_joined(id)
 
 func _connected_to_server() -> void:
-    Input.mouse_mode = Input.MOUSE_MODE_CONFINED
-    _hello.rpc_id(1, Simulation.VERSION)
+    if network_session != null:
+        network_session.connected_to_server()
 
 @rpc("any_peer", "reliable")
 
@@ -642,7 +689,8 @@ func _accepted(version: String, slot: int, state: Dictionary) -> void:
     connected  = true
     active     = true
     local_slot = slot
-    sim.apply_snapshot(state)
+    if not _apply_snapshot_checked(state, "accepted"):
+        return
     sim.rebuild_navigation()
     _reset_view()
     _notify("Red army assigned." if slot == 2 else "Spectator mode: no orders allowed.")
@@ -655,63 +703,62 @@ func _rejected(reason: String) -> void:
     _notify(reason)
 
 func _peer_left(id: int) -> void:
-    handshakes.erase(id)
-    rates.erase(id)
-    if is_host:
-        var was_player: bool = slots.get(id, 0) == 2
-        slots.erase(id)
-        if was_player:
-            for other: int in slots:
-                if slots[other] == 0:
-                    slots[other] = 2
-                    _accepted.rpc_id(other, Simulation.VERSION, 2, sim.snapshot())
-                    break
-            _notify("Red player disconnected; army retained for reconnect.")
+    if network_session != null:
+        network_session.peer_left(id)
 
 func _connection_failed() -> void:
-    _disconnect()
-    Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-    active       = false
-    menu_visible = true
-    menu.visible = true
-    _notify("Connection failed. Check host address and UDP 24560.")
+    if network_session != null:
+        network_session.connection_failed()
 
 func _server_left() -> void:
-    _disconnect()
-    Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-    active       = false
-    menu_visible = true
-    menu.visible = true
-    _clear_selection()
-    _notify("Host disconnected. Match stopped; return to title or start a new match.")
+    if network_session != null:
+        network_session.server_left()
 
 @rpc("authority", "call_remote", "reliable", 1)
 
 func _world(state: Dictionary) -> void:
-    if state.get("version") == Simulation.VERSION and state.get("match") == sim.match_id and int(state.frame) >= sim.frame:
-        var previous_positions: Dictionary = {}
-        for id: int in sim.units:
-            previous_positions[id] = sim.units[id].pos
-        var previous_frame: int = sim.frame
-        sim.apply_snapshot(state)
-        _update_render_velocities(previous_positions, previous_frame, int(state.frame))
-        _audio_for_effects()
+    if state.get("version") != Simulation.VERSION or state.get("match") != sim.match_id:
+        return
+    if typeof(state.get("frame")) != TYPE_INT:
+        _apply_snapshot_checked(state, "world")
+        return
+    if int(state.frame) < sim.frame:
+        return
+    var previous_positions: Dictionary = {}
+    for id: int in sim.units:
+        previous_positions[id] = sim.units[id].pos
+    var previous_frame: int = sim.frame
+    if not _apply_snapshot_checked(state, "world"):
+        return
+    _update_render_velocities(previous_positions, previous_frame, int(state.frame))
+    _audio_for_effects()
 
 @rpc("authority", "reliable")
 
 func _final_state(state: Dictionary) -> void:
     if state.get("match") == sim.match_id:
-        sim.apply_snapshot(state)
+        _apply_snapshot_checked(state, "final")
 
 @rpc("authority", "reliable")
 
 func _new_match(state: Dictionary) -> void:
-    sim.apply_snapshot(state)
+    if not _apply_snapshot_checked(state, "new match"):
+        return
     sim.rebuild_navigation()
     _reset_view()
 
-# Send a player order locally or to the authoritative host.
+# Submit a player order through the command boundary.
 func issue(order: Dictionary) -> void:
+    if command_bus != null:
+        command_bus.submit(order)
+    else:
+        _execute_order(order)
+
+# Execute a validated order locally or send it to the authoritative host.
+func _execute_order(order: Dictionary) -> void:
+    if network_session != null:
+        network_session.submit_order(order)
+        return
     if not active or local_slot == 0:
         _notify("Spectators cannot issue orders.")
         return
@@ -756,7 +803,10 @@ func restart_match() -> void:
     sim.reset(not connected)
     _reset_view()
     if is_host:
-        _new_match.rpc(sim.snapshot())
+        if network_session != null:
+            network_session.broadcast_new_match(sim.snapshot())
+        else:
+            _new_match.rpc(sim.snapshot())
     _notify("New match.")
 
 func return_to_title() -> void:
@@ -780,19 +830,10 @@ func _process(delta: float) -> void:
     speech_time   = maxf(0.0, speech_time - delta)
     if speech_time <= 0.0:
         speech_unit = -1
-    if active and (is_host or not connected):
-        accumulator += minf(delta, 0.25)
-        while accumulator >= 0.05:
-            accumulator -= 0.05
-            var previous_winner: int = sim.winner
-            sim.step()
-            _audio_for_effects()
-            if is_host and previous_winner == 0 and sim.winner > 0:
-                _final_state.rpc(sim.snapshot())
-            if is_host and not slots.is_empty():
-                # One snapshot per logic tick (20 Hz) keeps guest motion fluid.
-                _world.rpc(sim.snapshot())
-    elif active and connected and not is_host:
+    if session != null:
+        session.advance(delta, active, is_host, connected)
+        accumulator = session.accumulator
+    if active and connected and not is_host:
         _smooth_guest_motion(delta)
     if is_host:
         for id: int in handshakes.keys():
@@ -849,289 +890,42 @@ func _screen_is_map(pos: Vector2) -> bool:
     var size := get_viewport().get_visible_rect().size
     return pos.x < size.x - 260 and pos.y > 52 and pos.y < size.y - 132
 
-# Translate keyboard and mouse input into selection and simulation orders.
+# Compatibility wrappers delegate input handling to InputController.
 func _unhandled_input(event: InputEvent) -> void:
-    # _input and _unhandled_input can receive different subsets of injected or
-    # platform events, so keep the anti-duplicate timestamp accurate in both.
-    if event is InputEventMouseMotion:
-        last_mouse_event_msec = Time.get_ticks_msec()
-    if event is InputEventKey and event.pressed and not event.echo:
-        if rebinding_attack:
-            if event.keycode != KEY_ESCAPE:
-                attack_keycode = event.keycode
-                rebinding_attack = false
-                attack_rebind_button.text = "Rebind attack key (current: %s)" % OS.get_keycode_string(attack_keycode)
-                _notify("Attack key set to %s." % OS.get_keycode_string(attack_keycode))
-            get_viewport().set_input_as_handled()
-            return
-        if event.keycode == KEY_ESCAPE:
-            if not build_mode.is_empty() or not pending_command.is_empty():
-                build_mode = ""
-                pending_command = ""
-            else:
-                _toggle_menu()
-        elif active and not menu_visible and event.keycode == attack_keycode:
-            attack_mode = not attack_mode
-            _notify("Attack mode %s. Left-click a target or ground." % ("ON" if attack_mode else "OFF"))
-        elif active and not menu_visible and event.keycode == KEY_B:
-            _begin_build("barracks")
-        elif active and not menu_visible and event.keycode == KEY_S:
-            _stop()
-        elif active and not menu_visible and event.keycode >= KEY_1 and event.keycode <= KEY_9:
-            _control_group_key(int(event.keycode) - int(KEY_1) + 1, event.ctrl_pressed, event.shift_pressed)
-        elif active and not menu_visible and event.keycode == KEY_TAB:
-            if selected_buildings.size() > 1:
-                building_tab_index = (building_tab_index + 1) % selected_buildings.size()
-                _notify("Building %d / %d" % [building_tab_index + 1, selected_buildings.size()])
-    if not active or menu_visible:
-        return
-    if event is InputEventMouseButton:
-        var pos: Vector2 = _screen_to_world(event.position)
-        var button := event as InputEventMouseButton
-        if button.button_index == MOUSE_BUTTON_LEFT:
-            var was_held := left_button_held
-            if button.pressed and not button.canceled:
-                left_button_held = true
-            if button.pressed and _screen_is_map(event.position):
-                # Preserve the original box when Windows emits a duplicate press
-                # while the tracked button is still held. Stale drags fall
-                # through so their lost release can be recovered below.
-                if selection_dragging and was_held:
-                    var press_msec := Time.get_ticks_msec()
-                    if press_msec - last_mouse_event_msec < 1500:
-                        return
-                if not build_mode.is_empty():
-                    _place_building(pos)
-                else:
-                    selection_dragging = true
-                    selection_start    = pos
-                    selection_current  = pos
-            elif not button.pressed and selection_dragging:
-                if not button.canceled:
-                    _finish_drag_select(pos)
-            if not button.pressed and not button.canceled:
-                left_button_held = false
-        elif button.button_index == MOUSE_BUTTON_RIGHT and button.pressed and _screen_is_map(event.position):
-            if not build_mode.is_empty():
-                build_mode = ""
-            else:
-                _right_click(pos)
-        elif event.button_index == MOUSE_BUTTON_MIDDLE:
-            middle_dragging = event.pressed
-        elif event.pressed and _screen_is_map(event.position) and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
-            var before := _screen_to_world(event.position)
-            var factor := 1.15 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / 1.15
-            camera_zoom_level = clampf(camera_zoom_level * factor, _min_zoom(), 6.0)
-            # Iterative anchor: perspective projection needs multiple passes
-            # to converge the world point under the cursor exactly.
-            for i in range(3):
-                _update_camera_transform()
-                var after := _screen_to_world(event.position)
-                camera_controller.focus += before - after
-            _update_camera_transform()
-    elif event is InputEventMouseMotion:
-        if middle_dragging:
-            camera_controller.focus += Vector2(event.relative.x, event.relative.y) / camera_zoom_level
-        if selection_dragging:
-            selection_current = _screen_to_world(event.position)
+    if input_controller != null:
+        input_controller._unhandled_input(event)
 
 func _input(event: InputEvent) -> void:
-    # _input runs before the HUD consumes events, so an active drag keeps
-    # tracking (and can complete) even while the cursor is over HUD panels.
-    if event is InputEventMouseMotion:
-        last_mouse_event_msec = Time.get_ticks_msec()
-        if selection_dragging:
-            selection_current = _screen_to_world(event.position)
-    if event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_MIDDLE:
-        middle_dragging = false
-    if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-        var button := event as InputEventMouseButton
-        var now := Time.get_ticks_msec()
-        # A second press while the button is already held mid-drag is a
-        # spurious duplicate from the input stack (seen with confined cursor
-        # on Windows): swallow it so the original box start is preserved.
-        # Stale drags (release event lost entirely) restart from this press.
-        if button.pressed and selection_dragging and left_button_held and not button.canceled:
-            if now - last_mouse_event_msec < 1500:
-                get_viewport().set_input_as_handled()
-                return
-            _finish_drag_select(selection_current)
-        last_mouse_event_msec = now
-        # Track the button ourselves: Godot's Input state is also corrupted by
-        # canceled events, so only non-canceled presses/releases update it.
-        if not button.canceled:
-            left_button_held = button.pressed
-        if not button.pressed and selection_dragging:
-            # Canceled releases (focus quirks, confined-cursor edge pressure)
-            # must not end a drag while the button is still physically held.
-            if button.canceled or left_button_held:
-                return
-            _finish_drag_select(_screen_to_world(event.position))
+    if input_controller != null:
+        input_controller._input(event)
 
-# Complete a box drag: treat tiny drags as clicks, larger ones as selections.
 func _finish_drag_select(pos: Vector2) -> void:
-    selection_dragging = false
-    if (pos - selection_start).length() * camera_zoom_level < 8:
-        _left_click(pos)
-    else:
-        _select_rect(Rect2(selection_start, pos - selection_start).abs())
+    if input_controller != null:
+        input_controller._finish_drag_select(pos)
 
 func _left_click(pos: Vector2) -> void:
-    if not pending_command.is_empty():
-        _pending_click(pos)
-        return
-    if attack_mode:
-        _attack_click(pos)
-        return
-    _clear_selection()
-    for id: int in sim.units:
-        var u: Dictionary = sim.units[id]
-        if u.owner == local_slot and (u.pos as Vector2).distance_to(pos) <= 20:
-            var now := Time.get_ticks_msec() / 1000.0
-            if id == last_click_unit and now - last_click_time <= 0.4:
-                _select_same_type_on_screen(str(u.type))
-                last_click_unit = -1
-            else:
-                selected_units.append(id)
-                last_click_unit = id
-            last_click_time = now
-            return
-    for id: int in sim.buildings:
-        if sim.buildings[id].owner == local_slot and sim.footprint(sim.buildings[id]).has_point(pos):
-            var now := Time.get_ticks_msec() / 1000.0
-            if id == last_click_building and now - last_click_building_time <= 0.4:
-                _select_same_type_buildings_on_screen(str(sim.buildings[id].type))
-                last_click_building = -1
-            else:
-                selected_building = id
-                selected_buildings.clear()
-                selected_buildings.append(id)
-                last_click_building = id
-            last_click_building_time = now
-            return
+    if input_controller != null:
+        input_controller._left_click(pos)
 
-# Double-click: grab every on-screen building of the same kind as the clicked one.
 func _select_same_type_buildings_on_screen(kind: String) -> void:
-    selected_units.clear()
-    selected_buildings.clear()
-    var half := camera_controller._visible_ground_rect().size / 2.0
-    var view := Rect2(camera_controller.focus - half, half * 2.0)
-    for id: int in sim.buildings:
-        var b: Dictionary = sim.buildings[id]
-        if b.owner == local_slot and b.type == kind and view.has_point(b.pos):
-            selected_buildings.append(id)
-    if not selected_buildings.is_empty():
-        selected_building = selected_buildings[0]
-        _notify("All %ss on screen!" % kind)
+    if input_controller != null:
+        input_controller._select_same_type_buildings_on_screen(kind)
 
-# Double-click: grab every on-screen unit of the same kind as the clicked one.
 func _select_same_type_on_screen(kind: String) -> void:
-    selected_units.clear()
-    selected_building = -1
-    var half := camera_controller._visible_ground_rect().size / 2.0
-    var view := Rect2(camera_controller.focus - half, half * 2.0)
-    for id: int in sim.units:
-        var u: Dictionary = sim.units[id]
-        if u.owner == local_slot and u.type == kind and view.has_point(u.pos):
-            selected_units.append(id)
-    if not selected_units.is_empty():
-        _respond(selected_units[0], "All %ss on screen!" % kind)
+    if input_controller != null:
+        input_controller._select_same_type_on_screen(kind)
 
 func _attack_click(pos: Vector2) -> void:
-    var kind := ""
-    var target_id := -1
-    for id: int in sim.units:
-        if (sim.units[id].pos as Vector2).distance_to(pos) <= 24:
-            kind = "unit"
-            target_id = id
-            break
-    if target_id < 0:
-        for id: int in sim.buildings:
-            if sim.footprint(sim.buildings[id]).has_point(pos):
-                kind = "building"
-                target_id = id
-                break
-    if target_id >= 0:
-        issue({"action": "attack", "units": selected_units.duplicate(), "kind": kind, "target": target_id, "force": true})
-        clicks.append({"pos": pos, "life": 0.55, "action": "attack"})
-    else:
-        issue({"action": "attack_move", "units": selected_units.duplicate(), "pos": pos})
-        clicks.append({"pos": pos, "life": 0.55, "action": "attack_move"})
-    if not selected_units.is_empty():
-        _respond(selected_units[0], "Attack order!")
-    attack_mode = false
+    if input_controller != null:
+        input_controller._attack_click(pos)
 
 func _select_rect(rect: Rect2) -> void:
-    _clear_selection()
-    for id: int in sim.units:
-        if sim.units[id].owner == local_slot and rect.has_point(sim.units[id].pos):
-            selected_units.append(id)
+    if input_controller != null:
+        input_controller._select_rect(rect)
 
-# Ctrl+N assigns the selection to group N, Shift+N adds to it, N alone recalls it.
-# A group can hold units and/or one building; recalling prefers units for orders.
 func _control_group_key(group: int, ctrl: bool, shift: bool) -> void:
-    if ctrl:
-        if selected_units.is_empty() and selected_building < 0:
-            control_groups.erase(group)
-            _notify("Group %d cleared." % group)
-            return
-        var members: Array[int] = []
-        for id: int in selected_units:
-            members.append(id)
-        var building_list: Array[int] = selected_buildings.duplicate()
-        if building_list.is_empty() and selected_building >= 0:
-            building_list.append(selected_building)
-        control_groups[group] = {"units": members, "building": selected_building, "buildings": building_list}
-        var label := "%d unit(s)" % members.size() if not members.is_empty() else "%d building(s)" % selected_buildings.size()
-        _notify("Group %d assigned: %s." % [group, label])
-        return
-    if shift:
-        if selected_units.is_empty() and selected_building < 0:
-            return
-        var merged: Dictionary = {"units": [], "building": -1}
-        if control_groups.has(group):
-            merged = (control_groups[group] as Dictionary).duplicate()
-        var current: Array[int] = []
-        for value: Variant in merged.get("units", []):
-            current.append(int(value))
-        for id: int in selected_units:
-            if not current.has(id):
-                current.append(id)
-        merged.units = current
-        if selected_building >= 0:
-            merged.building = selected_building
-        control_groups[group] = merged
-        _notify("Group %d now has %d unit(s)." % [group, current.size()])
-        return
-    if not control_groups.has(group):
-        return
-    var state: Dictionary = control_groups[group]
-    var group_units: Array[int] = []
-    for value: Variant in state.get("units", []):
-        var id := int(value)
-        if sim.units.has(id) and sim.units[id].owner == local_slot and not group_units.has(id):
-            group_units.append(id)
-    var group_building := int(state.get("building", -1))
-    if group_building >= 0 and (not sim.buildings.has(group_building) or sim.buildings[group_building].owner != local_slot):
-        group_building = -1
-    if group_units.is_empty() and group_building < 0:
-        control_groups.erase(group)
-        return
-    if not group_units.is_empty():
-        selected_units = group_units
-        selected_building = -1
-        selected_buildings.clear()
-        _respond(group_units[0], "Group %d reporting." % group)
-    else:
-        var group_buildings: Array[int] = []
-        for value: Variant in state.get("buildings", []):
-            var bid := int(value)
-            if sim.buildings.has(bid) and sim.buildings[bid].owner == local_slot and not group_buildings.has(bid):
-                group_buildings.append(bid)
-        selected_units.clear()
-        selected_buildings = group_buildings
-        selected_building = group_buildings[0] if not group_buildings.is_empty() else -1
-        _notify("Group %d building ready." % group)
+    if input_controller != null:
+        input_controller._control_group_key(group, ctrl, shift)
 
 # Guest-side smoothing: derive per-unit velocity from consecutive snapshots.
 func _update_render_velocities(previous: Dictionary, previous_frame: int, current_frame: int) -> void:
@@ -1298,15 +1092,22 @@ func _stop() -> void:
         _respond(selected_units[0], "Standing by.")
 
 func _audio_for_effects() -> void:
-    for effect: Dictionary in sim.effects:
-        var effect_frame := int(effect.get("frame", -1))
-        if effect_frame <= audio_effect_frame or not sim.can_see(local_slot, effect.to):
-            continue
-        audio_effect_frame = maxi(audio_effect_frame, effect_frame)
-        if effect.kind == "shot":
-            _play_attack_sound()
-        elif effect.kind == "death":
-            _play_hit_sound()
+    if audio_controller != null:
+        audio_controller.set_local_slot(local_slot)
+        audio_controller.consume_effects()
+
+func _on_session_tick(previous_winner: int, _current_winner: int) -> void:
+    _audio_for_effects()
+    if is_host and previous_winner == 0 and sim.winner > 0:
+        if network_session != null:
+            network_session.broadcast_final_state(sim.snapshot())
+        else:
+            _final_state.rpc(sim.snapshot())
+    if is_host and not slots.is_empty():
+        if network_session != null:
+            network_session.broadcast_world(sim.snapshot())
+        else:
+            _world.rpc(sim.snapshot())
 
 func _toggle_menu() -> void:
     menu_visible       = not menu_visible
@@ -1325,6 +1126,9 @@ func _notify(message: String) -> void:
 
 # Keep all HUD text and command-card state in one place.
 func _refresh_ui() -> void:
+    if hud_controller != null:
+        hud_controller.refresh()
+        return
     var role := "BLUE" if local_slot == 1 else ("RED" if local_slot == 2 else "SPECTATOR")
     top_label.text = "IRON FRONT   /   %s     CREDITS: %d     %02d:%02d" % [role, int(sim.money.get(local_slot, 0)), sim.frame / 1200, (sim.frame / 20) % 60]
     resource_label.text = "MINERALS  %d" % int(sim.money.get(local_slot, 0))
