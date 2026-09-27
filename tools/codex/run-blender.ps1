@@ -4,7 +4,8 @@ param(
     [string]$Action = 'version',
     [string]$Script,
     [string]$BlendFile,
-    [string]$BlenderPath
+    [string]$BlenderPath,
+    [string]$LogFile
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,8 +45,18 @@ switch ($Action) {
     }
 }
 
-$exitCode = Start-TrackedProcess -FilePath $blender -ArgumentList $blenderArguments -Label "Blender $Action" -Wait
+$startParameters = @{
+    FilePath     = $blender
+    ArgumentList = $blenderArguments
+    Label        = "Blender $Action"
+    Wait         = $true
+}
+if ($LogFile) {
+    $logPath = Resolve-ProjectPath -Path $LogFile -AllowMissing
+    $startParameters.OutputLog = $logPath
+    $startParameters.ErrorLog = $logPath + '.err'
+}
+$exitCode = Start-TrackedProcess @startParameters
 if ($exitCode -ne 0) {
     throw "Blender $Action failed with exit code $exitCode."
 }
-

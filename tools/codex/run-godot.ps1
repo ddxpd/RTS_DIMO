@@ -1,11 +1,12 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('version', 'script', 'export')]
+    [ValidateSet('version', 'import', 'script', 'export')]
     [string]$Action = 'version',
     [string]$Script,
     [string]$Preset = 'Windows Desktop',
     [string]$Output = 'build\IronFront.exe',
     [string]$GodotPath,
+    [string]$LogFile,
     [string[]]$Arguments = @()
 )
 
@@ -19,6 +20,10 @@ switch ($Action) {
     'version' {
         if ($Arguments.Count -gt 0) { throw 'The version action does not accept extra arguments.' }
         $godotArguments = @('--version')
+    }
+    'import' {
+        if ($Arguments.Count -gt 0) { throw 'The import action does not accept extra arguments.' }
+        $godotArguments = @('--headless', '--editor', '--path', $script:ProjectRoot, '--quit')
     }
     'script' {
         if (-not $Script) { throw 'The script action requires -Script res://path.' }
@@ -40,8 +45,18 @@ switch ($Action) {
     }
 }
 
-$exitCode = Start-TrackedProcess -FilePath $godot -ArgumentList $godotArguments -Label "Godot $Action" -Wait
+$startParameters = @{
+    FilePath     = $godot
+    ArgumentList = $godotArguments
+    Label        = "Godot $Action"
+    Wait         = $true
+}
+if ($LogFile) {
+    $logPath = Resolve-ProjectPath -Path $LogFile -AllowMissing
+    $startParameters.OutputLog = $logPath
+    $startParameters.ErrorLog = $logPath + '.err'
+}
+$exitCode = Start-TrackedProcess @startParameters
 if ($exitCode -ne 0) {
     throw "Godot $Action failed with exit code $exitCode."
 }
-

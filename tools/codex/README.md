@@ -9,12 +9,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\project\godot_project
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\project\godot_project\rts_host_p2p_prototype\tools\codex\run-godot.ps1 -Action export -Output build\IronFront.exe
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\project\godot_project\rts_host_p2p_prototype\tools\codex\run-network.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\project\godot_project\rts_host_p2p_prototype\tools\codex\cleanup-project-processes.ps1 -StopTracked -StopUntracked
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\project\godot_project\rts_host_p2p_prototype\tools\codex\run-exported.ps1 -DurationSeconds 5
 ```
 
 ## wrapper 范围
 
 - `run-godot.ps1`：Godot 版本检查、项目脚本执行和 Windows 导出。
 - `run-network.ps1`：项目 ENet 回归。
+- `run-exported.ps1`：启动项目内 Windows EXE 做受限 smoke run，并登记进程供清理 wrapper 回收。
 - `run-blender.ps1`：Blender 版本检查和项目内脚本执行。
 - `run-mcp.ps1`：只启动 loopback 绑定的项目 MCP/图库服务。
 - `cleanup-project-processes.ps1`：停止并报告项目拥有的进程和端口。

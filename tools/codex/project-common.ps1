@@ -188,22 +188,36 @@ function Start-TrackedProcess {
     param(
         [Parameter(Mandatory = $true)]
         [string]$FilePath,
-        [Parameter(Mandatory = $true)]
-        [string[]]$ArgumentList,
+        [AllowEmptyCollection()]
+        [string[]]$ArgumentList = @(),
         [Parameter(Mandatory = $true)]
         [string]$Label,
+        [string]$OutputLog,
+        [string]$ErrorLog,
         [switch]$Wait
     )
 
     $processArguments = ConvertTo-ProcessArguments -ArgumentList $ArgumentList
-    $process = Start-Process -FilePath $FilePath -ArgumentList $processArguments -WorkingDirectory $script:ProjectRoot -WindowStyle Hidden -PassThru
+    $startParameters = @{
+        FilePath         = $FilePath
+        ArgumentList     = $processArguments
+        WorkingDirectory = $script:ProjectRoot
+        WindowStyle      = 'Hidden'
+        PassThru          = $true
+    }
+    if ($OutputLog) {
+        $startParameters.RedirectStandardOutput = $OutputLog
+        $startParameters.RedirectStandardError = if ($ErrorLog) { $ErrorLog } else { $OutputLog + '.err' }
+    }
+    $process = Start-Process @startParameters
     Add-TrackedProcess -ProcessId $process.Id -Label $Label -Executable $FilePath
     Write-Host "Started $Label (PID $($process.Id))"
 
     if ($Wait) {
         try {
             $process.WaitForExit()
-            return $process.ExitCode
+            $process.Refresh()
+            return [int]$process.ExitCode
         } finally {
             Remove-TrackedProcess -ProcessId $process.Id
         }

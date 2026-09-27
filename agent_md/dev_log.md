@@ -53,6 +53,45 @@
 - 修复：在 `InputController._input()` 先处理 Escape，并同时检查 `keycode`/`physical_keycode`；集中取消重绑、建造/待命令和菜单切换逻辑；保留 `_unhandled_input()` 兼容路径。
 - 验证：`tests/presentation.gd` 新增菜单打开/关闭和重绑取消回归，脚本退出码 0；项目进程和端口清理完成。
 
+## 2026-09-26：地堡模型替换与动画续作
+
+- 完成：按 UUID 参考图重建低矮圆台单管地堡，替换 `assets/models/bunker.glb`，并只删除共享 Blender 源文件中的旧 `bunker` 层级，保留其他模型。
+- 完成：新增 `BunkerBody`、单管 `Barrel`、`MuzzleFlash` 和左右 `FactionLight` 节点；Godot 运行时加入地下升起建造、炮管后坐/炮口闪光和炮塔预警巡查/灯带脉冲。
+- Bug 修复：Blender 导出初次使用不兼容的 `export_selected_objects` 参数，导致 GLB 未生成；根因是 Blender 5.2.2 的 glTF operator 只接受 `use_selection`；修复为兼容参数并通过日志确认导出完成。
+- Bug 修复：Godot 视觉测试仍加载旧 9 月 24 日导入缓存；根因是 headless 脚本不会主动重建已删除的 `.godot/imported` 场景；修复 `run-godot.ps1 -Action import` 并强制重导入，视觉测试随后通过。
+- Bug 修复：新 Body 根节点被共享场景中的士兵 `Body` 自动改名为 `Body_001`；根因是 Blender 对象名全局唯一；修复为 `BunkerBody` 并同步动画/测试路径，视觉测试随后通过。
+- Bug 修复：导出游戏 smoke wrapper 传入空参数数组时 PowerShell 参数绑定失败；根因是空 `string[]` 不被当前 PowerShell 接受；修复为传递 `--smoke` 哨兵参数，并通过 5 秒存活检查。
+- 验证：视觉、玩法、功能、表现、相机、操作栏、性能和 ENet 回归通过；性能独立重跑为 `sync_visuals_ms=6.54535`；Windows 导出退出码 0，EXE smoke 运行 5 秒通过；项目进程和端口清理完成。
+
+## 2026-09-26：地堡施工灯光悬浮修复
+
+- 症状：地堡尚未建造完成时，左右警示灯保持在最终高度，悬浮在仍处于地下的主体上方。
+- 根因：施工动画只移动 `BunkerBody` 和 `Turret`，`FactionLights` 是独立兄弟节点，仅做缩放淡入，没有同步施工下沉/升起。
+- 修复：在 `assets/art/entity_visual.gd` 中记录 `FactionLights` 默认变换，新增其位置施工轨道，并在退出施工状态时恢复默认位置；保留灯光原有的缩放淡入效果。
+- 验证：`tests/visual_models.gd` 新增施工中点位置、动画轨道和完工复位断言；视觉测试、玩法/功能/表现/相机/操作栏回归、性能测试和 ENet 回归均通过；重新导出 EXE，5 秒 smoke 通过，项目进程和端口清理完成。
+
+## 2026-09-26：士兵与能量弹模型重做
+
+- 完成：以 `exec-c83c3377-171b-4b9e-b39e-5a03cb723d5d` 为参考，重建简约硬表面士兵；运行时层级改为 `ArmorCore`、`Helmet`、`Shoulder_L/R`、`Arm_L/R`、`Hips`、`Leg_L/R`、`Weapon`、`Muzzle`，并同步 idle/move/attack 动画路径。
+- 完成：阵营材质只保留在左右护肩，枪械、前臂、头盔侧面和其余装甲使用中性材质；新增蓝白发光 `assets/models/bullet.glb`，替代旧白色方点射击效果。
+- Bug 修复：首次 ENet 回归中，`frame + index` 效果键可能让 `shot` 的 Node3D 与死亡 Sprite3D 复用，随后对空 Sprite3D 写入 `modulate`。修复为在复用前检查视觉节点类型，不匹配时释放并按当前效果种类重建。
+- 验证：Blender 导出/预览、Godot import、visual_models、gameplay 64/0、features、presentation、camera、action_bar、visual_performance（`sync_visuals_ms=6.61585`）和完整 ENet 回归通过；Windows EXE 重新导出，5 秒 smoke 通过。
+
+## 2026-09-26：2D 格子血条
+
+- 完成：移除单位和建筑实体上的 3D HP `Sprite3D`，新增 `HealthGridOverlay` 自绘 2D 控件挂载到 HUD `CanvasLayer`，通过相机投影跟随实体顶部。
+- 完成：每 10 点最大生命值显示一格，最后不足 10 点的格子按比例填充；单位和建筑分别使用目标总宽自动缩放格宽，阵营色保留在已填充格中。
+- 保持：建造进度条和采集量显示不变；未修改 Simulation HP、伤害判定、快照 schema 或 ENet 协议。
+- 验证：`tests/visual_models.gd`、gameplay 64/0、presentation、features、camera、action_bar、visual performance（`sync_visuals_ms=7.2193`）和完整 ENet 回归通过；Windows EXE 重新导出，5 秒 smoke 通过。
+
+## 2026-09-26：绿色 3D 选中圈
+
+- 完成：为单位和建筑增加延迟创建的地面 `TorusMesh` 选中圈，固定使用醒目绿色发光材质，不使用阵营颜色；单位和建筑尺寸通过 `SELECTION_RING_PROFILES` 按类型配置。
+- Bug 修复：选中圈原先通过缩放和亮度脉冲表现选中状态，现已移除时间驱动的呼吸效果，保持静态大小和亮度；建筑半径改为底座半对角线加安全边距，完整覆盖底座。
+- Bug 修复：新建建筑在 `_ready()` 前收到选中状态时，原先不会创建选中圈；现由 `_ready()` 末尾补应用待处理状态，并用回归断言验证。
+- 预览：通过 Blender 生成 `build/verification/selection_ring_preview.png`，确认士兵与建筑底部的圆环可见且比例合理。
+- 验证：visual、gameplay 64/0、presentation、features、camera、action_bar、visual performance（`sync_visuals_ms=6.9522`）和完整 ENet 回归通过；Windows EXE 重新导出，5 秒 smoke 通过。
+
 ## 记录规则
 
 - 确认 bug 必须在同一条记录中写明症状、根因、具体修复和验证。

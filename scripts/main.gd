@@ -1300,6 +1300,10 @@ var build_preview_model:
     get:
         return visual_sync.build_preview_model if visual_sync != null else null
 
+var health_grid_overlay:
+    get:
+        return visual_sync.health_grid_overlay if visual_sync != null else null
+
 func _sync_visuals() -> void:
     if visual_sync != null:
         visual_sync.sync()

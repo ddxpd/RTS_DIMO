@@ -2,6 +2,17 @@ extends Node3D
 
 const Simulation = preload("res://scripts/simulation.gd")
 const EntityVisual = preload("res://assets/art/entity_visual.gd")
+const BULLET_SCENE = preload("res://assets/models/bullet.glb")
+const HealthGridOverlay = preload("res://scripts/ui/health_grid_overlay.gd")
+
+const SELECTION_RING_PROFILES := {
+    "soldier": {"radius_multiplier": 1.25, "radius_override": -1.0, "margin": 0.0},
+    "harvester": {"radius_multiplier": 1.25, "radius_override": -1.0, "margin": 0.0},
+    "base": {"radius_multiplier": 1.0, "radius_override": -1.0, "margin": 4.0},
+    "barracks": {"radius_multiplier": 1.0, "radius_override": -1.0, "margin": 4.0},
+    "refinery": {"radius_multiplier": 1.0, "radius_override": -1.0, "margin": 4.0},
+    "bunker": {"radius_multiplier": 1.0, "radius_override": -1.0, "margin": 4.0}
+}
 
 var host
 
@@ -11,14 +22,40 @@ var ore_visuals: Dictionary = {}
 var rock_visuals: Array[EntityVisual] = []
 var effect_visuals: Dictionary = {}
 var marker_visuals: Dictionary = {}
+var health_grid_overlay: HealthGridOverlay
 var selection_rect_overlay: Panel
 var build_preview_visual: MeshInstance3D
 var build_preview_model: EntityVisual
 
+
+func _selection_ring_radius(kind: String, base_radius: float, footprint_size: Vector2 = Vector2.ZERO) -> float:
+    var profile: Dictionary = SELECTION_RING_PROFILES.get(kind, {})
+    var radius_override := float(profile.get("radius_override", -1.0))
+    if radius_override >= 0.0:
+        return maxf(radius_override, 1.0)
+
+    var margin := float(profile.get("margin", 0.0))
+    if footprint_size.length_squared() > 0.0:
+        var half_diagonal := sqrt(pow(footprint_size.x * 0.5, 2.0) + pow(footprint_size.y * 0.5, 2.0))
+        return maxf(half_diagonal + margin, 1.0)
+
+    var multiplier := float(profile.get("radius_multiplier", 1.0))
+    return maxf(base_radius * multiplier + margin, 1.0)
+
 func configure(owner) -> void:
     host = owner
 
+
+func _ensure_health_grid_overlay() -> void:
+    if health_grid_overlay != null:
+        return
+    health_grid_overlay = HealthGridOverlay.new()
+    health_grid_overlay.name = "HealthGridOverlay"
+    health_grid_overlay.configure(host)
+    host.hud.add_child(health_grid_overlay)
+
 func sync() -> void:
+    _ensure_health_grid_overlay()
     _sync_rocks()
     _sync_ores()
     _sync_buildings()
@@ -120,10 +157,7 @@ func _sync_buildings() -> void:
             visual.name = "Building%d" % id
             visual.set_position_2d(b.pos)
             add_child(visual)
-            var hp_bar := _make_status_bar(Simulation.BUILD_TYPES[b.type].size.x * 0.8, 5, Color("#75c46e"))
-            hp_bar.position = Vector3(0, visual.get_model_height() + 12, 0)
-            visual.add_child(hp_bar)
-            building_visuals[id] = {"visual": visual, "hp_bar": hp_bar}
+            building_visuals[id] = {"visual": visual}
         var vis: Dictionary = building_visuals[id]
         var visual: EntityVisual = vis.visual
 
@@ -146,7 +180,20 @@ func _sync_buildings() -> void:
         else:
             visual.set_animation("idle")
 
-        _update_status_bar(vis.hp_bar, float(b.hp) / Simulation.BUILD_TYPES[b.type].hp)
+        var building_selected: bool = host.selected_buildings.has(id) or host.selected_building == id
+        var building_size: Vector2 = Simulation.BUILD_TYPES[b.type].size
+        var building_radius := _selection_ring_radius(b.type, maxf(building_size.x, building_size.y) * 0.5, building_size)
+        visual.set_selected(building_selected and visual.visible, building_radius)
+
+        health_grid_overlay.upsert_entity(
+            "building_%d" % id,
+            visual.global_position + Vector3(0, visual.get_model_height() + 12, 0),
+            int(b.hp),
+            int(Simulation.BUILD_TYPES[b.type].hp),
+            int(b.owner),
+            "building",
+            visual.visible
+        )
         if b.remaining > 0:
             if not vis.has("build_bar"):
                 var build_bar := _make_status_bar(Simulation.BUILD_TYPES[b.type].size.x * 0.8, 5, Color("#eac75b"))
@@ -157,6 +204,7 @@ func _sync_buildings() -> void:
         seen[id] = true
     for id: int in building_visuals.keys():
         if not seen.has(id):
+            health_grid_overlay.remove_entity("building_%d" % id)
             building_visuals[id].visual.queue_free()
             building_visuals.erase(id)
 
@@ -170,10 +218,7 @@ func _sync_units() -> void:
             visual.name = "Unit%d" % id
             visual.set_position_2d(u.pos)
             add_child(visual)
-            var hp_bar := _make_status_bar(30, 4, Color("#75c46e"))
-            hp_bar.position = Vector3(0, visual.get_model_height() + 12, 0)
-            visual.add_child(hp_bar)
-            unit_visuals[id] = {"visual": visual, "hp_bar": hp_bar}
+            unit_visuals[id] = {"visual": visual}
         var vis: Dictionary = unit_visuals[id]
         var visual: EntityVisual = vis.visual
 
@@ -183,7 +228,18 @@ func _sync_units() -> void:
         visual.set_flash(u.flash > 0)
         visual.set_heading(_unit_heading(u, id))
         visual.set_animation(_unit_animation_state(u))
-        _update_status_bar(vis.hp_bar, float(u.hp) / Simulation.UNIT_TYPES[u.type].hp)
+        var unit_selected: bool = host.selected_units.has(id)
+        var unit_radius := _selection_ring_radius(u.type, float(Simulation.UNIT_TYPES[u.type].radius))
+        visual.set_selected(unit_selected and visual.visible, unit_radius)
+        health_grid_overlay.upsert_entity(
+            "unit_%d" % id,
+            visual.global_position + Vector3(0, visual.get_model_height() + 12, 0),
+            int(u.hp),
+            int(Simulation.UNIT_TYPES[u.type].hp),
+            int(u.owner),
+            "unit",
+            visual.visible
+        )
 
         # Cargo bar for harvesters (reset when cargo drops to 0).
         if u.type == "harvester":
@@ -200,6 +256,7 @@ func _sync_units() -> void:
         seen[id] = true
     for id: int in unit_visuals.keys():
         if not seen.has(id):
+            health_grid_overlay.remove_entity("unit_%d" % id)
             unit_visuals[id].visual.queue_free()
             unit_visuals.erase(id)
 
@@ -269,7 +326,7 @@ func _unit_heading(u: Dictionary, id: int) -> Vector2:
 
 var _dot_texture: ImageTexture
 
-# Simple white dot for effects and click markers (tinted by modulate).
+# Simple white dot for non-projectile effects and click markers (tinted by modulate).
 func _white_dot() -> ImageTexture:
     if _dot_texture == null:
         var img := Image.create(8, 8, false, Image.FORMAT_RGBA8)
@@ -319,25 +376,40 @@ func _sync_effects() -> void:
         if not host.sim.can_see(host.local_slot, e.to):
             continue
         var key := "%d_%d" % [int(e.frame), i]
+        if effect_visuals.has(key):
+            var existing_visual = effect_visuals[key]
+            var kind_mismatch: bool = (e.kind == "shot") == (existing_visual is Sprite3D)
+            if not is_instance_valid(existing_visual) or kind_mismatch:
+                if is_instance_valid(existing_visual):
+                    existing_visual.queue_free()
+                effect_visuals.erase(key)
         if not effect_visuals.has(key):
-            var sprite := Sprite3D.new()
-            sprite.pixel_size = 2.0
-            sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-            sprite.shaded = false
-            sprite.texture = _white_dot()
-            add_child(sprite)
-            effect_visuals[key] = sprite
-        var sprite: Sprite3D = effect_visuals[key]
+            if e.kind == "shot":
+                var bullet := BULLET_SCENE.instantiate() as Node3D
+                bullet.scale = Vector3.ONE * 6.0
+                add_child(bullet)
+                effect_visuals[key] = bullet
+            else:
+                var sprite := Sprite3D.new()
+                sprite.pixel_size = 2.0
+                sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+                sprite.shaded = false
+                sprite.texture = _white_dot()
+                add_child(sprite)
+                effect_visuals[key] = sprite
+        var visual: Node3D = effect_visuals[key]
         var progress := 1.0 - float(e.life) / 10.0
         if e.kind == "shot":
-            var point := Vector3((e.from as Vector2).lerp(e.to, progress).x, 12, (e.from as Vector2).lerp(e.to, progress).y)
-            point.y = 12
-            sprite.position = point
-            sprite.modulate = Color("#ffe9a2")
+            var from_point := Vector3((e.from as Vector2).x, 12, (e.from as Vector2).y)
+            var to_point := Vector3((e.to as Vector2).x, 12, (e.to as Vector2).y)
+            visual.position = from_point.lerp(to_point, progress)
+            var direction := to_point - from_point
+            if direction.length_squared() > 0.001:
+                visual.look_at(visual.position + direction.normalized(), Vector3.UP, true)
         else:
             var pos3 := Vector3((e.to as Vector2).x, 5 + (10 - e.life) * 2, (e.to as Vector2).y)
-            sprite.position = pos3
-            sprite.modulate = Color(1, 0.6, 0.2, float(e.life) / 10)
+            visual.position = pos3
+            (visual as Sprite3D).modulate = Color(1, 0.6, 0.2, float(e.life) / 10)
         seen[key] = true
     for key: String in effect_visuals.keys():
         if not seen.has(key):

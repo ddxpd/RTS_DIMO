@@ -27,6 +27,7 @@ const TEAM_COLORS := {
     1: Color("#5fa5e0"),
     2: Color("#d66551")
 }
+const SELECTION_GREEN := Color("#65ff78")
 
 var kind := ""
 var owner_id := 1
@@ -39,6 +40,12 @@ var _target_heading := 0.0
 var _model_scale := 1.0
 var _materials: Array[Dictionary] = []
 var _faction_applied := false
+var _soldier_animation_defaults: Dictionary = {}
+var _bunker_construction_defaults: Dictionary = {}
+var selection_ring: MeshInstance3D
+var _selection_ring_material: StandardMaterial3D
+var _selection_ring_enabled := false
+var _selection_ring_radius := 1.0
 
 static var _shared_animation_libraries: Dictionary = {}
 
@@ -54,17 +61,19 @@ func _ready() -> void:
     model = MODEL_SCENES[kind].instantiate()
     add_child(model)
     model.scale = Vector3.ONE * _model_scale
+    _capture_soldier_animation_defaults()
+    _capture_bunker_construction_defaults()
     _instance_materials()
     _apply_lod_and_shadow_policy()
     _create_animation_player()
     set_faction(owner_id)
     set_animation("idle")
+    _apply_selection_ring_state()
 
 
 func _process(delta: float) -> void:
-    if absf(angle_difference(rotation.y, _target_heading)) < 0.001:
-        return
-    rotation.y = lerp_angle(rotation.y, _target_heading, minf(delta * 10.0, 1.0))
+    if absf(angle_difference(rotation.y, _target_heading)) >= 0.001:
+        rotation.y = lerp_angle(rotation.y, _target_heading, minf(delta * 10.0, 1.0))
 
 
 func set_position_2d(position_2d: Vector2) -> void:
@@ -91,12 +100,16 @@ func _forward_z() -> float:
 func set_animation(next_state: String) -> void:
     if animation_state == next_state:
         return
+    if kind == "soldier" and not animation_state.is_empty():
+        _reset_soldier_animation_state()
     # Construction scales the model inner root. Reset it when leaving that
     # state so a stopped loop cannot leave a completed building double-scaled.
     if animation_state == "construction":
         var animated_root := model.get_node_or_null(NodePath(kind))
         if animated_root != null:
             animated_root.scale = Vector3.ONE
+        if kind == "bunker":
+            _reset_bunker_construction_state()
     animation_state = next_state
     if animation_player == null or not animation_player.has_animation(next_state):
         return
@@ -130,6 +143,44 @@ func set_construction_progress(progress: float, duration: float) -> void:
     if animation_player.assigned_animation != &"construction":
         animation_player.play("construction")
     animation_player.seek(animation.length * next_progress, true)
+
+
+func set_selected(enabled: bool, radius: float = 1.0) -> void:
+    _selection_ring_enabled = enabled
+    _selection_ring_radius = maxf(radius, 1.0)
+    if enabled and selection_ring == null:
+        _create_selection_ring()
+    _apply_selection_ring_state()
+
+
+func _apply_selection_ring_state() -> void:
+    if selection_ring == null:
+        return
+    selection_ring.visible = _selection_ring_enabled
+    selection_ring.scale = Vector3.ONE * _selection_ring_radius
+
+
+func _create_selection_ring() -> void:
+    selection_ring = MeshInstance3D.new()
+    selection_ring.name = "SelectionRing"
+    var torus := TorusMesh.new()
+    torus.inner_radius = 0.88
+    torus.outer_radius = 1.0
+    torus.rings = 32
+    torus.ring_segments = 8
+    selection_ring.mesh = torus
+    selection_ring.position.y = 0.42
+    selection_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    _selection_ring_material = StandardMaterial3D.new()
+    _selection_ring_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    _selection_ring_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    _selection_ring_material.albedo_color = Color(SELECTION_GREEN, 0.9)
+    _selection_ring_material.emission_enabled = true
+    _selection_ring_material.emission = SELECTION_GREEN
+    _selection_ring_material.emission_energy_multiplier = 1.8
+    selection_ring.material_override = _selection_ring_material
+    selection_ring.visible = false
+    add_child(selection_ring)
 
 
 func set_faction(next_owner: int) -> void:
@@ -184,7 +235,18 @@ func _apply_lod_and_shadow_policy() -> void:
     # passes and fade small mechanical details at strategic zoom distances.
     var unit_core: Dictionary = {}
     if kind == "soldier":
-        unit_core = {"Body": true, "soldier_Static_Armor_FactionPaint": true, "Weapon": true}
+        unit_core = {
+            "ArmorCoreMesh": true,
+            "HelmetMesh": true,
+            "Shoulder_L_Mesh": true,
+            "Shoulder_R_Mesh": true,
+            "Arm_L_Mesh": true,
+            "Arm_R_Mesh": true,
+            "HipsMesh": true,
+            "Leg_L_Mesh": true,
+            "Leg_R_Mesh": true,
+            "WeaponMesh": true
+        }
     elif kind == "harvester":
         unit_core = {"Hull": true, "harvester_Static_Armor": true, "harvester_Static_Steel": true}
 
@@ -218,6 +280,84 @@ func _create_animation_player() -> void:
         _shared_animation_libraries[kind] = _build_animation_library()
     animation_player.add_animation_library("", _shared_animation_libraries[kind])
     animation_player.active = kind != "rock"
+
+
+func _capture_soldier_animation_defaults() -> void:
+    if kind != "soldier":
+        return
+    for node_name: String in [
+        "soldier/ArmorCore",
+        "soldier/Helmet",
+        "soldier/Arm_L",
+        "soldier/Arm_R",
+        "soldier/Hips",
+        "soldier/Leg_L",
+        "soldier/Leg_R",
+        "soldier/Weapon",
+        "soldier/Muzzle"
+    ]:
+        var node := model.get_node_or_null(NodePath(node_name))
+        if node == null:
+            continue
+        _soldier_animation_defaults[node_name] = {
+            "position": node.position,
+            "rotation": node.rotation,
+            "scale": node.scale
+        }
+
+
+func _soldier_default_transform(node_name: String, property: String, fallback: Vector3) -> Vector3:
+    var entry: Dictionary = _soldier_animation_defaults.get(node_name, {})
+    var value = entry.get(property, fallback)
+    return value if value is Vector3 else fallback
+
+
+func _reset_soldier_animation_state() -> void:
+    for node_name: String in _soldier_animation_defaults:
+        var node := model.get_node_or_null(NodePath(node_name))
+        var defaults: Dictionary = _soldier_animation_defaults[node_name]
+        if node == null:
+            continue
+        node.position = defaults.get("position", Vector3.ZERO)
+        node.rotation = defaults.get("rotation", Vector3.ZERO)
+        node.scale = defaults.get("scale", Vector3.ONE)
+
+
+func _capture_bunker_construction_defaults() -> void:
+    if kind != "bunker":
+        return
+    for node_name: String in [
+        "bunker/BunkerBody",
+        "bunker/Turret",
+        "bunker/FactionLights",
+        "bunker/FactionLights/FactionLight_L",
+        "bunker/FactionLights/FactionLight_R"
+    ]:
+        var node := model.get_node_or_null(NodePath(node_name))
+        if node == null:
+            continue
+        _bunker_construction_defaults[node_name] = {
+            "position": node.position,
+            "rotation": node.rotation,
+            "scale": node.scale
+        }
+
+
+func _bunker_default_transform(node_name: String, property: String, fallback: Vector3) -> Vector3:
+    var entry: Dictionary = _bunker_construction_defaults.get(node_name, {})
+    var value = entry.get(property, fallback)
+    return value if value is Vector3 else fallback
+
+
+func _reset_bunker_construction_state() -> void:
+    for node_name: String in _bunker_construction_defaults:
+        var node := model.get_node_or_null(NodePath(node_name))
+        var defaults: Dictionary = _bunker_construction_defaults[node_name]
+        if node == null:
+            continue
+        node.position = defaults.get("position", Vector3.ZERO)
+        node.rotation = defaults.get("rotation", Vector3.ZERO)
+        node.scale = defaults.get("scale", Vector3.ONE)
 
 
 func _build_animation_library() -> AnimationLibrary:
@@ -272,8 +412,10 @@ func _add_value_track(animation: Animation, node_name: String, property: String,
 
 func _soldier_idle() -> Animation:
     var animation := _make_animation(2.4)
-    _add_value_track(animation, "soldier/Body", "position", [Vector3(0, 1.63, 0), Vector3(0, 1.648, 0), Vector3(0, 1.63, 0)])
-    _add_value_track(animation, "soldier/Head", "rotation", [Vector3.ZERO, Vector3(0, 0.12, 0), Vector3.ZERO])
+    var armor_position := _soldier_default_transform("soldier/ArmorCore", "position", Vector3.ZERO)
+    var helmet_rotation := _soldier_default_transform("soldier/Helmet", "rotation", Vector3.ZERO)
+    _add_value_track(animation, "soldier/ArmorCore", "position", [armor_position, armor_position + Vector3(0, 0.018, 0), armor_position])
+    _add_value_track(animation, "soldier/Helmet", "rotation", [helmet_rotation, helmet_rotation + Vector3(0, 0.12, 0), helmet_rotation])
     return animation
 
 
@@ -289,10 +431,13 @@ func _soldier_move() -> Animation:
 
 func _soldier_attack() -> Animation:
     var animation := _make_animation(0.45)
+    var weapon_position := _soldier_default_transform("soldier/Weapon", "position", Vector3.ZERO)
+    var muzzle_position := _soldier_default_transform("soldier/Muzzle", "position", Vector3(0, 0, 1))
+    var right_arm_rotation := _soldier_default_transform("soldier/Arm_R", "rotation", Vector3.ZERO)
     # The visible soldier front and corrected weapon both use local +Z.
-    _add_value_track(animation, "soldier/Weapon", "position", [Vector3(0.70, 1.51, 0.52), Vector3(0.70, 1.51, 0.35), Vector3(0.70, 1.51, 0.52)])
-    _add_value_track(animation, "soldier/Muzzle", "position", [Vector3(0.70, 1.51, 0.98), Vector3(0.70, 1.51, 0.86), Vector3(0.70, 1.51, 0.98)])
-    _add_value_track(animation, "soldier/Arm_R", "rotation", [Vector3(-0.16, 0, 0), Vector3(0.10, 0, 0), Vector3(-0.16, 0, 0)])
+    _add_value_track(animation, "soldier/Weapon", "position", [weapon_position, weapon_position + Vector3(0, 0, -0.14), weapon_position])
+    _add_value_track(animation, "soldier/Muzzle", "position", [muzzle_position, muzzle_position + Vector3(0, 0, -0.14), muzzle_position])
+    _add_value_track(animation, "soldier/Arm_R", "rotation", [right_arm_rotation + Vector3(-0.16, 0, 0), right_arm_rotation + Vector3(0.10, 0, 0), right_arm_rotation + Vector3(-0.16, 0, 0)])
     return animation
 
 
@@ -365,19 +510,47 @@ func _refinery_active() -> Animation:
 
 func _bunker_idle() -> Animation:
     var animation := _make_animation(3.6)
-    _add_value_track(animation, "bunker/Turret", "rotation", [Vector3(0, PI - 0.10, 0), Vector3(0, PI + 0.10, 0), Vector3(0, PI - 0.10, 0)])
-    _add_value_track(animation, "bunker/SensorMast", "rotation", [Vector3(0, -0.04, 0), Vector3(0, 0.04, 0), Vector3(0, -0.04, 0)])
-    _add_value_track(animation, "bunker/FactionSensor", "scale", [Vector3.ONE, Vector3(1.18, 1.30, 1.18), Vector3.ONE])
+    var turret_rotation := _bunker_default_transform("bunker/Turret", "rotation", Vector3.ZERO)
+    var left_light_scale := _bunker_default_transform("bunker/FactionLights/FactionLight_L", "scale", Vector3.ONE)
+    var right_light_scale := _bunker_default_transform("bunker/FactionLights/FactionLight_R", "scale", Vector3.ONE)
+    _add_value_track(animation, "bunker/Turret", "rotation", [
+        turret_rotation + Vector3(0, -0.12, 0),
+        turret_rotation + Vector3(0, 0.12, 0),
+        turret_rotation + Vector3(0, -0.12, 0)
+    ])
+    _add_value_track(animation, "bunker/FactionLights/FactionLight_L", "scale", [
+        left_light_scale,
+        left_light_scale * 1.24,
+        left_light_scale
+    ])
+    _add_value_track(animation, "bunker/FactionLights/FactionLight_R", "scale", [
+        right_light_scale,
+        right_light_scale * 1.24,
+        right_light_scale
+    ])
     return animation
 
 
 func _bunker_fire() -> Animation:
     var animation := _make_animation(0.5)
-    _add_value_track(animation, "bunker/Turret/Barrel_L", "position", [Vector3(-0.22, 0.25, 0.60), Vector3(-0.22, 0.25, 0.48), Vector3(-0.22, 0.25, 0.60)])
-    _add_value_track(animation, "bunker/Turret/Barrel_R", "position", [Vector3(0.22, 0.25, 0.60), Vector3(0.22, 0.25, 0.48), Vector3(0.22, 0.25, 0.60)])
-    _add_value_track(animation, "bunker/Turret", "rotation", [Vector3(0, PI + 0.06, 0), Vector3(0, PI - 0.10, 0), Vector3(0, PI + 0.06, 0)])
-    _add_value_track(animation, "bunker/Turret/MuzzleFlash", "scale", [Vector3(0.04, 0.04, 0.04), Vector3(1.40, 0.75, 1.40), Vector3(0.04, 0.04, 0.04)])
-    _add_value_track(animation, "bunker/FactionSensor", "scale", [Vector3.ONE, Vector3(1.55, 1.55, 1.55), Vector3.ONE])
+    var barrel_position := _bunker_default_transform("bunker/Turret/Barrel", "position", Vector3.ZERO)
+    var turret_rotation := _bunker_default_transform("bunker/Turret", "rotation", Vector3.ZERO)
+    var muzzle_scale := _bunker_default_transform("bunker/Turret/MuzzleFlash", "scale", Vector3.ONE)
+    _add_value_track(animation, "bunker/Turret/Barrel", "position", [
+        barrel_position,
+        barrel_position + Vector3(0, 0, 0.12),
+        barrel_position
+    ])
+    _add_value_track(animation, "bunker/Turret", "rotation", [
+        turret_rotation,
+        turret_rotation + Vector3(0.035, 0, 0),
+        turret_rotation
+    ])
+    _add_value_track(animation, "bunker/Turret/MuzzleFlash", "scale", [
+        muzzle_scale,
+        Vector3(1.35, 0.75, 1.35),
+        muzzle_scale
+    ])
     return animation
 
 
@@ -392,13 +565,46 @@ func _construction_animation() -> Animation:
     # Keep this clip normalized. `set_construction_progress()` maps it to the
     # building's actual build time and seeks to the current construction ratio.
     var animation := _make_animation(1.0, false)
+    if kind == "bunker":
+        var body_position := _bunker_default_transform("bunker/BunkerBody", "position", Vector3.ZERO)
+        var turret_position := _bunker_default_transform("bunker/Turret", "position", Vector3.ZERO)
+        var lights_position := _bunker_default_transform("bunker/FactionLights", "position", Vector3.ZERO)
+        var left_light_scale := _bunker_default_transform("bunker/FactionLights/FactionLight_L", "scale", Vector3.ONE)
+        var right_light_scale := _bunker_default_transform("bunker/FactionLights/FactionLight_R", "scale", Vector3.ONE)
+        var body_hidden := body_position + Vector3(0, -0.85, 0)
+        var turret_hidden := turret_position + Vector3(0, -0.45, 0)
+        var lights_hidden := lights_position + Vector3(0, -0.85, 0)
+        _add_value_track(animation, "bunker/BunkerBody", "position", [
+            body_hidden,
+            body_hidden,
+            body_position + Vector3(0, -0.25, 0),
+            body_position
+        ])
+        _add_value_track(animation, "bunker/Turret", "position", [
+            turret_hidden,
+            turret_hidden,
+            turret_position + Vector3(0, -0.18, 0),
+            turret_position
+        ])
+        _add_value_track(animation, "bunker/FactionLights", "position", [
+            lights_hidden,
+            lights_hidden,
+            lights_position + Vector3(0, -0.25, 0),
+            lights_position
+        ])
+        _add_value_track(animation, "bunker/FactionLights/FactionLight_L", "scale", [
+            Vector3.ZERO,
+            Vector3.ZERO,
+            left_light_scale * 0.35,
+            left_light_scale
+        ])
+        _add_value_track(animation, "bunker/FactionLights/FactionLight_R", "scale", [
+            Vector3.ZERO,
+            Vector3.ZERO,
+            right_light_scale * 0.35,
+            right_light_scale
+        ])
+        return animation
     var low := Vector3(1, 0.2, 1)
     _add_value_track(animation, kind, "scale", [low, Vector3.ONE])
-    if kind == "bunker":
-        _add_value_track(animation, "bunker/BlastShutter_L", "scale", [Vector3(0.15, 0.15, 0.15), Vector3.ONE])
-        _add_value_track(animation, "bunker/BlastShutter_R", "scale", [Vector3(0.15, 0.15, 0.15), Vector3.ONE])
-        _add_value_track(animation, "bunker/Stabilizer_L", "scale", [Vector3(0.10, 0.10, 0.10), Vector3.ONE])
-        _add_value_track(animation, "bunker/Stabilizer_R", "scale", [Vector3(0.10, 0.10, 0.10), Vector3.ONE])
-        _add_value_track(animation, "bunker/SensorMast", "scale", [Vector3(0.12, 0.12, 0.12), Vector3.ONE])
-        _add_value_track(animation, "bunker/FactionSensor", "scale", [Vector3(0.05, 0.05, 0.05), Vector3.ONE])
     return animation

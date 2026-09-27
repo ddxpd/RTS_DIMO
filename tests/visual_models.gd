@@ -43,6 +43,14 @@ func _fits_footprint(box: AABB, footprint: Vector2, tolerance: float = 8.0) -> b
     return box.size.x <= footprint.x + tolerance and box.size.z <= footprint.y + tolerance
 
 
+func _ring_contains_footprint(visual: EntityVisual, footprint: Vector2) -> bool:
+    if visual.selection_ring == null or not visual.selection_ring.mesh is TorusMesh:
+        return false
+    var torus := visual.selection_ring.mesh as TorusMesh
+    var half_diagonal := sqrt(pow(footprint.x * 0.5, 2.0) + pow(footprint.y * 0.5, 2.0))
+    return visual._selection_ring_radius * torus.outer_radius >= half_diagonal
+
+
 func _check_track_count(visual: EntityVisual, animation_name: String, expected: int, message: String) -> void:
     var animation := visual.animation_player.get_animation(animation_name)
     check(animation != null and animation.get_track_count() == expected, message)
@@ -67,19 +75,32 @@ func _check_visual_forward(visual: EntityVisual, heading: Vector2, message: Stri
     check(forward.is_equal_approx(Vector3(heading.x, 0, heading.y)), message)
 
 
-func _check_attack_track(visual: EntityVisual, node_name: String, expected_z: Array, message: String) -> void:
+func _check_attack_recoil(visual: EntityVisual, node_name: String, message: String) -> void:
     var animation := visual.animation_player.get_animation("attack")
     var expected_path := "soldier/%s:position" % node_name
     for track_index: int in range(animation.get_track_count()):
         if String(animation.track_get_path(track_index)) != expected_path:
             continue
-        check(animation.get_track_count() >= 3, "%s has all attack tracks" % node_name)
-        check(animation.track_get_key_count(track_index) == expected_z.size(), "%s attack key count matches" % node_name)
-        for key_index: int in range(mini(animation.track_get_key_count(track_index), expected_z.size())):
-            var value: Vector3 = animation.track_get_key_value(track_index, key_index)
-            check(value.z > 0.0 && is_equal_approx(value.z, float(expected_z[key_index])), "%s attack key %d stays on the visible soldier front" % [node_name, key_index])
+        check(animation.track_get_key_count(track_index) == 3, "%s attack key count matches" % node_name)
+        var first: Vector3 = animation.track_get_key_value(track_index, 0)
+        var recoil: Vector3 = animation.track_get_key_value(track_index, 1)
+        var last: Vector3 = animation.track_get_key_value(track_index, 2)
+        check(first.z > recoil.z and is_equal_approx(first.z, last.z), message)
         return
-    check(false, message)
+    check(false, "%s attack recoil track exists" % node_name)
+
+
+func _check_faction_materials_on_shoulders(visual: EntityVisual) -> void:
+    var faction_meshes := 0
+    for node: Node in visual.model.find_children("*", "MeshInstance3D", true, false):
+        var mesh_instance := node as MeshInstance3D
+        for surface_index: int in range(mesh_instance.mesh.get_surface_count()):
+            var material := mesh_instance.get_active_material(surface_index)
+            if material == null or "Faction" not in material.resource_name:
+                continue
+            faction_meshes += 1
+            check(mesh_instance.get_parent().name in ["Shoulder_L", "Shoulder_R"], "Soldier team marking stays on the shoulders")
+    check(faction_meshes == 2, "Soldier exposes exactly two shoulder team markings")
 
 
 func _check_attack_muzzle_forward(visual: EntityVisual, heading: Vector2, message: String) -> void:
@@ -105,7 +126,78 @@ func run() -> void:
     await process_frame
     game._sync_visuals()
 
+    var health_overlay = game.health_grid_overlay
+    check(health_overlay != null, "Health bars use the 2D HUD overlay")
+    check(not game.unit_visuals[3].has("hp_bar"), "Soldier no longer owns a 3D health bar")
+    check(not game.building_visuals[1].has("hp_bar"), "Building no longer owns a 3D health bar")
+    var soldier_health: Dictionary = health_overlay.entries["unit_3"]
+    var base_health: Dictionary = health_overlay.entries["building_1"]
+    check(int(soldier_health.cell_count) == 10, "100 HP soldier uses ten health cells")
+    check(int(base_health.cell_count) == 80, "800 HP base uses eighty health cells")
+    game.sim.units[3].hp = 25
+    game._sync_units()
+    soldier_health = health_overlay.entries["unit_3"]
+    var soldier_fractions: Array = soldier_health.cell_fractions
+    check(
+        is_equal_approx(float(soldier_fractions[0]), 1.0)
+        and is_equal_approx(float(soldier_fractions[1]), 1.0)
+        and is_equal_approx(float(soldier_fractions[2]), 0.5),
+        "Health cells partially fill the final ten-point segment"
+    )
+    var projected_health_position: Vector2 = game.camera.unproject_position(soldier_health.world_position)
+    check(soldier_health.screen_position.is_equal_approx(projected_health_position), "Health grid tracks the 3D camera projection")
+    game.sim.units[3].hp = 100
+    game._sync_units()
+
     var soldier_visual: EntityVisual = game.unit_visuals[3].visual
+    game.selected_units.clear()
+    game.selected_units.append(3)
+    game._sync_units()
+    check(soldier_visual.selection_ring != null and soldier_visual.selection_ring.visible, "Selected soldier shows a ground ring")
+    var soldier_ring_material := soldier_visual.selection_ring.material_override as StandardMaterial3D
+    check(
+        soldier_ring_material != null
+        and soldier_ring_material.albedo_color.g > soldier_ring_material.albedo_color.r * 1.5,
+        "Selection ring uses a fixed bright green material"
+    )
+    var static_ring_scale := soldier_visual.selection_ring.scale
+    var static_ring_energy := soldier_ring_material.emission_energy_multiplier
+    soldier_visual._process(1.0)
+    check(soldier_visual.selection_ring.scale.is_equal_approx(static_ring_scale), "Selection ring scale stays static while selected")
+    check(is_equal_approx(soldier_ring_material.emission_energy_multiplier, static_ring_energy), "Selection ring brightness stays static while selected")
+    check(
+        is_equal_approx(
+            soldier_visual._selection_ring_radius,
+            float(Sim.UNIT_TYPES.soldier.radius) * game.visual_sync.SELECTION_RING_PROFILES.soldier.radius_multiplier
+        ),
+        "Soldier selection radius comes from the per-kind profile"
+    )
+    game.selected_units.append(4)
+    game._sync_units()
+    check((game.unit_visuals[4].visual as EntityVisual).selection_ring.visible, "Multi-selection shows a ring for each soldier")
+    game.selected_units.clear()
+    game.selected_building = 1
+    game.selected_buildings.append(1)
+    game._sync_buildings()
+    var base_visual: EntityVisual = game.building_visuals[1].visual
+    check(base_visual.selection_ring.visible, "Selected building shows a ground ring")
+    check(_ring_contains_footprint(base_visual, Sim.BUILD_TYPES.base.size), "Base selection ring contains the complete footprint")
+
+    var pending_selection_visual := EntityVisual.new("bunker", 1)
+    pending_selection_visual.set_selected(true, 50.0)
+    root.add_child(pending_selection_visual)
+    await process_frame
+    check(
+        pending_selection_visual.selection_ring != null and pending_selection_visual.selection_ring.visible,
+        "Selection requested before ready still creates a visible ring"
+    )
+    pending_selection_visual.queue_free()
+
+    game._clear_selection()
+    game._sync_units()
+    game._sync_buildings()
+    check(not soldier_visual.selection_ring.visible, "Clearing selection hides the ground ring")
+
     check(soldier_visual.kind == "soldier", "Soldier uses the 3D model visual")
     check(soldier_visual.owner_id == 1, "Soldier visual records blue ownership")
     check(_has_animations(soldier_visual.get_animation_names(), ["idle", "move", "attack"]), "Soldier exposes state animations")
@@ -113,16 +205,39 @@ func run() -> void:
     _check_track_count(soldier_visual, "move", 5, "Soldier move animation keeps all limb tracks")
     _check_track_count(soldier_visual, "attack", 3, "Soldier attack animation keeps recoil tracks")
     check(soldier_visual.model.find_children("*", "MeshInstance3D", true, false).size() <= 12, "Optimized soldier keeps at most 12 mesh nodes")
+    check(soldier_visual.model.get_node_or_null("soldier/ArmorCore") != null, "Soldier exposes the simplified armor core")
+    check(soldier_visual.model.get_node_or_null("soldier/Shoulder_L") != null, "Soldier exposes the left shoulder rig")
+    check(soldier_visual.model.get_node_or_null("soldier/Shoulder_R") != null, "Soldier exposes the right shoulder rig")
+    _check_faction_materials_on_shoulders(soldier_visual)
     _check_visual_forward(soldier_visual, Vector2.RIGHT, "Soldier faces east when moving east")
     _check_visual_forward(soldier_visual, Vector2.LEFT, "Soldier faces west when moving west")
     _check_visual_forward(soldier_visual, Vector2.DOWN, "Soldier faces south when moving south")
     _check_visual_forward(soldier_visual, Vector2.UP, "Soldier faces north when moving north")
-    _check_attack_track(soldier_visual, "Weapon", [0.52, 0.35, 0.52], "Soldier weapon attack track exists")
-    _check_attack_track(soldier_visual, "Muzzle", [0.98, 0.86, 0.98], "Soldier muzzle attack track exists")
+    _check_attack_recoil(soldier_visual, "Weapon", "Soldier weapon attack track exists")
+    _check_attack_recoil(soldier_visual, "Muzzle", "Soldier muzzle attack track exists")
     _check_attack_muzzle_forward(soldier_visual, Vector2.RIGHT, "Attacking soldier aims east")
     _check_attack_muzzle_forward(soldier_visual, Vector2.LEFT, "Attacking soldier aims west")
     _check_attack_muzzle_forward(soldier_visual, Vector2.DOWN, "Attacking soldier aims south")
     _check_attack_muzzle_forward(soldier_visual, Vector2.UP, "Attacking soldier aims north")
+
+    game.sim.effects = [{
+        "from": Vector2(640, 256),
+        "to": Vector2(760, 256),
+        "life": 5,
+        "kind": "shot",
+        "owner": 1,
+        "frame": game.sim.frame
+    }]
+    game._sync_effects()
+    check(game.effect_visuals.size() == 1, "Shot effect creates one projectile visual")
+    var bullet_visual := game.effect_visuals.values()[0] as Node3D
+    check(bullet_visual != null and not bullet_visual is Sprite3D, "Shot effect uses a 3D projectile model")
+    check(bullet_visual.get_node_or_null("bullet/EnergyCore") != null, "Projectile exposes the energy core mesh")
+    var bullet_direction := Vector3(1, 0, 0)
+    check(bullet_visual.global_transform.basis.z.dot(bullet_direction) > 0.85, "Projectile points along its flight direction")
+    game.sim.effects.clear()
+    game._sync_effects()
+    check(game.effect_visuals.is_empty(), "Projectile visual is removed when the shot expires")
 
     game.sim.units[3].order = "move"
     game.sim.units[3].target = Vector2(800, 300)
@@ -175,7 +290,17 @@ func run() -> void:
     var refinery_visual: EntityVisual = game.building_visuals[refinery_id].visual
     var refinery_box := _visual_world_aabb(refinery_visual)
     check(_fits_footprint(refinery_box, Sim.BUILD_TYPES.refinery.size), "Completed refinery stays within its 80x80 visual footprint")
+    game.selected_building = refinery_id
+    game.selected_buildings.clear()
+    game.selected_buildings.append(refinery_id)
+    game._sync_buildings()
+    check(_ring_contains_footprint(refinery_visual, Sim.BUILD_TYPES.refinery.size), "Refinery selection ring contains the complete footprint")
     var barracks_visual: EntityVisual = game.building_visuals[barracks_id].visual
+    game.selected_building = barracks_id
+    game.selected_buildings.clear()
+    game.selected_buildings.append(barracks_id)
+    game._sync_buildings()
+    check(_ring_contains_footprint(barracks_visual, Sim.BUILD_TYPES.barracks.size), "Barracks selection ring contains the complete footprint")
     var barracks_animation := barracks_visual.animation_player.get_animation("construction")
     check(barracks_animation.loop_mode == Animation.LOOP_NONE, "Construction animation does not loop")
     check(is_equal_approx(barracks_animation.length, 1.0), "Construction animation is normalized")
@@ -200,10 +325,13 @@ func run() -> void:
         {"kind": "bunker", "position": Vector2(1450, 1050)},
         {"kind": "base", "position": Vector2(1650, 1200)}
     ]
+    var bunker_construction_id := -1
     for case: Dictionary in construction_cases:
         var kind := str(case.kind)
         var case_time: int = Sim.BUILD_TYPES[kind].time
         var case_id: int = game.sim._add_building(1, kind, case.position, false)
+        if kind == "bunker":
+            bunker_construction_id = case_id
         game.sim.buildings[case_id].remaining = case_time / 2
         game._sync_buildings()
         var case_visual: EntityVisual = game.building_visuals[case_id].visual
@@ -212,21 +340,41 @@ func run() -> void:
         check(is_equal_approx(case_visual.animation_player.speed_scale, expected_speed), "%s construction animation matches its build time" % kind)
         check(is_equal_approx(case_visual.animation_player.current_animation_position, 0.5), "%s construction animation starts at snapshot progress" % kind)
 
+    var bunker_construction_visual: EntityVisual = game.building_visuals[bunker_construction_id].visual
+    var bunker_body := bunker_construction_visual.model.get_node("bunker/BunkerBody") as Node3D
+    var bunker_lights := bunker_construction_visual.model.get_node("bunker/FactionLights") as Node3D
+    check(bunker_body.position.y < -0.20, "Bunker construction keeps the body below ground at mid-progress")
+    check(bunker_lights.position.y < -0.20, "Bunker construction keeps the warning lights with the body")
+    _has_track(bunker_construction_visual, "construction", "bunker/FactionLights:position", "Bunker construction raises the warning lights")
+    game.sim.buildings[bunker_construction_id].remaining = 0
+    game._sync_buildings()
+    check(bunker_construction_visual.animation_state == "idle", "Completed bunker returns to idle animation")
+    check(bunker_body.position.is_equal_approx(Vector3.ZERO), "Completed bunker restores the body base position")
+
     var bunker_id: int = game.sim._add_building(1, "bunker", Vector2(1150, 760), true)
     game.sim.buildings[bunker_id].cooldown = 10
     game._sync_buildings()
     var bunker_visual: EntityVisual = game.building_visuals[bunker_id].visual
+    game.selected_building = bunker_id
+    game.selected_buildings.clear()
+    game.selected_buildings.append(bunker_id)
+    game._sync_buildings()
+    check(_ring_contains_footprint(bunker_visual, Sim.BUILD_TYPES.bunker.size), "Bunker selection ring contains the complete footprint")
+    var completed_bunker_lights := bunker_visual.model.get_node("bunker/FactionLights") as Node3D
+    check(bunker_lights.position.is_equal_approx(completed_bunker_lights.position), "Completed bunker restores the warning light position")
     check(bunker_visual.animation_state == "fire", "Bunker cooldown plays fire animation")
-    check(bunker_visual.model.get_node_or_null("bunker/Turret/Barrel_L") != null, "Bunker keeps the left barrel under the turret rig")
-    check(bunker_visual.model.get_node_or_null("bunker/Turret/Barrel_R") != null, "Bunker keeps the right barrel under the turret rig")
+    check(bunker_visual.model.get_node_or_null("bunker/Turret/Barrel") != null, "Bunker keeps the single barrel under the turret rig")
     check(bunker_visual.model.get_node_or_null("bunker/Turret/MuzzleFlash") != null, "Bunker exposes a muzzle flash node")
+    check(bunker_visual.model.get_node_or_null("bunker/FactionLights/FactionLight_L") != null, "Bunker exposes the left warning light")
+    check(bunker_visual.model.get_node_or_null("bunker/FactionLights/FactionLight_R") != null, "Bunker exposes the right warning light")
     _has_track(bunker_visual, "idle", "bunker/Turret:rotation", "Bunker idle scans the turret")
-    _has_track(bunker_visual, "idle", "bunker/FactionSensor:scale", "Bunker idle pulses the faction sensor")
-    _has_track(bunker_visual, "fire", "bunker/Turret/Barrel_L:position", "Bunker fire recoils the left barrel")
-    _has_track(bunker_visual, "fire", "bunker/Turret/Barrel_R:position", "Bunker fire recoils the right barrel")
+    _has_track(bunker_visual, "idle", "bunker/FactionLights/FactionLight_L:scale", "Bunker idle pulses the left warning light")
+    _has_track(bunker_visual, "idle", "bunker/FactionLights/FactionLight_R:scale", "Bunker idle pulses the right warning light")
+    _has_track(bunker_visual, "fire", "bunker/Turret/Barrel:position", "Bunker fire recoils the barrel")
     _has_track(bunker_visual, "fire", "bunker/Turret/MuzzleFlash:scale", "Bunker fire pulses the muzzle flash")
-    _has_track(bunker_visual, "construction", "bunker/BlastShutter_L:scale", "Bunker construction deploys the left shutter")
-    _has_track(bunker_visual, "construction", "bunker/Stabilizer_L:scale", "Bunker construction deploys the left stabilizer")
+    _has_track(bunker_visual, "construction", "bunker/BunkerBody:position", "Bunker construction rises from underground")
+    _has_track(bunker_visual, "construction", "bunker/Turret:position", "Bunker construction raises the turret")
+    _has_track(bunker_visual, "construction", "bunker/FactionLights/FactionLight_L:scale", "Bunker construction enables the left warning light")
 
     check(game.ore_visuals.size() == game.sim.ores.size(), "Every ore has a 3D visual")
     check(game.rock_visuals.size() > 0, "Rock obstacles use 3D rock models")
