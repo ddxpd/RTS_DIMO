@@ -2,6 +2,22 @@
 
 本文件保存已完成工作的压缩记录。当前待办只写入 [task_plan.md](task_plan.md)；验证数字集中在 [VERIFICATION.md](VERIFICATION.md)。
 
+## 2026-09-29：建立两级开发验证
+
+- 新增 `run-validation.ps1`：`Light` 按显式影响面选择并去重测试，`Full` 固定运行全部本地源码/表现/性能套件和完整 ENet；导出与 EXE 冒烟不属于验证等级。
+- 数值验证按实际消费者选择：普通价格/伤害/射程/速度/冷却默认只跑 Simulation，HP/时间/尺寸/半径等视觉相关数值增加 Visual；只有网络边界变化才跑 Network。
+- ENet 运行日志迁到被忽略的 `.godot/validation/<run-id>/`，不再覆盖 Git 跟踪的历史日志；统一入口输出 `VALIDATION_SUMMARY` JSON，并给同步 Godot 阶段增加超时。
+- 未修复限制：当前无界面 Godot import 在文件扫描完成后停留于编辑器生命周期。自动 import 已从 Light/Full 移除，资产变更需单独导入；连续失败的探针均已终止并完成进程清理。
+- 验证：参数拒绝、Area 解析/去重、Light Simulation+Tooling、8-wrapper Parser/execpolicy、七个本地 Full 套件、性能、完整 ENet、日志隔离和最终清理全部通过；未导出 EXE。
+
+## 2026-09-29：精简项目工作流
+
+- 将两份 PowerShell execpolicy 配置合并为单一 `default.rules`，固定 wrapper 规则由 21 条重复项缩减为 7 条候选数组规则。
+- 删除 MCP 的重复 `stop` 动作和遗留空运行时台账；服务停止统一使用完整清理 wrapper。
+- 权限自检默认只执行 PowerShell 语法和 execpolicy 静态检查，显式使用 `-ToolchainSmoke` 时才启动 Godot/Blender 版本入口并检查进程状态。
+- 收口计划、发现、进度和验证文档：活动文件只保留当前状态，完成历史集中保存在本文件。
+- 验证：PowerShell Parser、7 个 wrapper allow 断言、3 种 PowerShell 名称、裸命令拒绝、旧 MCP `stop` 拒绝、Markdown 编码/链接、残留引用和限定差异检查均通过。
+
 ## 2026-09-29：删除效果图库
 
 - 删除开发期本地素材图库、全部跟踪概念图、本地导入/垃圾桶数据和三个图库专用生成脚本。
@@ -17,7 +33,7 @@
 
 - 症状：执行开发和验证任务时出现大量 PowerShell 控制台窗口，联机回归还存在 PowerShell 再启动 PowerShell 的套用。
 - 根因：`run-network.ps1` 为 `.ps1` runner 创建了第二个 `powershell.exe`；`godot_ai` 的端口和进程身份查询反复通过 `OS.execute()` 调用 PowerShell，却没有在命令参数和 Godot 调用层同时固定无窗口模式；图库为延迟打开浏览器额外启动了 PowerShell。
-- 修复：联机 runner 改为当前 runspace 直接执行；插件统一增加 `-NonInteractive -WindowStyle Hidden` 并显式传递 `open_console=false`；图库把浏览器延迟打开移入 `server.py`；新增固定 `regression` 动作，将八项常规测试收敛到一个可信 wrapper 入口。
+- 修复：联机 runner 改为当前 runspace 直接执行；插件统一增加 `-NonInteractive -WindowStyle Hidden` 并显式传递 `open_console=false`；图库把浏览器延迟打开移入 `server.py`；八项常规测试均通过固定 Godot wrapper 执行。
 - 验证：PowerShell Parser、工具回归、八项批量 Godot 回归、完整 ENet、图库 `/api/health`、wrapper 权限自检、Windows 重新导出和 5 秒 EXE 冒烟运行全部通过；最终项目进程和端口为空。execpolicy CLI 子检查因当前 `PATH` 无 `codex` 被跳过。
 
 ## 2026-09-19：操作栏与编码规范

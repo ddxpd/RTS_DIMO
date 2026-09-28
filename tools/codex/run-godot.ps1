@@ -7,6 +7,8 @@ param(
     [string]$Output = 'build\IronFront.exe',
     [string]$GodotPath,
     [string]$LogFile,
+    [ValidateRange(0, 3600)]
+    [int]$TimeoutSeconds = 0,
     [string[]]$Arguments = @()
 )
 
@@ -49,6 +51,7 @@ $startParameters = @{
     FilePath     = $godot
     ArgumentList = $godotArguments
     Label        = "Godot $Action"
+    TimeoutSeconds = $TimeoutSeconds
     Wait         = $true
 }
 if ($LogFile) {

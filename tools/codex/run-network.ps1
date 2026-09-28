@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$GodotPath
+    [string]$GodotPath,
+    [string]$ResultDirectory
 )
 
 $ErrorActionPreference = 'Stop'
@@ -12,4 +13,14 @@ if (-not (Test-Path -LiteralPath $networkScript -PathType Leaf)) {
     throw "Network test runner was not found: $networkScript"
 }
 
-& $networkScript -GodotPath $godot
+$validationRoot = Join-Path $script:ProjectRoot '.godot\validation'
+$resultPath = if ($ResultDirectory) {
+    Resolve-ProjectPath -Path $ResultDirectory -AllowMissing
+} else {
+    Join-Path $validationRoot ('network-{0}-{1}' -f (Get-Date -Format 'yyyyMMdd-HHmmss'), $PID)
+}
+if (-not (Test-PathWithin -Candidate $resultPath -Root $validationRoot)) {
+    throw 'Network validation output must remain under .godot\validation.'
+}
+
+& $networkScript -GodotPath $godot -ResultDirectory $resultPath

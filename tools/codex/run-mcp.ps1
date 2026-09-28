@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('blender-http', 'blender-stdio', 'stop')]
+    [ValidateSet('blender-http', 'blender-stdio')]
     [string]$Action = 'blender-http',
     [ValidateRange(8000, 8999)]
     [int]$Port = 8766
@@ -26,8 +26,5 @@ switch ($Action) {
         # detach the stdio streams needed by a Codex MCP client.
         & $blenderMcp '--transport' 'stdio'
         if ($LASTEXITCODE -ne 0) { throw "Blender MCP stdio exited with code $LASTEXITCODE." }
-    }
-    'stop' {
-        & (Join-Path $PSScriptRoot 'cleanup-project-processes.ps1') -StopTracked
     }
 }

@@ -4,6 +4,3 @@ export_templates/
 # Large binaries are published via Releases, not git history
 build/IronFront.exe
 build/IronFront3D-review.exe
-
-# Project-local Codex process ledger
-.codex/runtime/

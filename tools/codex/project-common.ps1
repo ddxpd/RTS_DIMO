@@ -194,6 +194,8 @@ function Start-TrackedProcess {
         [string]$Label,
         [string]$OutputLog,
         [string]$ErrorLog,
+        [ValidateRange(0, 3600)]
+        [int]$TimeoutSeconds = 0,
         [switch]$Wait
     )
 
@@ -215,7 +217,14 @@ function Start-TrackedProcess {
 
     if ($Wait) {
         try {
-            $process.WaitForExit()
+            if ($TimeoutSeconds -gt 0) {
+                if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+                    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                    throw "$Label timed out after $TimeoutSeconds seconds."
+                }
+            } else {
+                $process.WaitForExit()
+            }
             $process.Refresh()
             return [int]$process.ExitCode
         } finally {

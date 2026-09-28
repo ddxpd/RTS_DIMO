@@ -1,30 +1,44 @@
-param([string]$GodotPath = 'D:\application\Godot_v4.7.2\Godot_v4.7.2-stable_win64_console.exe')
+param(
+    [string]$GodotPath = 'D:\application\Godot_v4.7.2\Godot_v4.7.2-stable_win64_console.exe',
+    [string]$ResultDirectory
+)
 $ErrorActionPreference = 'Stop'
 $projectDir = Split-Path -Parent $PSScriptRoot
-$resultDir = Join-Path $projectDir 'build\verification'
+$validationRoot = [IO.Path]::GetFullPath((Join-Path $projectDir '.godot\validation')).TrimEnd('\')
+$resultDir = if ($ResultDirectory) {
+    [IO.Path]::GetFullPath($ResultDirectory).TrimEnd('\')
+} else {
+    Join-Path $validationRoot ('network-{0}-{1}' -f (Get-Date -Format 'yyyyMMdd-HHmmss'), $PID)
+}
+if (-not ($resultDir.Equals($validationRoot, [StringComparison]::OrdinalIgnoreCase) -or
+    $resultDir.StartsWith($validationRoot + '\', [StringComparison]::OrdinalIgnoreCase))) {
+    throw 'Network validation output must remain under .godot\validation.'
+}
 New-Item -ItemType Directory -Force -Path $resultDir | Out-Null
 $started = @()
 try {
-    $hostProcess = Start-Process -FilePath $GodotPath -ArgumentList @('--headless','--path',$projectDir,'--log-file','build/verification/host.log','--script','res://tests/network_guest.gd','--','--role=host') -WorkingDirectory $projectDir -WindowStyle Hidden -PassThru
+    $hostLog = Join-Path $resultDir 'host.log'
+    $hostProcess = Start-Process -FilePath $GodotPath -ArgumentList @('--headless','--path',$projectDir,'--log-file',$hostLog,'--script','res://tests/network_guest.gd','--','--role=host') -WorkingDirectory $projectDir -WindowStyle Hidden -PassThru
     $started += $hostProcess
     Start-Sleep -Milliseconds 600
     foreach ($testRole in @('mismatch','guest','guest')) {
         if ($testRole -eq 'mismatch') { $roundIndex = 0 } elseif ($roundIndex -eq 0) { $roundIndex = 1 } else { $roundIndex = 2 }
-        $log = "build/verification/guest_$roundIndex.log"
+        $log = Join-Path $resultDir "guest_$roundIndex.log"
         $guestProcess = Start-Process -FilePath $GodotPath -ArgumentList @('--headless','--path',$projectDir,'--log-file',$log,'--script','res://tests/network_guest.gd','--',"--role=$testRole","--round=$roundIndex") -WorkingDirectory $projectDir -WindowStyle Hidden -PassThru
         $started += $guestProcess
         if ($roundIndex -eq 1) {
             Start-Sleep -Milliseconds 1000
-            $spectatorProcess = Start-Process -FilePath $GodotPath -ArgumentList @('--headless','--path',$projectDir,'--log-file','build/verification/spectator.log','--script','res://tests/network_guest.gd','--','--role=spectator') -WorkingDirectory $projectDir -WindowStyle Hidden -PassThru
+            $spectatorLogPath = Join-Path $resultDir 'spectator.log'
+            $spectatorProcess = Start-Process -FilePath $GodotPath -ArgumentList @('--headless','--path',$projectDir,'--log-file',$spectatorLogPath,'--script','res://tests/network_guest.gd','--','--role=spectator') -WorkingDirectory $projectDir -WindowStyle Hidden -PassThru
             $started += $spectatorProcess
             if (-not $spectatorProcess.WaitForExit(6000)) { throw 'Spectator timed out' }
-            $spectatorLog = Get-Content -Raw -LiteralPath (Join-Path $resultDir 'spectator.log')
+            $spectatorLog = Get-Content -Raw -LiteralPath $spectatorLogPath
             $spectatorLog = $spectatorLog -replace 'ERROR: Failed to read the root certificate store\.', ''
             if ($spectatorLog -match 'SCRIPT ERROR|ERROR:' -or $spectatorLog -notmatch 'NETWORK_TEST PASS') { throw $spectatorLog }
             Write-Output $spectatorLog
         }
         if (-not $guestProcess.WaitForExit(110000)) { throw "Guest $roundIndex timed out" }
-        $text = Get-Content -Raw -LiteralPath (Join-Path $projectDir $log)
+        $text = Get-Content -Raw -LiteralPath $log
         $text = $text -replace 'ERROR: Failed to read the root certificate store\.', ''
         if ($text -match 'SCRIPT ERROR|NETWORK_TEST.*Timeout|ERROR:' -or $text -notmatch 'NETWORK_TEST PASS') { throw "Guest $roundIndex failed: $text" }
         Write-Output $text
@@ -41,3 +55,4 @@ try {
         if (-not $testProcess.HasExited) { Stop-Process -Id $testProcess.Id -Force }
     }
 }
+Write-Output "NETWORK_LOG_DIR $resultDir"
