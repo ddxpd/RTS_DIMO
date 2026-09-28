@@ -7,6 +7,7 @@
 
 - Markdown authorization rule:
   - Existing Markdown files whose basename is not `AGENTS.md` may be edited as needed without repeated user confirmation.
+  - Edit those existing non-`AGENTS.md` Markdown files only through workspace-scoped mechanisms such as `apply_patch`. Do not use shell or `cmd` write commands, and do not request a retry without sandbox, solely to edit or validate them. If a sandboxed attempt fails, switch to a workspace-scoped edit or read mechanism; if none can complete the operation, report the limitation instead of requesting escalation.
   - Creating or modifying any file whose basename is `AGENTS.md`, at any path in the repository, requires the user's explicit prior consent. A user request that explicitly asks for that creation or modification counts as consent for the requested scope only.
   - Before creating any other new Markdown file, ask the user how future edits to that file should be authorized and wait for an answer. Offer persistent pre-authorization, confirmation before every edit, or a user-defined limited scope; record the selected policy in `agent_md/authorization_log.md` before creating the file.
   - These Markdown-specific permissions do not override system or sandbox approvals, security restrictions, destructive-action safeguards, remote-upload rules, or large-file distribution rules.
