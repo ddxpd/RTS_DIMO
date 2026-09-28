@@ -41,6 +41,24 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = ["powershell.exe", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\run-exported.ps1"],
+    decision = "allow",
+    justification = "Run the exported game smoke check through the project-pinned wrapper.",
+)
+
+prefix_rule(
+    pattern = ["powershell", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\run-exported.ps1"],
+    decision = "allow",
+    justification = "Run the exported game smoke check through the project-pinned wrapper.",
+)
+
+prefix_rule(
+    pattern = ["C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\run-exported.ps1"],
+    decision = "allow",
+    justification = "Run the exported game smoke check through the project-pinned wrapper.",
+)
+
+prefix_rule(
     pattern = ["powershell.exe", "-NoProfile", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\run-blender.ps1"],
     decision = "allow",
     justification = "Run Blender only through the project-pinned background wrapper.",

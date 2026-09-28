@@ -18,7 +18,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\project\godot_project
 - `run-network.ps1`：项目 ENet 回归。
 - `run-exported.ps1`：启动项目内 Windows EXE 做受限 smoke run，并登记进程供清理 wrapper 回收。
 - `run-blender.ps1`：Blender 版本检查和项目内脚本执行。
-- `run-mcp.ps1`：只启动 loopback 绑定的项目 MCP/图库服务。
+- `run-mcp.ps1`：只启动 loopback 绑定的项目 MCP 服务。
 - `cleanup-project-processes.ps1`：停止并报告项目拥有的进程和端口。
 
 服务 ledger 写入用户临时目录，不写入仓库。wrapper 只允许本地项目路径；外部网络和未列出的解释器调用仍需单独审批。

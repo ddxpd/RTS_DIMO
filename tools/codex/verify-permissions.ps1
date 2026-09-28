@@ -9,6 +9,8 @@ $requiredFiles = @(
     (Join-Path $script:ProjectRoot '.codex\rules\default.rules'),
     (Join-Path $PSScriptRoot 'run-godot.ps1'),
     (Join-Path $PSScriptRoot 'run-blender.ps1'),
+    (Join-Path $PSScriptRoot 'run-network.ps1'),
+    (Join-Path $PSScriptRoot 'run-exported.ps1'),
     (Join-Path $PSScriptRoot 'run-mcp.ps1'),
     (Join-Path $PSScriptRoot 'cleanup-project-processes.ps1')
 )

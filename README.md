@@ -7,7 +7,6 @@ Iron Front 是一个 Godot 4 RTS 主机对等联机原型，当前分支包含 3
 - Windows 构建：`build/IronFront.exe`（当前导出使用嵌入资源）。
 - 源码验证：使用 `tools/codex/run-godot.ps1` 和 `tools/codex/run-network.ps1`，不要直接调用未固定路径的 Godot/Python。
 - 局域网：主机使用 `Create LAN Host`，客户端输入主机 IP 后选择 `Join Host`；默认 UDP 端口为 `24560`。
-- 效果图库：在项目根目录运行 `tools/effect-gallery/start.ps1`。
 
 ## 基本操作
 

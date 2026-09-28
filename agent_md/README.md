@@ -25,18 +25,18 @@
 | `game_rules_zh.md` | 当前可玩规则和数值参考 | 规则变化时更新 |
 | `dev_log.md` | 按日期保存的历史实现和 bug 修复 | 只追加或压缩重复历史 |
 
-仓库外部的项目自有说明还包括根目录 `README.md`、`tools/codex/README.md` 和 `tools/effect-gallery/README.md`；第三方插件 `addons/godot_ai/README.md` 不改动。
+仓库外部的项目自有说明还包括根目录 `README.md` 和 `tools/codex/README.md`；第三方插件 `addons/godot_ai/README.md` 本次同步翻译，但不纳入项目维护范围。
 
 ## 当前状态（2026-09-25）
 
 - 运行时职责拆分、快照边界校验和现有回归已完成。
 - 当前未完成重构集中在 `task_plan.md` 的架构后续项；不要从旧历史条目的复选框判断状态。
 - 最近验证基线：gameplay 64/0，presentation、visual、features、camera、action-bar 通过，ENet 多进程回归通过，Windows 导出进程检查通过。
-- MCP 测试发现当前仍为 0 个已注册 suite；这是已记录的测试基础设施限制。
+- MCP 测试发现当前仍为 0 个已注册测试套件；这是已记录的测试基础设施限制。
 
 ## 维护规则
 
 - 计划写 `task_plan.md`，不要把新计划塞进历史日志。
 - 验证数字写 `VERIFICATION.md`，`progress.md` 只保留摘要。
-- 已解决问题必须记录症状、根因、修复和验证；未解决问题必须明确标记 `unfixed`。
-- 所有项目自有文档使用 UTF-8；第三方 `addons/godot_ai/README.md` 不在本目录维护范围内。
+- 已解决问题必须记录症状、根因、修复和验证；未解决问题必须明确标记为“未修复”。
+- 所有项目自有文档使用 UTF-8；第三方 `addons/godot_ai/README.md` 虽已同步翻译，但不在本目录维护范围内。

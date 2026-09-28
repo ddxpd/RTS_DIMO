@@ -5,10 +5,5 @@ export_templates/
 build/IronFront.exe
 build/IronFront3D-review.exe
 
-# Local effect gallery data and runtime cache
-tools/effect-gallery/library/
-tools/effect-gallery/.trash/
-tools/effect-gallery/__pycache__/
-
 # Project-local Codex process ledger
 .codex/runtime/

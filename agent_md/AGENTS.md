@@ -2,10 +2,14 @@
 
 - The user authorizes routine file inspection, code edits, builds, exports, and test/script execution within this project without repeated conversational confirmation, provided the action does not involve system security.
 - Preserve user data. This permission does not authorize unrelated destructive actions, changes to system security, or bypassing platform-enforced approvals.
-- Verify gameplay and multiplayer behavior before claiming completion. Compilation or successful export alone does not establish functional correctness.
+- Verify the behavior affected by the change before claiming completion. Gameplay and multiplayer verification are required only when the change can affect those areas; compilation or export alone is insufficient when runtime behavior is in scope.
 - Report unfinished features and test limitations explicitly. Exported EXE and its adjacent PCK must be distributed together unless embedded packaging is configured.
 
-- Once the user has explicitly authorized an operation during game development, treat that authorization as persistent for subsequent equivalent work in this project and do not ask for repeated confirmation, unless system security or a materially different irreversible action is involved.
+- Markdown authorization rule:
+  - Existing Markdown files whose basename is not `AGENTS.md` may be edited as needed without repeated user confirmation.
+  - Creating or modifying any file whose basename is `AGENTS.md`, at any path in the repository, requires the user's explicit prior consent. A user request that explicitly asks for that creation or modification counts as consent for the requested scope only.
+  - Before creating any other new Markdown file, ask the user how future edits to that file should be authorized and wait for an answer. Offer persistent pre-authorization, confirmation before every edit, or a user-defined limited scope; record the selected policy in `agent_md/authorization_log.md` before creating the file.
+  - These Markdown-specific permissions do not override system or sandbox approvals, security restrictions, destructive-action safeguards, remote-upload rules, or large-file distribution rules.
 
 - GitHub upload rule: NEVER execute or proactively offer a git push or other GitHub upload unless the user actively requests it in their own message ("我主动要求才推送"). When the user does request an upload, confirm scope (especially large binaries) before pushing. Local edits, commits, builds, and exports may proceed without asking.
 - Bug record format rule: when recording a confirmed bug in the development log, the entry must pair the bug with its fix method at the same location — symptom, root cause, concrete fix implementation, and verification. Never record a bug without its fix (or an explicit "unfixed" note).
@@ -14,11 +18,18 @@
 
 - MCP development rule: use the project's MCP integration under addons/godot_ai when it is useful for development, testing, or debugging. The user authorizes this MCP usage for this project; do not ask for repeated approval for equivalent use.
 
-- Build and validation rule: after every project modification, unless the user explicitly requests otherwise, generate a fresh Windows EXE and verify the game by running it. Export success alone is insufficient; use the project MCP for gameplay validation when available.
+- Risk-based validation rule: run the smallest sufficient validation set for the changed behavior, then expand only when a focused check fails, shared dependencies make the impact broader, or the user requests broader coverage. Always report what ran, what was skipped, and why.
+  - Documentation, planning, rules, and logs: check only the changed text, links, encoding, Markdown structure, and scoped diff hygiene. Do not start Godot/Blender, run gameplay or ENet, or export an EXE.
+  - Tool wrappers: run syntax checks and the affected wrapper or service path. Run ENet only when the network runner or networking behavior changed; run export/smoke only when the export or executable-launch path changed; do not run unrelated gameplay, visual, or performance suites.
+  - Gameplay or simulation code: run the focused affected tests and the core gameplay suite when shared simulation behavior changed. Add multiplayer only for RPC, authority, command routing, snapshots, deterministic timing, or other network-visible state.
+  - UI, presentation, visual code, and assets: run the relevant presentation/visual/import checks. Add performance only for hot-path or scale-sensitive changes, and add multiplayer only when replicated state or network presentation is affected.
+  - Networking code or protocol: run focused/core checks plus the full ENet regression.
+  - Export presets, packaging, executable startup, or requested binary delivery: generate a fresh Windows EXE and run the exported smoke check. A fresh EXE is not required for unrelated source or documentation changes.
+  - Full regression, ENet, export, and smoke together are reserved for release milestones, broad cross-system/core-architecture changes, explicit user requests, or focused failures that indicate wider regression risk.
 
-- Trusted tool wrapper rule: invoke Godot, Blender, project MCP services, and their Python runtimes through the fixed entry points under `tools/codex/`. For Codex execpolicy matching, use `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <absolute-wrapper-path> ...`; do not replace this with a broad raw `powershell`, `python`, Godot, or Blender allow rule.
+- Trusted tool wrapper rule: invoke Godot, Blender, project MCP services, tests, exports, and cleanup through the fixed PowerShell entry points under `tools/codex/`. For Codex execpolicy matching, use `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <absolute-wrapper-path> ...`; do not replace these with broad raw PowerShell, Python, Godot, or Blender allow rules.
 - Local-network rule: wrapper-managed MCP/Python services may bind only to `127.0.0.1`/`localhost`. External network access remains approval-gated.
-- Process cleanup rule: before finishing any task that starts Godot, Blender, an exported game, MCP, or Python services, run `tools/codex/cleanup-project-processes.ps1 -StopTracked -StopUntracked`, then run it again with `-ReportOnly`. Do not claim completion while project-owned processes or ports remain. Do not stop unrelated or shared infrastructure processes; when ownership is ambiguous, report the PID and command line instead.
+- Process cleanup rule: before finishing any task that starts Godot, Blender, an exported game, MCP, or Python services, run `tools/codex/cleanup-project-processes.ps1 -StopTracked -StopUntracked` once; that command must re-query and fail if project processes or ports remain. Run a separate `-ReportOnly` pass only after background-service work, interrupted/failed cleanup, ambiguous process ownership, release handoff, or an explicit user request. Never stop unrelated or shared infrastructure processes; when ownership is ambiguous, report the PID and command line instead.
 
 ## Coding style
 - Use four-space indentation consistently within new or reformatted GDScript blocks.

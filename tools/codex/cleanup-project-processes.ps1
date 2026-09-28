@@ -70,7 +70,7 @@ if ($StopUntracked) {
     $state = Get-RelevantProcessState
 }
 
-$ports = @(24560, 8765, 8766)
+$ports = @(24560, 8766)
 $listeners = @()
 foreach ($port in $ports) {
     $listeners += @(Get-NetTCPConnection -State Listen -LocalAddress 127.0.0.1 -LocalPort $port -ErrorAction SilentlyContinue)
@@ -90,7 +90,7 @@ if ($state.Shared.Count -gt 0) {
 }
 
 if ($listeners.Count -eq 0) {
-    Write-Output 'PROJECT_PORTS none (checked 24560, 8765, 8766)'
+    Write-Output 'PROJECT_PORTS none (checked 24560, 8766)'
 } else {
     Write-Output 'PROJECT_PORTS'
     $listeners | Select-Object LocalAddress, LocalPort, OwningProcess | Format-Table -AutoSize
