@@ -4,6 +4,7 @@ const Simulation = preload("res://scripts/simulation.gd")
 const EntityVisual = preload("res://assets/art/entity_visual.gd")
 const BULLET_SCENE = preload("res://assets/models/bullet.glb")
 const HealthGridOverlay = preload("res://scripts/ui/health_grid_overlay.gd")
+const DestinationMarker = preload("res://scripts/ui/destination_marker.gd")
 
 const SELECTION_RING_PROFILES := {
     "soldier": {"radius_multiplier": 1.25, "radius_override": -1.0, "margin": 0.0},
@@ -15,6 +16,7 @@ const SELECTION_RING_PROFILES := {
 }
 
 var host
+var last_fog_key := ""
 
 var unit_visuals: Dictionary = {}
 var building_visuals: Dictionary = {}
@@ -72,6 +74,8 @@ func _set_visual_visible(visual: EntityVisual, next_visible: bool) -> void:
         visual.animation_player.active = next_visible
 
 func _sync_rocks() -> void:
+    if host.sim.map_id != "prototype":
+        return
     if rock_visuals.is_empty():
         # Tile rock clusters across each obstacle footprint.
         var rock_index := 0
@@ -120,8 +124,16 @@ func _sync_ores() -> void:
         if not ore_visuals.has(id):
             var visual := EntityVisual.new("ore", 1)
             visual.name = "Ore%d" % id
-            visual.set_position_2d(ore.pos)
+            visual.set_position_2d(ore.pos, host.sim.terrain.height_at(ore.pos))
             add_child(visual)
+            if host.sim.map_id == "desert_quarry":
+                for entry in visual._materials:
+                    entry.material.emission_enabled = false
+                    entry.material.metallic = 0.0
+                    entry.material.roughness = 0.9
+                    entry.material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+                    entry.material.albedo_color = Color("#b69a63")
+                    entry.base_color = entry.material.albedo_color
             var label := Label3D.new()
             label.text = str(ore.amount)
             label.font_size = 32
@@ -136,7 +148,7 @@ func _sync_ores() -> void:
 
         # Fog of war: only render ores the local player can currently see.
         _set_visual_visible(visual, ore.amount > 0 and host.sim.can_see(host.local_slot, ore.pos))
-        visual.set_position_2d(ore.pos)
+        visual.set_position_2d(ore.pos, host.sim.terrain.height_at(ore.pos))
         var label: Label3D = vis.label
         if int(vis.get("last_amount", -1)) != ore.amount:
             label.text = str(ore.amount)
@@ -155,7 +167,7 @@ func _sync_buildings() -> void:
         if not building_visuals.has(id):
             var visual := EntityVisual.new(b.type, b.owner)
             visual.name = "Building%d" % id
-            visual.set_position_2d(b.pos)
+            visual.set_position_2d(b.pos, host.sim.terrain.height_at(b.pos))
             add_child(visual)
             building_visuals[id] = {"visual": visual}
         var vis: Dictionary = building_visuals[id]
@@ -163,7 +175,7 @@ func _sync_buildings() -> void:
 
         # Fog: enemy buildings only render when currently visible.
         _set_visual_visible(visual, b.owner == host.local_slot or host.sim.can_see(host.local_slot, b.pos))
-        visual.set_position_2d(b.pos)
+        visual.set_position_2d(b.pos, host.sim.terrain.height_at(b.pos))
         visual.set_flash(b.flash > 0)
         visual.set_construction_tint(b.remaining > 0)
         if b.remaining > 0:
@@ -216,7 +228,7 @@ func _sync_units() -> void:
         if not unit_visuals.has(id):
             var visual := EntityVisual.new(u.type, u.owner)
             visual.name = "Unit%d" % id
-            visual.set_position_2d(u.pos)
+            visual.set_position_2d(u.pos, host.sim.terrain.height_at(u.pos))
             add_child(visual)
             unit_visuals[id] = {"visual": visual}
         var vis: Dictionary = unit_visuals[id]
@@ -224,13 +236,15 @@ func _sync_units() -> void:
 
         # Fog: enemy units only render when currently visible.
         _set_visual_visible(visual, u.owner == host.local_slot or host.sim.can_see(host.local_slot, u.pos))
-        visual.set_position_2d(u.pos)
+        visual.set_position_2d(u.pos, host.sim.terrain.height_at(u.pos))
         visual.set_flash(u.flash > 0)
         visual.set_heading(_unit_heading(u, id))
         visual.set_animation(_unit_animation_state(u))
         var unit_selected: bool = host.selected_units.has(id)
         var unit_radius := _selection_ring_radius(u.type, float(Simulation.UNIT_TYPES[u.type].radius))
         visual.set_selected(unit_selected and visual.visible, unit_radius)
+        if visual.selection_ring != null:
+            visual.selection_ring.global_rotation = _surface_rotation(u.pos)
         health_grid_overlay.upsert_entity(
             "unit_%d" % id,
             visual.global_position + Vector3(0, visual.get_model_height() + 12, 0),
@@ -262,7 +276,7 @@ func _sync_units() -> void:
 
 
 func _unit_animation_state(u: Dictionary) -> String:
-    if u.order == "attack":
+    if u.order in ["attack", "attack_move"] and int(u.attack_id) >= 0:
         return "attack" if _unit_in_attack_range(u) else "move"
     if u.order in ["move", "attack_move"]:
         return "move"
@@ -276,7 +290,7 @@ func _unit_animation_state(u: Dictionary) -> String:
 
 
 func _unit_destination(u: Dictionary) -> Vector2:
-    if u.order == "attack":
+    if u.order in ["attack", "attack_move"] and int(u.attack_id) >= 0:
         if u.attack_kind == "unit" and host.sim.units.has(int(u.attack_id)):
             return host.sim.units[int(u.attack_id)].pos
         if u.attack_kind == "building" and host.sim.buildings.has(int(u.attack_id)):
@@ -400,14 +414,14 @@ func _sync_effects() -> void:
         var visual: Node3D = effect_visuals[key]
         var progress := 1.0 - float(e.life) / 10.0
         if e.kind == "shot":
-            var from_point := Vector3((e.from as Vector2).x, 12, (e.from as Vector2).y)
-            var to_point := Vector3((e.to as Vector2).x, 12, (e.to as Vector2).y)
+            var from_point := Vector3((e.from as Vector2).x, host.sim.terrain.height_at(e.from) + 40, (e.from as Vector2).y)
+            var to_point := Vector3((e.to as Vector2).x, host.sim.terrain.height_at(e.to) + 24, (e.to as Vector2).y)
             visual.position = from_point.lerp(to_point, progress)
             var direction := to_point - from_point
             if direction.length_squared() > 0.001:
                 visual.look_at(visual.position + direction.normalized(), Vector3.UP, true)
         else:
-            var pos3 := Vector3((e.to as Vector2).x, 5 + (10 - e.life) * 2, (e.to as Vector2).y)
+            var pos3 := Vector3((e.to as Vector2).x, host.sim.terrain.height_at(e.to) + 5 + (10 - e.life) * 2, (e.to as Vector2).y)
             visual.position = pos3
             (visual as Sprite3D).modulate = Color(1, 0.6, 0.2, float(e.life) / 10)
         seen[key] = true
@@ -418,22 +432,32 @@ func _sync_effects() -> void:
 
 func _sync_markers() -> void:
     var seen := {}
-    for i: int in host.clicks.size():
-        var click: Dictionary = host.clicks[i]
-        var key := "click_%d" % i
+    for click: Dictionary in host.clicks:
+        var key := "click_%d" % int(click.id)
+        var animated: bool = click.action in ["move", "attack", "attack_move"]
         if not marker_visuals.has(key):
-            var sprite := Sprite3D.new()
-            sprite.pixel_size = 3.0
-            sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-            sprite.shaded = false
-            sprite.texture = _white_dot()
-            add_child(sprite)
-            marker_visuals[key] = sprite
-        var sprite: Sprite3D = marker_visuals[key]
-        var pos3 := Vector3((click.pos as Vector2).x, 5, (click.pos as Vector2).y)
-        sprite.position = pos3
-        var p: float = 1.0 - click.life / 0.55
-        sprite.modulate = Color("#ffc359", 1.0 - p)
+            if animated:
+                var marker := DestinationMarker.new()
+                marker.configure(click.action, click.pos)
+                marker.position.y += host.sim.terrain.height_at(click.pos)
+                marker.rotation = _surface_rotation(click.pos)
+                add_child(marker)
+                marker_visuals[key] = marker
+            else:
+                var sprite := Sprite3D.new()
+                sprite.pixel_size = 3.0
+                sprite.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+                sprite.shaded = false
+                sprite.texture = _white_dot()
+                sprite.position = Vector3((click.pos as Vector2).x, host.sim.terrain.height_at(click.pos) + 5, (click.pos as Vector2).y)
+                add_child(sprite)
+                marker_visuals[key] = sprite
+        if animated:
+            var marker: DestinationMarker = marker_visuals[key]
+            marker.set_age(float(click.duration) - float(click.life))
+        else:
+            var sprite: Sprite3D = marker_visuals[key]
+            sprite.modulate = Color("#ffc359", clampf(float(click.life) / float(click.duration), 0.0, 1.0))
         seen[key] = true
     for key: String in marker_visuals.keys():
         if not seen.has(key):
@@ -483,10 +507,10 @@ func _sync_build_preview() -> void:
             build_preview_visual.material_override = surface
             add_child(build_preview_visual)
         build_preview_model.visible = true
-        build_preview_model.set_position_2d(pos)
+        build_preview_model.set_position_2d(pos, host.sim.terrain.height_at(pos))
         build_preview_model.set_animation("idle")
         build_preview_visual.visible = true
-        build_preview_visual.position = Vector3(pos.x, 0.5, pos.y)
+        build_preview_visual.position = Vector3(pos.x, host.sim.terrain.height_at(pos) + 0.5, pos.y)
         build_preview_visual.scale = Vector3(size.x / 100.0, 1, size.y / 100.0)
         build_preview_visual.get_active_material(0).albedo_color = Color(0.45, 1, 0.45, 0.3) if valid else Color(1, 0.3, 0.3, 0.3)
     else:
@@ -496,6 +520,10 @@ func _sync_build_preview() -> void:
             build_preview_visual.visible = false
 
 func _sync_fog() -> void:
+    var key := "%d:%d:%d" % [host.sim.match_id, host.local_slot, int(host.sim.frame / 4)]
+    if key == last_fog_key:
+        return
+    last_fog_key = key
     if host.local_slot in [1, 2]:
         for y in range(Simulation.GRID.y):
             for x in range(Simulation.GRID.x):
@@ -506,3 +534,22 @@ func _sync_fog() -> void:
                 else:
                     host.fog_image.set_pixel(x, y, Color(0, 0, 0, 0))
         host.fog_texture.update(host.fog_image)
+func _surface_rotation(point: Vector2) -> Vector3:
+    var gradient: Vector2 = host.sim.terrain.gradients[host.sim.terrain.cell_index(point)]
+    return Vector3(-atan(gradient.y), 0.0, atan(gradient.x))
+
+func reset_world() -> void:
+    last_fog_key = ""
+    for child in get_children():
+        child.free()
+    unit_visuals.clear()
+    building_visuals.clear()
+    ore_visuals.clear()
+    rock_visuals.clear()
+    effect_visuals.clear()
+    marker_visuals.clear()
+    build_preview_model = null
+    build_preview_visual = null
+    if health_grid_overlay != null:
+        health_grid_overlay.entries.clear()
+        health_grid_overlay.queue_redraw()

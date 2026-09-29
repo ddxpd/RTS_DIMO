@@ -23,6 +23,10 @@
 
 ## 持续规则
 
+- 2026-09-29：用户要求所有效果图统一保存到项目 `assets/concept_art/`，今后生成的效果图、概念图和预览方案图均适用，包括仅用于对话比较的图片。生成工具若先输出到默认目录，应将最终图片复制到该项目目录，使用可辨识的主题及版本文件名，避免覆盖已有图片；回复中提供项目内保存位置。本次三张地图地形效果图也按此规则归档。
+
+- 2026-09-29：用户要求“就按建议来做”，执行保留沙箱、修正普通文件编辑流程、补齐固定脚本入口的方案。项目内普通 PS1 和已有非 AGENTS.md 的 MD 可按任务需要直接编辑，不重复进行对话确认；新增 MD 仍沿用先询问后续权限的规则。本次不修改任何 AGENTS.md，不授予任意解释器、系统安全变更或远程上传权限；平台审批独立生效。
+
 - 2026-09-25 | commit `b1f2883` and push `origin/feature/3d-models` | remote upload | User selected source/docs/tools only; current EXE excluded from the new commit | Push also uploaded 3 historical LFS objects (about 330 MB) because the remote branch lacked objects referenced by earlier commits; current EXE remains local.
 
 - 本地读写、测试、导出和 commit 属于项目授权范围；远程 push、远程分支和大文件上传必须由用户在当前请求中主动提出。

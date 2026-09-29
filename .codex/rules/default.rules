@@ -4,6 +4,12 @@
 # approval-gated.
 
 prefix_rule(
+    pattern = [['powershell.exe', 'powershell', 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'], '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\inspect-cursor.ps1'],
+    decision = 'allow',
+    justification = 'Inspect the project preview cursor through the fixed local diagnostic script.',
+)
+
+prefix_rule(
     pattern = [["powershell.exe", "powershell", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"], "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "D:\\project\\godot_project\\rts_host_p2p_prototype\\tools\\codex\\run-godot.ps1"],
     decision = "allow",
     justification = "Run the project-pinned Godot wrapper with a fixed project root.",

@@ -15,7 +15,7 @@ const MODEL_SCENES := {
 const MODEL_SETTINGS := {
     "soldier": {"scale": 24.0, "height": 68.0},
     "harvester": {"scale": 19.0, "height": 44.0},
-    "base": {"scale": 21.0, "height": 88.0},
+    "base": {"scale": 32.0, "height": 108.0},
     "barracks": {"scale": 19.0, "height": 48.0},
     "refinery": {"scale": 18.0, "height": 70.0},
     "bunker": {"scale": 23.0, "height": 62.0},
@@ -42,6 +42,17 @@ var _materials: Array[Dictionary] = []
 var _faction_applied := false
 var _soldier_animation_defaults: Dictionary = {}
 var _bunker_construction_defaults: Dictionary = {}
+var _base_construction_defaults: Dictionary = {}
+var _base_light_materials: Array[Dictionary] = []
+# Animation tracks target these properties on this instance, not shared resources.
+var base_scan_phase := 0.0:
+    set(value):
+        base_scan_phase = value
+        _refresh_base_lights()
+var base_windows_power := 1.0:
+    set(value):
+        base_windows_power = value
+        _refresh_base_lights()
 var selection_ring: MeshInstance3D
 var _selection_ring_material: StandardMaterial3D
 var _selection_ring_enabled := false
@@ -63,6 +74,7 @@ func _ready() -> void:
     model.scale = Vector3.ONE * _model_scale
     _capture_soldier_animation_defaults()
     _capture_bunker_construction_defaults()
+    _capture_base_construction_defaults()
     _instance_materials()
     _apply_lod_and_shadow_policy()
     _create_animation_player()
@@ -76,8 +88,8 @@ func _process(delta: float) -> void:
         rotation.y = lerp_angle(rotation.y, _target_heading, minf(delta * 10.0, 1.0))
 
 
-func set_position_2d(position_2d: Vector2) -> void:
-    position = Vector3(position_2d.x, 0, position_2d.y)
+func set_position_2d(position_2d: Vector2, ground_height: float = 0.0) -> void:
+    position = Vector3(position_2d.x, ground_height, position_2d.y)
 
 
 func set_heading(heading: Vector2) -> void:
@@ -110,6 +122,11 @@ func set_animation(next_state: String) -> void:
             animated_root.scale = Vector3.ONE
         if kind == "bunker":
             _reset_bunker_construction_state()
+        elif kind == "base":
+            for node_path: String in _base_construction_defaults:
+                model.get_node(node_path).position = _base_construction_defaults[node_path]
+            base_windows_power = 1.0
+            base_scan_phase = 0.0
     animation_state = next_state
     if animation_player == null or not animation_player.has_animation(next_state):
         return
@@ -197,6 +214,10 @@ func set_faction(next_owner: int) -> void:
         material.emission_enabled = true
         material.emission = team.lightened(0.25)
         material.emission_energy_multiplier = 1.25 if "Glow" in material.resource_name else 0.12
+        if kind == "base":
+            # Saturated emission stays visibly blue/red under Compatibility rendering.
+            material.albedo_color = team
+            material.emission = team * team * team
         entry.base_color = material.albedo_color
     _refresh_material_tint()
 
@@ -223,11 +244,15 @@ func _instance_materials() -> void:
                 continue
             var material := (source as StandardMaterial3D).duplicate()
             mesh_instance.set_surface_override_material(surface_index, material)
-            _materials.append({
+            var entry := {
                 "material": material,
                 "base_color": material.albedo_color,
                 "faction": "Faction" in material.resource_name
-            })
+            }
+            _materials.append(entry)
+            if kind == "base" and "Base_Faction" in material.resource_name:
+                entry["tower_index"] = int(material.resource_name.get_slice("_", 2)) if "TowerGlow" in material.resource_name else -1
+                _base_light_materials.append(entry)
 
 
 func _apply_lod_and_shadow_policy() -> void:
@@ -269,6 +294,39 @@ func _refresh_material_tint() -> void:
     for entry: Dictionary in _materials:
         var material: StandardMaterial3D = entry.material
         material.albedo_color = (entry.base_color as Color) * tint
+    _refresh_base_lights()
+
+
+func _refresh_base_lights() -> void:
+    for entry: Dictionary in _base_light_materials:
+        var index: int = entry.tower_index
+        var energy := clampf(base_windows_power, 0.0, 1.0)
+        if index >= 0:
+            var local_time := fposmod(base_scan_phase, 2.4) - float(index) * 0.32
+            energy = 0.0
+            if base_windows_power > 0.0 and local_time >= 0.0 and local_time < 0.28:
+                energy = minf(clampf(local_time / 0.04, 0.0, 1.0), clampf((0.28 - local_time) / 0.06, 0.0, 1.0))
+        var material: StandardMaterial3D = entry.material
+        var tint := 1.9 if flash_enabled else (0.62 if construction_tint else 1.0)
+        material.albedo_color = (entry.base_color as Color) * lerpf(0.035, 0.55 if index < 0 else 0.25, energy) * tint
+        material.emission_energy_multiplier = energy * (0.65 if index < 0 else 2.5)
+
+
+func _capture_base_construction_defaults() -> void:
+    if kind != "base":
+        return
+    for node_name: String in ["BaseFoundation", "BaseRing_0", "BaseRing_1", "BaseRing_2", "BaseRing_3", "BaseTower", "BaseCrown"]:
+        var node_path := "base/" + node_name
+        var node := model.get_node(node_path) as Node3D
+        _base_construction_defaults[node_path] = node.position
+
+
+func _base_property_track(animation: Animation, property: String, keys: Array) -> void:
+    var track := animation.add_track(Animation.TYPE_VALUE)
+    animation.track_set_path(track, "..:" + property)
+    animation.value_track_set_update_mode(track, Animation.UPDATE_CONTINUOUS)
+    for key: Array in keys:
+        animation.track_insert_key(track, float(key[0]), key[1])
 
 
 func _create_animation_player() -> void:
@@ -473,9 +531,9 @@ func _harvester_unload() -> Animation:
 
 
 func _base_idle() -> Animation:
-    var animation := _make_animation(4.0)
-    _add_value_track(animation, "base/RadarDish", "rotation", [Vector3(0, 0, 0.15), Vector3(0, TAU * 0.5, 0.15), Vector3(0, TAU, 0.15)])
-    _add_value_track(animation, "base/Hologram", "scale", [Vector3.ONE, Vector3(1.08, 1.18, 1.08), Vector3.ONE])
+    var animation := _make_animation(2.4)
+    _base_property_track(animation, "base_windows_power", [[0.0, 1.0], [2.4, 1.0]])
+    _base_property_track(animation, "base_scan_phase", [[0.0, 0.0], [2.4, 2.4]])
     return animation
 
 
@@ -565,6 +623,29 @@ func _construction_animation() -> Animation:
     # Keep this clip normalized. `set_construction_progress()` maps it to the
     # building's actual build time and seeks to the current construction ratio.
     var animation := _make_animation(1.0, false)
+    if kind == "base":
+        var stages := [
+            ["BaseFoundation", 0.0, 0.12, 0.18],
+            ["BaseRing_0", 0.12, 0.24, 1.25],
+            ["BaseRing_1", 0.24, 0.36, 1.25],
+            ["BaseRing_2", 0.36, 0.48, 1.25],
+            ["BaseRing_3", 0.48, 0.60, 1.25],
+            ["BaseTower", 0.60, 0.82, 2.75],
+            ["BaseCrown", 0.82, 0.95, 3.45]
+        ]
+        for stage: Array in stages:
+            var node_path := "base/" + str(stage[0])
+            var final_position: Vector3 = _base_construction_defaults[node_path]
+            var hidden_position := final_position - Vector3(0, float(stage[3]), 0)
+            var track := animation.add_track(Animation.TYPE_VALUE)
+            animation.track_set_path(track, node_path + ":position")
+            animation.track_insert_key(track, 0.0, hidden_position)
+            animation.track_insert_key(track, float(stage[1]), hidden_position)
+            animation.track_insert_key(track, float(stage[2]), final_position)
+            animation.track_insert_key(track, 1.0, final_position)
+        _base_property_track(animation, "base_windows_power", [[0.0, 0.0], [1.0, 0.0]])
+        _base_property_track(animation, "base_scan_phase", [[0.0, 0.0], [1.0, 0.0]])
+        return animation
     if kind == "bunker":
         var body_position := _bunker_default_transform("bunker/BunkerBody", "position", Vector3.ZERO)
         var turret_position := _bunker_default_transform("bunker/Turret", "position", Vector3.ZERO)

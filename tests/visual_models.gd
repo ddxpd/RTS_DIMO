@@ -51,6 +51,69 @@ func _ring_contains_footprint(visual: EntityVisual, footprint: Vector2) -> bool:
     return visual._selection_ring_radius * torus.outer_radius >= half_diagonal
 
 
+func _check_base(visual: EntityVisual) -> void:
+    check(visual.model.get_node_or_null("base/RadarDish") == null, "Base no longer contains the old radar")
+    check(visual.model.get_node_or_null("base/Hologram") == null, "Base no longer contains the old hologram")
+    check(_has_animations(visual.get_animation_names(), ["idle", "construction"]), "Base exposes construction and idle")
+    var clip := visual.animation_player.get_animation("construction")
+    check(clip.loop_mode == Animation.LOOP_NONE and is_equal_approx(clip.length, 1.0), "Base construction is normalized and non-looping")
+    visual.set_animation("construction")
+    var stage_names := ["BaseFoundation", "BaseRing_0", "BaseRing_1", "BaseRing_2", "BaseRing_3", "BaseTower", "BaseCrown"]
+    var boundaries := [0.12, 0.24, 0.36, 0.48, 0.60, 0.82, 0.95]
+    for i in range(stage_names.size()):
+        visual.set_construction_progress(float(boundaries[i]), 7.0)
+        for j in range(stage_names.size()):
+            var node := visual.model.get_node("base/" + str(stage_names[j])) as Node3D
+            check(is_zero_approx(node.position.y) if j <= i else node.position.y < -0.1, "Base stage %d restores finished modules and keeps later ones underground (%d)" % [i, j])
+        check(is_zero_approx(visual.base_windows_power), "Base construction keeps window power off")
+    visual.set_construction_progress(0.70, 7.0)
+    check(is_equal_approx(visual.animation_player.speed_scale, 1.0 / 7.0), "Base construction maps to seven seconds")
+    # Jumping backwards must restore the earlier construction state too.
+    visual.set_construction_progress(0.0, 7.0)
+    check((visual.model.get_node("base/BaseTower") as Node3D).position.y < -2.0, "Base supports backward construction seeks")
+    visual.set_animation("idle")
+    for node_name: String in stage_names:
+        check((visual.model.get_node("base/" + node_name) as Node3D).position.is_equal_approx(Vector3.ZERO), "Base completion resets " + node_name)
+    var bounds := _visual_world_aabb(visual)
+    check(_fits_footprint(bounds, Vector2(160, 160), 0.1), "Base model fits its 5x5 footprint")
+    check(bounds.end.y <= visual.get_model_height() + 0.1, "Base health bar anchor clears the tower roof")
+    var lights: Array[StandardMaterial3D] = []
+    for i in range(6):
+        var node := visual.model.get_node("base/BaseTower/TowerLight_%d" % i) as MeshInstance3D
+        lights.append(node.get_active_material(0))
+        if i > 0:
+            var previous := visual.model.get_node("base/BaseTower/TowerLight_%d" % (i - 1)) as Node3D
+            check(previous.position.y > node.position.y, "Base lamps are ordered top to bottom")
+    for i in range(6):
+        visual.animation_player.seek(float(i) * 0.32 + 0.12, true)
+        for j in range(6):
+            check(lights[j].emission_energy_multiplier > 2.0 if i == j else is_zero_approx(lights[j].emission_energy_multiplier), "Base scan lights only segment %d at phase %d" % [j, i])
+    visual.animation_player.seek(2.1, true)
+    check(lights.all(func(mat: StandardMaterial3D) -> bool: return is_zero_approx(mat.emission_energy_multiplier)), "Base scan pauses with all lamps off")
+    visual.animation_player.seek(0.12, true)
+    var other := EntityVisual.new("base", 2)
+    game.add_child(other)
+    other.animation_player.seek(0.44, true)
+    var other_top := (other.model.get_node("base/BaseTower/TowerLight_0") as MeshInstance3D).get_active_material(0) as StandardMaterial3D
+    check(other_top != lights[0], "Two bases have independent light materials")
+    check(is_zero_approx(other_top.emission_energy_multiplier) and lights[0].emission_energy_multiplier > 2.0, "Two bases keep independent scan phases")
+    other.free()
+    visual.set_faction(2)
+    check(lights[0].emission.r > lights[0].emission.b, "Base tower light switches to red faction")
+    var window_count := 0
+    for entry: Dictionary in visual._base_light_materials:
+        if int(entry.tower_index) < 0:
+            window_count += 1
+            var mat: StandardMaterial3D = entry.material
+            check(mat.emission.r > mat.emission.b and mat.emission_energy_multiplier > 0.0, "Base windows stay lit in red faction")
+    check(window_count == 5, "Base has four ring window groups and one command-window group")
+    visual.set_flash(true)
+    check(lights[0].emission_energy_multiplier > 2.0 and is_zero_approx(lights[1].emission_energy_multiplier), "Damage tint preserves the active scan segment")
+    visual.set_flash(false)
+    visual.set_faction(1)
+    check(lights[0].emission.b > lights[0].emission.r, "Base tower light switches back to blue faction")
+
+
 func _check_track_count(visual: EntityVisual, animation_name: String, expected: int, message: String) -> void:
     var animation := visual.animation_player.get_animation(animation_name)
     check(animation != null and animation.get_track_count() == expected, message)
@@ -118,6 +181,7 @@ func _check_attack_muzzle_forward(visual: EntityVisual, heading: Vector2, messag
 func run() -> void:
     root.size = Vector2i(1280, 800)
     game = MAIN.instantiate()
+    game.selected_map_id = "prototype"
     root.add_child(game)
     game.play_solo()
     game.set_process(false)
@@ -182,6 +246,7 @@ func run() -> void:
     var base_visual: EntityVisual = game.building_visuals[1].visual
     check(base_visual.selection_ring.visible, "Selected building shows a ground ring")
     check(_ring_contains_footprint(base_visual, Sim.BUILD_TYPES.base.size), "Base selection ring contains the complete footprint")
+    _check_base(base_visual)
 
     var pending_selection_visual := EntityVisual.new("bunker", 1)
     pending_selection_visual.set_selected(true, 50.0)
@@ -258,6 +323,20 @@ func run() -> void:
     var attack_direction := (attack_target - attack_origin).normalized()
     _check_visual_forward(soldier_visual, attack_direction, "Soldier body faces the attacked building")
     _check_attack_muzzle_forward(soldier_visual, attack_direction, "Soldier rifle points at the attacked building")
+
+    game.sim.units[3].order  = "attack_move"
+    game.sim.units[3].target = Vector2(800, 300)
+    game._sync_units()
+    check(soldier_visual.animation_state == "attack", "Engaged attack-move plays attack animation in range")
+    _check_visual_forward(soldier_visual, attack_direction, "Engaged attack-move faces its temporary target")
+    game.sim.units[3].attack_kind = ""
+    game.sim.units[3].attack_id   = -1
+    game._sync_units()
+    check(soldier_visual.animation_state == "move", "Attack-move resumes move animation after releasing its target")
+    var resume_target: Vector2 = game.sim.units[3].target
+    var resume_origin: Vector2 = game.sim.units[3].pos
+    var resume_direction := (resume_target - resume_origin).normalized()
+    _check_visual_forward(soldier_visual, resume_direction, "Resumed attack-move faces its original destination")
 
     var ore_id := 1
     var harvester_id: int = game.sim.add_unit(1, "harvester", game.sim.ores[ore_id].pos)
@@ -394,6 +473,12 @@ func run() -> void:
         regenerated_transforms.append(Vector3(visual.position.x, visual.position.z, visual.scale.x))
     check(rock_transforms == regenerated_transforms, "Rock decoration transforms are deterministic")
 
+    game._begin_build("base")
+    game._sync_build_preview()
+    check(game.build_preview_model.kind == "base", "Build preview uses the new command base")
+    check(game.build_preview_visual.scale.is_equal_approx(Vector3(1.6, 1, 1.6)), "Base preview matches its 160x160 footprint")
+    check(_fits_footprint(_visual_world_aabb(game.build_preview_model), Vector2(160, 160), 0.1), "Base preview model matches the footprint")
+
     game._begin_build("barracks")
     game._sync_build_preview()
     var barracks_size: Vector2 = Sim.BUILD_TYPES.barracks.size
@@ -406,5 +491,6 @@ func run() -> void:
     check(game.build_preview_model != null and game.build_preview_model.kind == "refinery", "Build preview uses the refinery 3D model")
     check(is_equal_approx(game.build_preview_visual.scale.x, refinery_size.x / 100.0) and is_equal_approx(game.build_preview_visual.scale.z, refinery_size.y / 100.0), "Refinery preview matches its 80x80 footprint")
 
+    preload("res://tests/cursor_checks.gd").visual(game, check)
     print("VISUAL_MODELS_TEST failures=", failures)
     quit(0 if failures.is_empty() else 1)

@@ -26,6 +26,7 @@ func click(world: Vector2, button: int = MOUSE_BUTTON_LEFT) -> void:
 func run() -> void:
     root.size = Vector2i(1280, 800)
     game = MAIN.instantiate()
+    game.selected_map_id = "prototype"
     root.add_child(game)
     game.play_solo()
     game.set_process(false)
@@ -177,6 +178,16 @@ func run() -> void:
     game._clear_selection()
     var one_unit: Array[int] = [3]
     game.selected_units   = one_unit
+    var attack_key := InputEventKey.new()
+    attack_key.keycode          = game.attack_keycode
+    attack_key.physical_keycode = game.attack_keycode
+    attack_key.pressed          = true
+    root.push_input(attack_key, true)
+    check(game.attack_mode, "Attack key enables attack mode exactly once")
+    click(Vector2(600, 160))
+    check(game.sim.units[3].order == "attack_move", "Attack key plus ground click creates attack-move")
+    check(game.selected_units == one_unit, "Attack-move ground click preserves unit selection")
+    check(not game.attack_mode, "Attack mode closes after the ground command")
     game.sim.units[4].pos = game.sim.units[3].pos + Vector2(50, 0)
     game.attack_mode      = true
     game._attack_click(game.sim.units[4].pos)
@@ -202,5 +213,6 @@ func run() -> void:
     if screenshot and DisplayServer.get_name() != "headless":
         await process_frame
         root.get_texture().get_image().save_png("res://build/verification/gameplay.png")
+    preload("res://tests/cursor_checks.gd").presentation(game, check)
     print("PRESENTATION_TEST failures=", failures)
     quit(0 if failures.is_empty() else 1)

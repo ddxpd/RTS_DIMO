@@ -356,12 +356,17 @@ func build() -> void:
     host.menu.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
     host.menu.offset_left   = -235
     host.menu.offset_right  = 235
-    host.menu.offset_top    = -255
-    host.menu.offset_bottom = 255
+    var menu_half_height := minf(440.0, host.get_viewport().get_visible_rect().size.y * 0.45)
+    host.menu.offset_top    = -menu_half_height
+    host.menu.offset_bottom = menu_half_height
     root.add_child(host.menu)
     host.menu_buttons = VBoxContainer.new()
     host.menu_buttons.add_theme_constant_override("separation", 12)
-    host.menu.add_child(host.menu_buttons)
+    var menu_scroll := ScrollContainer.new()
+    menu_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+    host.menu.add_child(menu_scroll)
+    host.menu_buttons.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+    menu_scroll.add_child(host.menu_buttons)
     var heading := Label.new()
     heading.text = "IRON FRONT\nRTS SKIRMISH"
     heading.add_theme_font_size_override("font_size", 28)
@@ -369,6 +374,20 @@ func build() -> void:
     var subtitle := Label.new()
     subtitle.text = "Mine. Build. Deploy. Capture the field."
     host.menu_buttons.add_child(subtitle)
+    host.map_selector = OptionButton.new()
+    for id in host.MapCatalog.IDS:
+        host.map_selector.add_item(host.MapCatalog.definition(id).title)
+    host.map_selector.item_selected.connect(host._map_selected)
+    host.menu_buttons.add_child(host.map_selector)
+    host.map_preview = TextureRect.new()
+    host.map_preview.custom_minimum_size = Vector2(400, 132)
+    host.map_preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+    host.map_preview.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+    host.menu_buttons.add_child(host.map_preview)
+    host.map_description = Label.new()
+    host.map_description.add_theme_font_size_override("font_size", 14)
+    host.menu_buttons.add_child(host.map_description)
+    host._update_map_description()
     host.resume_button = _button(host.menu_buttons, "Resume", host._close_menu)
     _button(host.menu_buttons, "New solo match (vs AI)", host.play_solo)
     _button(host.menu_buttons, "Create LAN Host", host.create_host)

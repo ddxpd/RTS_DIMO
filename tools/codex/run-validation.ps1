@@ -11,11 +11,11 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'project-common.ps1')
 
 $allowedAreas = @('Simulation', 'Presentation', 'Features', 'Camera', 'ActionBar', 'Visual', 'Performance', 'Network', 'Tooling')
-$selectedAreas = if ([string]::IsNullOrWhiteSpace($Area)) {
+$selectedAreas = @(if ([string]::IsNullOrWhiteSpace($Area)) {
     @()
 } else {
     @($Area.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ } | Select-Object -Unique)
-}
+})
 $invalidAreas = @($selectedAreas | Where-Object { $_ -notin $allowedAreas })
 if ($invalidAreas.Count -gt 0) {
     throw "Unknown validation Area: $($invalidAreas -join ', ')."
@@ -31,8 +31,10 @@ $runGodot = Join-Path $PSScriptRoot 'run-godot.ps1'
 $runNetwork = Join-Path $PSScriptRoot 'run-network.ps1'
 $verifyPermissions = Join-Path $PSScriptRoot 'verify-permissions.ps1'
 $cleanup = Join-Path $PSScriptRoot 'cleanup-project-processes.ps1'
-$suiteOrder = @('gameplay', 'presentation', 'features', 'camera', 'action_bar', 'visual_models', 'visual_performance')
+$suiteOrder = @('gameplay', 'presentation', 'features', 'camera', 'action_bar', 'visual_models', 'visual_performance', 'terrain_maps', 'terrain_presentation')
 $suiteScripts = @{
+    terrain_maps       = 'res://tests/terrain_maps.gd'
+    terrain_presentation = 'res://tests/terrain_presentation.gd'
     gameplay           = 'res://tests/gameplay.gd'
     presentation       = 'res://tests/presentation.gd'
     features           = 'res://tests/features.gd'
@@ -42,14 +44,14 @@ $suiteScripts = @{
     visual_performance = 'res://tests/visual_performance.gd'
 }
 $areaSuites = @{
-    Simulation   = @('gameplay')
+    Simulation   = @('gameplay', 'terrain_maps')
     Presentation = @('presentation')
-    Features     = @('features')
+    Features     = @('features', 'terrain_presentation')
     Camera       = @('camera')
     ActionBar    = @('action_bar')
-    Visual       = @('visual_models')
+    Visual       = @('visual_models', 'terrain_presentation')
     Performance  = @('visual_performance')
-    Network      = @('gameplay')
+    Network      = @('gameplay', 'terrain_maps')
     Tooling      = @()
 }
 
@@ -115,7 +117,19 @@ try {
         $cleanupNeeded = $true
         $scriptPath = $suiteScripts[$suiteName]
         Invoke-ValidationStage -Name $suiteName -Action {
-            & $runGodot -Action script -Script $scriptPath -GodotPath $GodotPath -TimeoutSeconds 180
+            $stageLog = Join-Path $script:ProjectRoot ".godot\validation\$runId\$suiteName.log"
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $stageLog) | Out-Null
+            & $runGodot -Action script -Script $scriptPath -GodotPath $GodotPath -TimeoutSeconds 180 -LogFile $stageLog
+            $stageText = (Get-Content -Raw -LiteralPath $stageLog) + (Get-Content -Raw -LiteralPath ($stageLog + '.err'))
+            Write-Output $stageText
+            if ($stageText -match 'SCRIPT ERROR|(?m)^ERROR:') { throw "Godot logged an error in $suiteName. See $stageLog" }
+            if ($suiteName -eq 'visual_performance') {
+                $desertLog = Join-Path $script:ProjectRoot ".godot\validation\$runId\desert_performance.log"
+                & $runGodot -Action script -Script $scriptPath -GodotPath $GodotPath -Arguments @('--desert') -TimeoutSeconds 180 -LogFile $desertLog
+                $desertText = (Get-Content -Raw -LiteralPath $desertLog) + (Get-Content -Raw -LiteralPath ($desertLog + '.err'))
+                Write-Output $desertText
+                if ($desertText -match 'SCRIPT ERROR|(?m)^ERROR:' -or $desertText -notmatch 'failures=\[\]') { throw "Desert performance failed. See $desertLog" }
+            }
         }
     }
 

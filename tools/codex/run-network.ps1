@@ -23,4 +23,6 @@ if (-not (Test-PathWithin -Candidate $resultPath -Root $validationRoot)) {
     throw 'Network validation output must remain under .godot\validation.'
 }
 
-& $networkScript -GodotPath $godot -ResultDirectory $resultPath
+foreach ($mapId in @("prototype", "desert_quarry")) {
+    & $networkScript -GodotPath $godot -ResultDirectory (Join-Path $resultPath $mapId) -MapId $mapId
+}

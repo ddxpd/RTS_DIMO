@@ -26,6 +26,7 @@ func measure(callable: Callable, iterations: int) -> float:
 func run() -> void:
     root.size = Vector2i(1920, 1080)
     game = MAIN.instantiate()
+    game.selected_map_id = "desert_quarry" if "--desert" in OS.get_cmdline_args() else "prototype"
     root.add_child(game)
     game.play_solo()
     game.sim.ai_enabled = false
@@ -38,6 +39,8 @@ func run() -> void:
         for column: int in range(14):
             var kind := "soldier" if (row + column) % 3 != 0 else "harvester"
             var position := Vector2(600.0 + column * 95.0, 300.0 + row * 105.0)
+            if game.sim.map_id == "desert_quarry":
+                position = game.sim.nav.get_point_position(game.sim.nearest_cell(position))
             var id: int = game.sim.add_unit(1, kind, position)
             game.sim.units[id].order = "move"
             game.sim.units[id].target = position + Vector2(180.0, 160.0)

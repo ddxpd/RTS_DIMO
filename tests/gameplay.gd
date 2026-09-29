@@ -20,6 +20,11 @@ func run() -> void:
     var s := Sim.new()
     s.reset()
     check(s.units.size() == 12 and s.buildings.size() == 2, "Starting armies / bases")
+    check(s.footprint(s.buildings[1]).size == Vector2(160, 160), "Command base occupies 5x5 cells")
+    check(not s.position_free(Vector2(454, 384), 0), "New outer base area blocks movement")
+    check(s.position_free(Vector2(480, 384), 0), "Ground beyond the enlarged base stays passable")
+    check(s.build_error(1, "base", Vector2(544, 384)) == "Buildings need more space", "Enlarged base rejects too-close placement")
+    check(s.build_error(1, "base", Vector2(160, 384)).is_empty(), "Enlarged base accepts separated placement")
     check(s.command(0, {"action": "move", "units": [3], "pos": Vector2(400, 300)}) != "", "Spectator rejected")
     check(s.command(2, {"action": "move", "units": [3], "pos": Vector2(400, 300)}) != "", "Enemy control rejected")
     check(s.command(1, {"action": "move", "units": [3], "pos": Vector2(NAN, 1)}) != "", "Non-finite position rejected")
@@ -192,12 +197,24 @@ func run() -> void:
     advance(s, 2)
     check(s.units[4].hp < 100, "Force attack damages selected friendly target")
     s.reset()
-    s.units[3].pos   = Vector2(1000, 400)
-    s.units[4].pos   = Vector2(800, 400)
-    s.units[4].owner = 2
-    check(s.command(1, {"action": "attack_move", "units": [3], "pos": Vector2(600, 160)}) == "", "Attack-move order accepted")
-    advance(s, 80)
-    check((not s.units.has(4) or s.units[4].hp < 100) and s.units[3].pos.x > 600, "Attack-move stops and engages encountered enemy")
+    s.units.clear()
+    var attack_move_destination := Vector2(500, 400)
+    var attack_mover: int = s.add_unit(1, "soldier", Vector2(1000, 400))
+    var first_enemy: int  = s.add_unit(2, "soldier", Vector2(850, 400))
+    var second_enemy: int = s.add_unit(2, "soldier", Vector2(650, 400))
+    s.units[first_enemy].hp  = 16
+    s.units[second_enemy].hp = 16
+    check(s.command(1, {"action": "attack_move", "units": [attack_mover], "pos": attack_move_destination}) == "", "Attack-move order accepted")
+    var attack_move_targets: Dictionary = {}
+    for i in range(200):
+        s.step()
+        if s.units.has(attack_mover) and int(s.units[attack_mover].attack_id) in [first_enemy, second_enemy]:
+            attack_move_targets[int(s.units[attack_mover].attack_id)] = true
+        if not s.units.has(first_enemy) and not s.units.has(second_enemy) and s.units[attack_mover].order == "idle":
+            break
+    check(attack_move_targets.has(first_enemy) and attack_move_targets.has(second_enemy), "Attack-move engages consecutive encountered enemies")
+    check(not s.units.has(first_enemy) and not s.units.has(second_enemy), "Attack-move destroys encountered enemies")
+    check(s.units[attack_mover].order == "idle" and (s.units[attack_mover].pos as Vector2).distance_to(attack_move_destination) < 5, "Attack-move resumes and reaches its original destination")
     var mirror := Sim.new()
     mirror.reset()
     mirror.apply_snapshot(s.snapshot())

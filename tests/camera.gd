@@ -10,6 +10,7 @@ func _initialize() -> void:
 func run() -> void:
     Engine.max_fps = 120
     var game := MAIN.instantiate()
+    game.selected_map_id = "prototype"
     root.add_child(game)
     game.play_solo()
     var failures: Array = []

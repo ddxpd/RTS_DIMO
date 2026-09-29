@@ -9,6 +9,9 @@ const AudioController = preload("res://scripts/audio/audio_controller.gd")
 const InputController = preload("res://scripts/controllers/input_controller.gd")
 const NetworkSession = preload("res://scripts/runtime/network_session.gd")
 const HudController = preload("res://scripts/ui/hud_controller.gd")
+const CursorController = preload("res://scripts/ui/cursor_controller.gd")
+const MapCatalog = preload("res://scripts/maps/map_catalog.gd")
+const TerrainView = preload("res://scripts/maps/terrain_view.gd")
 const PORT := 24560
 const MAX_CLIENTS := 4
 var sim := Simulation.new()
@@ -18,6 +21,7 @@ var audio_controller: AudioController
 var input_controller: InputController
 var network_session: NetworkSession
 var hud_controller: HudController
+var cursor_controller: CursorController
 var peer: ENetMultiplayerPeer
 var is_host := false
 var connected := false
@@ -54,6 +58,13 @@ var menu_visible := true
 var camera: Camera3D
 var camera_zoom_level := 1.0
 var camera_controller: CameraController
+var selected_map_id := "desert_quarry"
+var terrain_view: TerrainView
+var rendered_map_id := ""
+var rendered_match_id := -1
+var map_selector: OptionButton
+var map_description: Label
+var map_preview: TextureRect
 var terrain_chunks: Array[MeshInstance3D] = []
 var fog_plane: MeshInstance3D
 var fog_texture: ImageTexture
@@ -75,6 +86,7 @@ var resume_button: Button
 var address: LineEdit
 var build_buttons: Array[Button] = []
 var clicks: Array = []
+var next_click_id := 0
 var feedback := ""
 var feedback_time := 0.0
 var audio_player: AudioStreamPlayer
@@ -146,6 +158,19 @@ func _add_bottom_zone(row: HBoxContainer, key: String, min_size: Vector2, captio
 
 # Bake the procedural tile pattern into four ground planes (Don't Starve stage).
 func _create_terrain() -> void:
+    if terrain_view != null:
+        terrain_view.free()
+        terrain_view = null
+    for chunk in terrain_chunks:
+        if is_instance_valid(chunk):
+            chunk.free()
+    terrain_chunks.clear()
+    rendered_map_id = sim.map_id
+    if sim.map_id == "desert_quarry":
+        terrain_view = TerrainView.new()
+        add_child(terrain_view)
+        terrain_view.build(sim.terrain, fog_texture)
+        return
     # Single continuous ground plane: no seams, no floating patches.
     var tex := ImageTexture.create_from_image(Art.terrain_image())
     var mesh := PlaneMesh.new()
@@ -212,7 +237,7 @@ func _create_fog() -> void:
 func _update_camera_transform() -> void:
     if camera_controller != null:
         camera_controller.focus = camera_controller.focus.clamp(Vector2.ZERO, Simulation.WORLD)
-    var focus3 := Vector3(camera_controller.focus.x, 0, camera_controller.focus.y)
+    var focus3 := Vector3(camera_controller.focus.x, sim.terrain.height_at(camera_controller.focus), camera_controller.focus.y)
     var pitch := deg_to_rad(42.0)
     var dist := 1200.0 / camera_zoom_level
     camera.position = focus3 + Vector3(0, dist * sin(pitch), -dist * cos(pitch))
@@ -220,12 +245,17 @@ func _update_camera_transform() -> void:
 
 # Project a ground point back to screen space (for input event construction).
 func _world_to_screen(world: Vector2) -> Vector2:
-    return camera.unproject_position(Vector3(world.x, 0, world.y))
+    return camera.unproject_position(Vector3(world.x, sim.terrain.height_at(world), world.y))
 
 # Project a screen point onto the y=0 ground plane.
 func _screen_to_world(screen: Vector2) -> Vector2:
     var from := camera.project_ray_origin(screen)
     var dir := camera.project_ray_normal(screen)
+    if sim.map_id != "prototype":
+        var terrain_hit := sim.terrain.ray_hit(from, dir)
+        if terrain_hit.is_finite():
+            return Vector2(terrain_hit.x, terrain_hit.z)
+        return Vector2(-1, -1)
     if absf(dir.y) < 0.001:
         return camera_controller.focus
     var t := -from.y / dir.y
@@ -258,23 +288,28 @@ func _ready() -> void:
     input_controller.name = "InputController"
     input_controller.configure(self)
     add_child(input_controller)
+    # Main owns the engine callbacks and delegates once through the compatibility
+    # wrappers below. Disable the child callbacks to avoid processing each event twice.
+    input_controller.set_process_input(false)
+    input_controller.set_process_unhandled_input(false)
     network_session = NetworkSession.new()
     network_session.name = "NetworkSession"
     network_session.configure(self)
     add_child(network_session)
-    sim.reset(false)
+    sim.reset(false, selected_map_id)
+    _create_fog()
     _create_terrain()
     _create_lighting()
-    _create_fog()
     camera = Camera3D.new()
     camera.fov = 38.0
     camera.near = 1.0
-    camera.far = 5000.0
+    camera.far = 12000.0
     add_child(camera)
     camera.make_current()
     camera_controller = CameraController.new(camera, Simulation.WORLD,
         func() -> Vector2: return get_viewport().get_visible_rect().size,
         func() -> Vector2: return get_viewport().get_mouse_position())
+    camera_controller.surface_picker = _screen_to_world
     camera_controller.speed_multiplier = camera_speed_multiplier
     camera_controller.focus = Vector2(900, 700)
     _update_camera_transform()
@@ -291,6 +326,10 @@ func _ready() -> void:
     visual_sync.name = "WorldVisualSync"
     visual_sync.configure(self)
     add_child(visual_sync)
+    cursor_controller = CursorController.new()
+    cursor_controller.name = "CursorController"
+    cursor_controller.configure(self)
+    add_child(cursor_controller)
     multiplayer.peer_connected.connect(_peer_joined)
     multiplayer.peer_disconnected.connect(_peer_left)
     multiplayer.connected_to_server.connect(_connected_to_server)
@@ -317,6 +356,10 @@ func _camera_speed_changed(value: float) -> void:
 
 # Never leave the cursor confined when the game node leaves the tree.
 func _exit_tree() -> void:
+    if camera_controller != null:
+        camera_controller.surface_picker = Callable()
+        camera_controller.viewport_size_provider = Callable()
+        camera_controller.mouse_position_provider = Callable()
     Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 # Build the HUD in code so the exported scene stays lightweight.
@@ -583,6 +626,7 @@ func _min_zoom() -> float:
     return 0.45
 
 func _reset_view() -> void:
+    _sync_map_world()
     _clear_selection()
     build_mode = ""
     clicks.clear()
@@ -615,7 +659,9 @@ func _apply_snapshot_checked(state: Dictionary, context: String) -> bool:
 
 func play_solo() -> void:
     _disconnect()
-    sim.reset(true)
+    if not sim.reset(true, selected_map_id):
+        _notify(sim.last_snapshot_error)
+        return
     active      = true
     local_slot  = 1
     accumulator = 0.0
@@ -640,7 +686,11 @@ func create_host() -> void:
     local_slot = 1
     if session != null:
         session.reset_clock()
-    sim.reset(false)
+    if not sim.reset(false, selected_map_id):
+        _disconnect()
+        active = false
+        _notify(sim.last_snapshot_error)
+        return
     _reset_view()
     _notify("LAN host ready on UDP 24560. Waiting for the red player.")
 
@@ -800,7 +850,7 @@ func restart_match() -> void:
     if not active:
         play_solo()
         return
-    sim.reset(not connected)
+    sim.reset(not connected, sim.map_id)
     _reset_view()
     if is_host:
         if network_session != null:
@@ -814,7 +864,8 @@ func return_to_title() -> void:
     Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
     active = false
     local_slot = 1
-    sim.reset(false)
+    sim.reset(false, selected_map_id)
+    _sync_map_world()
     _clear_selection()
     build_mode   = ""
     menu_visible = true
@@ -823,6 +874,9 @@ func return_to_title() -> void:
 
 # Main loop: advance host simulation, refresh HUD, and redraw the battlefield.
 func _process(delta: float) -> void:
+    _sync_map_world()
+    if map_selector != null:
+        map_selector.disabled = active or connected
     for click: Dictionary in clicks:
         click.life -= delta
     clicks        = clicks.filter(func(c: Dictionary) -> bool: return c.life > 0)
@@ -852,6 +906,10 @@ func _process(delta: float) -> void:
         _finish_drag_select(selection_current)
     _refresh_ui()
     _sync_visuals()
+
+    if cursor_controller != null:
+        cursor_controller.update_cursor()
+
 
 func _clean_selection() -> void:
     var valid: Array[int] = []
@@ -962,7 +1020,7 @@ func _right_click(pos: Vector2) -> void:
             for id: int in rally_targets:
                 issue({"action": "set_rally", "building": id, "pos": pos})
             _notify("Rally points set.")
-            clicks.append({"pos": pos, "life": 0.55, "action": "rally"})
+            _show_order_feedback({"action": "rally"}, pos)
         return
     var order := {"action": "move", "units": selected_units.duplicate(), "pos": pos}
     for kind: String in ["unit", "building"]:
@@ -984,7 +1042,36 @@ func _right_click(pos: Vector2) -> void:
         elif order.action == "gather":
             reply = "Mining operation!"
         _respond(selected_units[0], reply)
-    clicks.append({"pos": pos, "life": 0.55, "action": order.action})
+    _show_order_feedback(order, pos)
+
+
+func _show_order_feedback(order: Dictionary, pos: Vector2) -> void:
+    # An intent marker, not authoritative acceptance or a reachability guarantee.
+    if not active or menu_visible or local_slot == 0 or sim.winner != 0:
+        return
+    if not pos.is_finite() or not Rect2(Vector2.ZERO, Simulation.WORLD).has_point(pos):
+        return
+    var action := str(order.get("action", ""))
+    if action not in ["move", "attack_move", "attack", "gather", "rally"]:
+        return
+    var compatible := false
+    if action == "rally":
+        compatible = cursor_controller.has_buildings()
+    else:
+        var required := "soldier" if action == "attack" else ("harvester" if action == "gather" else "")
+        for id: int in order.get("units", []):
+            if sim.units.has(id):
+                var unit: Dictionary = sim.units[id]
+                if unit.owner == local_slot and unit.hp > 0 and (required.is_empty() or unit.type == required):
+                    compatible = true
+                    break
+    if not compatible:
+        return
+    var duration := 0.70 if action in ["move", "attack_move", "attack"] else 0.55
+    next_click_id += 1
+    clicks.append({"id": next_click_id, "pos": pos, "life": duration, "duration": duration, "action": action})
+    while clicks.size() > 16:
+        clicks.pop_front()
 
 func _begin_build(kind: String) -> void:
     if not active or local_slot == 0 or sim.winner != 0:
@@ -1049,8 +1136,9 @@ func _pending_click(pos: Vector2) -> void:
             return
         order = {"action": "gather", "units": selected_units.duplicate(), "target": ore_id}
     issue(order)
-    _respond(selected_units[0], "Moving out!" if pending_command == "move" else "Mining operation!")
-    clicks.append({"pos": pos, "life": 0.55, "action": pending_command})
+    if not selected_units.is_empty():
+        _respond(selected_units[0], "Moving out!" if pending_command == "move" else "Mining operation!")
+    _show_order_feedback(order, pos)
     pending_command = ""
 
 func _begin_rebind() -> void:
@@ -1343,3 +1431,44 @@ func _sync_build_preview() -> void:
 func _sync_fog() -> void:
     if visual_sync != null:
         visual_sync._sync_fog()
+# Rebuild only at map/match boundaries; snapshots never recreate static terrain.
+func _sync_map_world() -> void:
+    if rendered_map_id != sim.map_id:
+        _create_terrain()
+    if rendered_match_id != sim.match_id:
+        rendered_match_id = sim.match_id
+        render_velocities.clear()
+        if visual_sync != null:
+            visual_sync.reset_world()
+    fog_plane.visible = sim.map_id == "prototype"
+    if terrain_view != null:
+        terrain_view.set_reveal_all(local_slot == 0)
+    var environment_node := get_node_or_null("BattlefieldEnvironment") as WorldEnvironment
+    if environment_node != null:
+        var desert := sim.map_id == "desert_quarry"
+        environment_node.environment.ambient_light_energy = 0.45 if desert else 0.72
+        var sunlight := get_node_or_null("BattlefieldSun") as DirectionalLight3D
+        if sunlight != null:
+            sunlight.light_energy = 0.85 if desert else 1.12
+            sunlight.light_color = Color("#fff5e8") if desert else Color("#fff1d6")
+        environment_node.environment.ambient_light_color = Color("#c3b7a5") if desert else Color("#9fb6a6")
+        environment_node.environment.background_color = Color("#493c2c") if desert else Color("#203028")
+    if map_selector != null:
+        map_selector.select(MapCatalog.IDS.find(sim.map_id) if active else MapCatalog.IDS.find(selected_map_id))
+
+func _map_selected(index: int) -> void:
+    if active or connected:
+        return
+    selected_map_id = MapCatalog.IDS[index]
+    _update_map_description()
+
+func _update_map_description() -> void:
+    if map_description == null:
+        return
+    var data := MapCatalog.definition(selected_map_id)
+    map_description.text = data.description + "\n联机加入时使用主机地图"
+    var preview_path := "res://assets/concept_art/desert-quarry-overview.png" if selected_map_id == "desert_quarry" else "res://build/verification/gameplay.png"
+    if ResourceLoader.exists(preview_path):
+        map_preview.texture = load(preview_path)
+    else:
+        map_preview.texture = null

@@ -11,6 +11,10 @@ func _is_escape(event: InputEventKey) -> bool:
     return event.keycode == KEY_ESCAPE or event.physical_keycode == KEY_ESCAPE
 
 
+func _is_attack_key(event: InputEventKey) -> bool:
+    return event.keycode == host.attack_keycode or event.physical_keycode == host.attack_keycode
+
+
 func _handle_escape(event: InputEventKey) -> bool:
     if not _is_escape(event):
         return false
@@ -35,13 +39,13 @@ func _unhandled_input(event: InputEvent) -> void:
             get_viewport().set_input_as_handled()
             return
         if host.rebinding_attack:
-            host.attack_keycode = event.keycode
+            host.attack_keycode = event.keycode if event.keycode != KEY_NONE else event.physical_keycode
             host.rebinding_attack = false
             host.attack_rebind_button.text = "Rebind attack key (current: %s)" % OS.get_keycode_string(host.attack_keycode)
             host._notify("Attack key set to %s." % OS.get_keycode_string(host.attack_keycode))
             get_viewport().set_input_as_handled()
             return
-        if host.active and not host.menu_visible and event.keycode == host.attack_keycode:
+        if host.active and not host.menu_visible and _is_attack_key(event):
             host.attack_mode = not host.attack_mode
             host._notify("Attack mode %s. Left-click a target or ground." % ("ON" if host.attack_mode else "OFF"))
         elif host.active and not host.menu_visible and event.keycode == KEY_B:
@@ -149,7 +153,9 @@ func _finish_drag_select(pos: Vector2) -> void:
     if (pos - host.selection_start).length() * host.camera_zoom_level < 8:
         _left_click(pos)
     else:
-        _select_rect(Rect2(host.selection_start, pos - host.selection_start).abs())
+        var start_screen: Vector2 = host._world_to_screen(host.selection_start)
+        var end_screen: Vector2 = host._world_to_screen(pos)
+        _select_rect(Rect2(host.selection_start, pos - host.selection_start).abs(), Rect2(start_screen, end_screen - start_screen).abs())
 
 func _left_click(pos: Vector2) -> void:
     if not host.pending_command.is_empty():
@@ -193,7 +199,7 @@ func _select_same_type_buildings_on_screen(kind: String) -> void:
     var view := Rect2(host.camera_controller.focus - half, half * 2.0)
     for id: int in host.sim.buildings:
         var b: Dictionary = host.sim.buildings[id]
-        if b.owner == host.local_slot and b.type == kind and view.has_point(b.pos):
+        if b.owner == host.local_slot and b.type == kind and host._get_map_screen_rect().has_point(host._world_to_screen(b.pos)):
             host.selected_buildings.append(id)
     if not host.selected_buildings.is_empty():
         host.selected_building = host.selected_buildings[0]
@@ -207,7 +213,7 @@ func _select_same_type_on_screen(kind: String) -> void:
     var view := Rect2(host.camera_controller.focus - half, half * 2.0)
     for id: int in host.sim.units:
         var u: Dictionary = host.sim.units[id]
-        if u.owner == host.local_slot and u.type == kind and view.has_point(u.pos):
+        if u.owner == host.local_slot and u.type == kind and host._get_map_screen_rect().has_point(host._world_to_screen(u.pos)):
             host.selected_units.append(id)
     if not host.selected_units.is_empty():
         host._respond(host.selected_units[0], "All %ss on screen!" % kind)
@@ -228,18 +234,22 @@ func _attack_click(pos: Vector2) -> void:
                 break
     if target_id >= 0:
         host.issue({"action": "attack", "units": host.selected_units.duplicate(), "kind": kind, "target": target_id, "force": true})
-        host.clicks.append({"pos": pos, "life": 0.55, "action": "attack"})
+        host._show_order_feedback({"action": "attack", "units": host.selected_units.duplicate()}, pos)
     else:
         host.issue({"action": "attack_move", "units": host.selected_units.duplicate(), "pos": pos})
-        host.clicks.append({"pos": pos, "life": 0.55, "action": "attack_move"})
+        host._show_order_feedback({"action": "attack_move", "units": host.selected_units.duplicate()}, pos)
     if not host.selected_units.is_empty():
         host._respond(host.selected_units[0], "Attack order!")
     host.attack_mode = false
 
-func _select_rect(rect: Rect2) -> void:
+func _select_rect(rect: Rect2, screen_rect: Rect2 = Rect2()) -> void:
     host._clear_selection()
+    if screen_rect.size == Vector2.ZERO:
+        var a: Vector2 = host._world_to_screen(rect.position)
+        var b: Vector2 = host._world_to_screen(rect.end)
+        screen_rect = Rect2(a, b - a).abs()
     for id: int in host.sim.units:
-        if host.sim.units[id].owner == host.local_slot and rect.has_point(host.sim.units[id].pos):
+        if host.sim.units[id].owner == host.local_slot and screen_rect.has_point(host._world_to_screen(host.sim.units[id].pos)):
             host.selected_units.append(id)
 
 # Ctrl+N assigns the selection to group N, Shift+N adds to it, N alone recalls it.

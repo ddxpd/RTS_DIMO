@@ -53,7 +53,9 @@ func guest() -> void:
         await get_tree().process_frame
     if not check(game.local_slot == 2, "Red slot assigned on join/reconnect"):
         return
-    print("NETWORK_STAGE joined round ", round_number)
+    if not check(game.sim.map_id == game.selected_map_id, "Host-selected map identity replicated"):
+        return
+    print("NETWORK_STAGE joined round ", round_number, " map=", game.sim.map_id, " checksum=", game.sim.terrain.checksum)
     if round_number == 2:
         _request_restart.rpc_id(1)
         while game.sim.winner != 0 or game.sim.frame > 100:

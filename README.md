@@ -4,6 +4,7 @@ Iron Front 是一个 Godot 4 RTS 主机对等联机原型，当前分支包含 3
 
 ## 运行
 
+- 开局菜单可选择“荒漠矿区”或“原型地图”；单机与 LAN 主机使用所选地图，加入者跟随主机。荒漠地图含可进入矿坑、高台、坡道及地形视线遮挡。2026-09-29 21:02 导出的 EXE 已包含此更新。
 - Windows 构建：`build/IronFront.exe`（当前导出使用嵌入资源）。
 - 源码验证：普通改动使用 `tools/codex/run-validation.ps1 -Level Light -Area <影响面>`，跨系统改动使用 `-Level Full`；不要直接调用未固定路径的 Godot/Python。
 - 局域网：主机使用 `Create LAN Host`，客户端输入主机 IP 后选择 `Join Host`；默认 UDP 端口为 `24560`。

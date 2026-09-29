@@ -1,6 +1,8 @@
 param(
     [string]$GodotPath = 'D:\application\Godot_v4.7.2\Godot_v4.7.2-stable_win64_console.exe',
-    [string]$ResultDirectory
+    [string]$ResultDirectory,
+    [ValidateSet("prototype", "desert_quarry")]
+    [string]$MapId = "prototype"
 )
 $ErrorActionPreference = 'Stop'
 $projectDir = Split-Path -Parent $PSScriptRoot
@@ -18,18 +20,18 @@ New-Item -ItemType Directory -Force -Path $resultDir | Out-Null
 $started = @()
 try {
     $hostLog = Join-Path $resultDir 'host.log'
-    $hostProcess = Start-Process -FilePath $GodotPath -ArgumentList @('--headless','--path',$projectDir,'--log-file',$hostLog,'--script','res://tests/network_guest.gd','--','--role=host') -WorkingDirectory $projectDir -WindowStyle Hidden -PassThru
+    $hostProcess = Start-Process -FilePath $GodotPath -ArgumentList @('--headless','--path',$projectDir,'--log-file',$hostLog,'--script','res://tests/network_guest.gd','--','--role=host',"--map=$MapId") -WorkingDirectory $projectDir -WindowStyle Hidden -PassThru
     $started += $hostProcess
     Start-Sleep -Milliseconds 600
     foreach ($testRole in @('mismatch','guest','guest')) {
         if ($testRole -eq 'mismatch') { $roundIndex = 0 } elseif ($roundIndex -eq 0) { $roundIndex = 1 } else { $roundIndex = 2 }
         $log = Join-Path $resultDir "guest_$roundIndex.log"
-        $guestProcess = Start-Process -FilePath $GodotPath -ArgumentList @('--headless','--path',$projectDir,'--log-file',$log,'--script','res://tests/network_guest.gd','--',"--role=$testRole","--round=$roundIndex") -WorkingDirectory $projectDir -WindowStyle Hidden -PassThru
+        $guestProcess = Start-Process -FilePath $GodotPath -ArgumentList @('--headless','--path',$projectDir,'--log-file',$log,'--script','res://tests/network_guest.gd','--',"--role=$testRole","--round=$roundIndex", "--map=$MapId") -WorkingDirectory $projectDir -WindowStyle Hidden -PassThru
         $started += $guestProcess
         if ($roundIndex -eq 1) {
             Start-Sleep -Milliseconds 1000
             $spectatorLogPath = Join-Path $resultDir 'spectator.log'
-            $spectatorProcess = Start-Process -FilePath $GodotPath -ArgumentList @('--headless','--path',$projectDir,'--log-file',$spectatorLogPath,'--script','res://tests/network_guest.gd','--','--role=spectator') -WorkingDirectory $projectDir -WindowStyle Hidden -PassThru
+            $spectatorProcess = Start-Process -FilePath $GodotPath -ArgumentList @('--headless','--path',$projectDir,'--log-file',$spectatorLogPath,'--script','res://tests/network_guest.gd','--','--role=spectator',"--map=$MapId") -WorkingDirectory $projectDir -WindowStyle Hidden -PassThru
             $started += $spectatorProcess
             if (-not $spectatorProcess.WaitForExit(6000)) { throw 'Spectator timed out' }
             $spectatorLog = Get-Content -Raw -LiteralPath $spectatorLogPath

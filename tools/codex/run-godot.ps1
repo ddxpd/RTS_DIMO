@@ -7,6 +7,7 @@ param(
     [string]$Output = 'build\IronFront.exe',
     [string]$GodotPath,
     [string]$LogFile,
+    [switch]$Rendered,
     [ValidateRange(0, 3600)]
     [int]$TimeoutSeconds = 0,
     [string[]]$Arguments = @()
@@ -17,6 +18,9 @@ $ErrorActionPreference = 'Stop'
 
 $godot = Get-TrustedGodotPath -RequestedPath $GodotPath
 $godotArguments = @()
+if ($Rendered -and $Action -ne 'script') {
+    throw 'Rendered mode is only supported for project scripts.'
+}
 
 switch ($Action) {
     'version' {
@@ -35,7 +39,9 @@ switch ($Action) {
                 throw "The wrapper owns the project path and editor mode: $argument"
             }
         }
-        $godotArguments = @('--headless', '--path', $script:ProjectRoot, '--script', $Script) + $Arguments
+        $displayArguments = @()
+        if (-not $Rendered) { $displayArguments += '--headless' }
+        $godotArguments = $displayArguments + @('--path', $script:ProjectRoot, '--script', $Script) + $Arguments
     }
     'export' {
         $outputPath = Resolve-ProjectPath -Path $Output -AllowMissing

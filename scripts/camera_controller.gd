@@ -9,6 +9,7 @@ var world_size: Vector2
 var viewport_size_provider: Callable
 var mouse_position_provider: Callable
 var speed_multiplier := 1.0
+var surface_picker: Callable
 var focus := Vector2.ZERO
 
 func _init(target_camera: Camera3D, world: Vector2, viewport_provider: Callable, mouse_provider: Callable) -> void:
@@ -46,6 +47,11 @@ func _visible_ground_rect() -> Rect2:
     var vp := camera.get_viewport().get_visible_rect()
     var points: Array = []
     for corner: Vector2 in [Vector2(0, 0), Vector2(vp.size.x, 0), Vector2(vp.size.x, vp.size.y), Vector2(0, vp.size.y)]:
+        if surface_picker.is_valid():
+            var point: Vector2 = surface_picker.call(corner)
+            if point.x >= 0 and point.y >= 0:
+                points.append(point)
+                continue
         var ray_from: Vector3 = camera.project_ray_origin(corner)
         var ray_dir: Vector3 = camera.project_ray_normal(corner)
         if absf(ray_dir.y) < 0.001:
