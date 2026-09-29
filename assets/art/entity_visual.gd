@@ -92,11 +92,13 @@ func set_position_2d(position_2d: Vector2, ground_height: float = 0.0) -> void:
     position = Vector3(position_2d.x, ground_height, position_2d.y)
 
 
-func set_heading(heading: Vector2) -> void:
+func set_heading(heading: Vector2, immediate: bool = false) -> void:
     if heading.length_squared() < 0.01:
         return
     var forward_z := _forward_z()
     _target_heading = atan2(heading.x * forward_z, heading.y * forward_z)
+    if immediate:
+        rotation.y = _target_heading
 
 
 func get_visual_forward() -> Vector3:

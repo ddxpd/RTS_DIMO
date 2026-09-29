@@ -2,12 +2,14 @@ extends RefCounted
 
 const Catalog = preload("res://scripts/maps/map_catalog.gd")
 const Modules = preload("res://scripts/maps/terrain_modules.gd")
+const SampleSurface = preload("res://scripts/maps/sample_surface.gd")
 const CELL := 32.0
 const WIDTH := 150
 const DEPTH := 100
 const WORLD := Vector2(4800, 3200)
 const COUNT := WIDTH * DEPTH
 
+var sample_surface: SampleSurface
 var id := ""
 var definition: Dictionary = {}
 var checksum := ""
@@ -26,6 +28,7 @@ func load_map(map_id: String) -> bool:
 
 func assemble(data: Dictionary) -> bool:
     error = ""
+    sample_surface = null
     if data.is_empty() or data.get("size") != WORLD:
         error = "Unknown map or unsupported dimensions."
         return false
@@ -33,7 +36,10 @@ func assemble(data: Dictionary) -> bool:
     id = str(data.id)
     var digest := HashingContext.new()
     digest.start(HashingContext.HASH_SHA256)
-    digest.update(var_to_bytes([Modules.REVISION, definition]))
+    var revisions: Array = [Modules.REVISION, definition]
+    if definition.get("id", "") == "desert_sample":
+        revisions.append(SampleSurface.REVISION)
+    digest.update(var_to_bytes(revisions))
     checksum = digest.finish().hex_encode()
     heights.resize(COUNT)
     heights.fill(0.0)
@@ -51,6 +57,8 @@ func assemble(data: Dictionary) -> bool:
         navigation_clear.resize(COUNT)
         navigation_clear.fill(1)
         return true
+    if id == "desert_sample":
+        return _assemble_sample()
     var occupied: Array[Rect2] = []
     for module: Dictionary in data.modules:
         if not Modules.KINDS.has(module.get("kind")) or not module.get("position") is Vector2 or not module.get("size") is Vector2:
@@ -117,6 +125,8 @@ func center(index: int) -> Vector2:
     return Vector2((index % WIDTH) * CELL + 16.0, (index / WIDTH) * CELL + 16.0)
 
 func height_at(point: Vector2) -> float:
+    if sample_surface != null:
+        return sample_surface.height_at(point)
     if heights.is_empty():
         return 0.0
     var index := cell_index(point)
@@ -128,6 +138,8 @@ func vertex_in_cell(index: int, point: Vector2) -> Vector3:
     return Vector3(point.x, heights[index] + gradients[index].dot(point - center(index)), point.y)
 
 func position_clear(point: Vector2, radius: float) -> bool:
+    if sample_surface != null:
+        return sample_surface.position_clear(point, radius)
     if not Rect2(Vector2.ONE * radius, WORLD - Vector2.ONE * radius * 2).has_point(point):
         return false
     var index := cell_index(point)
@@ -152,6 +164,8 @@ func segment_clear(from: Vector2, to: Vector2, radius: float) -> bool:
     return true
 
 func build_error(rect: Rect2) -> String:
+    if sample_surface != null:
+        return sample_surface.build_error(rect)
     var h := height_at(rect.get_center())
     for z in range(int(floor(rect.position.y / CELL)), int(ceil(rect.end.y / CELL)) + 1):
         for x in range(int(floor(rect.position.x / CELL)), int(ceil(rect.end.x / CELL)) + 1):
@@ -263,6 +277,8 @@ func ray_hit(origin: Vector3, direction: Vector3) -> Vector3:
     return Vector3(INF, INF, INF)
 
 func road_weight(point: Vector2) -> float:
+    if sample_surface != null:
+        return sample_surface.road_sample(point).x
     var weight := 0.0
     for road: Dictionary in definition.roads:
         var points: Array = road.points
@@ -304,3 +320,24 @@ func _validate_connectivity() -> bool:
             error = "Unreachable spawn or resource at %s." % point
             return false
     return true
+
+func _assemble_sample() -> bool:
+    sample_surface = SampleSurface.new()
+    sample_surface.configure(definition)
+    navigation_clear.resize(COUNT)
+    # Sample-only arrays support the existing coarse AStar grid. Fine queries
+    # always use the shared triangle cache and never take the flat-cell shortcut.
+    for index in range(COUNT):
+        var point := center(index)
+        heights[index] = sample_surface.height_at(point)
+        gradients[index] = sample_surface.gradient_at(point)
+        passable[index] = int(sample_surface.bounds.has_point(point))
+        buildable[index] = int(passable[index] != 0 and gradients[index].length() < 0.005)
+        navigation_clear[index] = int(sample_surface.position_clear(point, 24.0))
+    return _validate_connectivity()
+
+
+func gradient_at(point: Vector2) -> Vector2:
+    if sample_surface != null:
+        return sample_surface.gradient_at(point)
+    return gradients[cell_index(point)]

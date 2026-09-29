@@ -56,7 +56,7 @@ func reset(with_ai: bool = false, selected_map: String = "prototype") -> bool:
     frame      = 0
     winner     = 0
     next_id    = 1
-    ai_enabled = with_ai
+    ai_enabled = with_ai and not is_test_map()
     effects.clear()
     for owner in [1, 2]:
         var cells := PackedByteArray()
@@ -65,21 +65,39 @@ func reset(with_ai: bool = false, selected_map: String = "prototype") -> bool:
         visible[owner] = cells.duplicate()
         explored[owner] = cells.duplicate()
     obstacles.assign(terrain.definition.get("obstacles", []))
-    for owner in [1, 2]:
+    for owner in ([1] if is_test_map() else [1, 2]):
         var spawn: Vector2 = terrain.definition.spawns[owner - 1]
         _add_building(owner, "base", spawn, true)
-    for owner in [1, 2]:
+    for owner in ([1] if is_test_map() else [1, 2]):
         var spawn: Vector2 = terrain.definition.spawns[owner - 1]
         var facing := 1.0 if owner == 1 else -1.0
         for index in range(6):
-            add_unit(owner, "soldier", spawn + Vector2(256.0, -128.0 + index * 64.0) * facing)
+            var position := spawn + Vector2(256.0, -128.0 + index * 64.0) * facing
+            if is_test_map():
+                position = terrain.definition.sample_bounds.position + Vector2(720 + index * 36, 520)
+            add_unit(owner, "soldier", position)
+    if is_test_map():
+        var origin: Vector2 = terrain.definition.sample_bounds.position
+        money = {1: 10000, 2: 0}
+        _add_building(1, "barracks", origin + Vector2(140, 520), true)
+        _add_building(1, "refinery", origin + Vector2(300, 160), true)
+        add_unit(1, "harvester", origin + Vector2(400, 160))
     for index in range(terrain.definition.ores.size()):
         ores[index + 1] = terrain.definition.ores[index].duplicate(true)
     rebuild_navigation()
     update_visibility()
     return true
 
+func is_test_map() -> bool:
+    return bool(terrain.definition.get("test_only", false))
+
+
 func update_visibility() -> void:
+    if is_test_map():
+        for owner in [1, 2]:
+            visible[owner].fill(1)
+            explored[owner].fill(1)
+        return
     for owner in [1, 2]:
         var cells: PackedByteArray = visible[owner]
         cells.fill(0)
@@ -613,6 +631,9 @@ func step() -> void:
         rebuild_navigation()
     if frame % 4 == 0:
         update_visibility()
+    if is_test_map():
+        winner = 0
+        return
     # Victory: a player is eliminated only when every friendly building is gone.
     var has_building := {1: false, 2: false}
     for b: Dictionary in buildings.values():

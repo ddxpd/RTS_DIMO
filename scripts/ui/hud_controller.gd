@@ -389,8 +389,9 @@ func build() -> void:
     host.menu_buttons.add_child(host.map_description)
     host._update_map_description()
     host.resume_button = _button(host.menu_buttons, "Resume", host._close_menu)
-    _button(host.menu_buttons, "New solo match (vs AI)", host.play_solo)
-    _button(host.menu_buttons, "Create LAN Host", host.create_host)
+    host.solo_button = _button(host.menu_buttons, "New solo match (vs AI)", host.play_solo)
+    host.sample_host_button = _button(host.menu_buttons, "Create LAN Host", host.create_host)
+    host._update_map_description()
     host.address = LineEdit.new()
     host.address.text = host.host_ip
     host.address.placeholder_text = "Host IPv4 host.address"

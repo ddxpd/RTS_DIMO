@@ -29,7 +29,7 @@ func run() -> void:
     root.add_child(game)
     game.set_process(false)
     check(game.selected_map_id == "desert_quarry", "Menu defaults to desert")
-    check(game.map_selector.item_count == 2, "Menu lists both maps")
+    check(game.map_selector.item_count == 3, "Menu lists both maps and temporary sample")
     game.play_solo()
     game.sim.ai_enabled = false
     game.local_slot = 0

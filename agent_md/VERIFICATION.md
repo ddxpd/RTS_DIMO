@@ -1,5 +1,37 @@
 # 验证索引
 
+## 2026-09-29：士兵朝向修复版 Windows 导出
+
+- 固定 run-godot.ps1 导出退出 0，.godot/soldier-heading-export.log 无脚本/导出错误，stderr 为空；确认更新后的 world_visual_sync.gdc 与 entity_visual.gdc 已打包。
+- build/IronFront.exe：130552040 字节，2026-09-29 23:01:22，embed_pck=true，可单独运行。SHA256：6E8895A311A657887F1DEEDCEEC8ECBC4594A80C8497AC68E350B49D2C0BD6A2。
+- run-exported.ps1 存活 5 秒检查通过；cleanup -StopTracked -StopUntracked 与 -ReportOnly 通过，无项目进程/端口残留，共享 Blender MCP 保留。
+- 本轮未修改源码，沿用上一轮 Light Visual 及实际 OpenGL 路线测试；不重复 Light/Full/ENet，EXE 仅做启动冒烟，未推送远端。此导出替代下面实现阶段“EXE 尚不包含修复”的历史状态。
+
+## 2026-09-29：士兵跟随实际行进方向
+
+- 最终 Light Visual 通过（8.503 秒），日志 .godot/validation/20260929-225604-133008，包含 visual_models、terrain_presentation、terrain_sample_view；直接检查同步后的模型正面方向，不由断言助手手动改朝向。
+- 覆盖无路径保持原朝向、首次路径节点优先、实际避让位移、模拟帧间保持、停步、交战瞄准、目标移除后恢复移动朝向、客户端快照速度及反向位置校正、零速度、实体销毁/ID 复用/世界重置。
+- 高台与矿坑各跑实际 command/step 寻路，要求存在超过 5 个方向偏离终点的绕行步，并逐步校验模型方向与位移点积大于 0.999，最终抵达目标 20 单位以内。
+- 固定 run-godot.ps1 -Action script -Script res://tests/terrain_sample_view.gd -Rendered -Arguments:--heading-capture 通过，.godot/soldier-heading-render.log 无错误、stderr 为空。1920×1080 OpenGL 实机截图四张位于 assets/concept_art/soldier-heading-{highland,quarry}-{turn,ramp}-v1.png，已查看。
+- 本次只有视觉层与测试变更，不修改模拟或快照；因此跳过 Simulation/Full/完整 ENet，无源素材变化故无需 import。按确认计划未导出/启动 EXE，已有 EXE 尚不包含这次朝向修复。
+- 最终 cleanup -StopTracked -StopUntracked 与 -ReportOnly 均通过，无项目进程/端口残留；共享 Blender MCP 保留。部分 headless 套件仍有既有 ObjectDB 退出警告，此问题不在本次修复范围。
+
+## 2026-09-29：荒漠样板区 1–8 项升级
+
+- 开发验证选择 Light Simulation/Visual/Tooling，全部通过：原 gameplay、visual_models、terrain_maps、terrain_presentation，以及新增 terrain_sample / terrain_sample_view；wrapper 语法与 execpolicy 27 个允许 / 5 个负例通过。该阶段跳过其余 UI 和 ENet，因为交付前另执行 Full。
+- 样板规则断言：7 单位/3 建筑/10000 资金、无 AI/胜负、全图可见、确定性生成、平面可建造/坡面拒绝、不可穿越崖壁、道路中心连续可通行。士兵和矿车通过实际 command/step 分别到达高台及坑底，切回普通地图恢复 AI/迷雾。
+- 场景断言：菜单第三项、禁止样板建主机、实际 NetworkSession 快照入口拒绝样板、重开不重复地形、切图恢复正式规则、四处高低地/坡道屏幕点选误差小于 1 单位、运行时预览已导入。
+- 实际 Compatibility/OpenGL，1920×1080、RTX 5070 Ti：初始场景平均 6.943 ms，P95 7.187 ms；180 单位静态显示 7.057 ms，P95 8.768 ms；180 单位运行平均 21.102 ms（约 47 FPS），P95 36.896 ms；独立逻辑 tick 平均 17.369 ms。该结果只代表本机短时测试，未作最低配置保证。
+- 样板地形 129024 三角形，首次构建约 0.76 秒。测试命令为固定 run-godot.ps1，-Action script -Script res://tests/terrain_sample_view.gd -Rendered -Arguments:--capture。日志 .godot/sample-render.log；TERRAIN_SAMPLE_VIEW PASS；最终渲染轮次出现既有 ObjectDB 退出警告，无脚本或渲染错误。
+- 固定视角 overview/highland/cliff/quarry/materials/gameplay/menu 共七张 PNG 位于 assets/concept_art；已查看并确认高低轮廓、岩壁碎石、道路、材质及菜单预览。菜单运行时图另在 assets/maps/sample/preview.png。
+- 单独资源导入完成，日志 sample-import.log / sample-preview-import.log 中有 DONE；编辑器既有退出挂起通过超时/清理入口回收，未宣称 editor 生命周期修复。部分 headless / 实际渲染场景仍有既有 ObjectDB 退出警告，未修复该独立问题。
+- Full 已通过，耗时 228.223 秒，日志 .godot/validation/20260929-223627-80592。全部 11 个本地套件通过，ENet 对 prototype/desert_quarry 分别完成协议不匹配、观察者权限、采矿、建造、生产、击杀、重连、重开、快照一致性和主机断线处理。导出独立执行，结果见下。
+- 最后发现自定义着色器贴图没有自动生成 mipmap，已显式启用八张材质图的导入设置，并新增运行时 has_mipmaps 断言；重新导入完成，编辑器 45 秒退出超时由 wrapper 终止。该纯资源变更之后补跑 Light Visual（8.539 秒）及实机截图均通过，包括八张贴图 has_mipmaps 断言；远景密集闪点减少，不重复无关 ENet。
+
+- Windows 导出退出 0，日志 .godot/sample-export.log，stderr 为空；确认样板配置、共享表面/渲染脚本、shader、八张材质和运行时预览均打包。build/IronFront.exe 为 130550632 字节（约 124.5 MiB），embed_pck=true，无需另配 PCK。
+- EXE SHA256：33A13AE8FA8408D5E83A9CD1E3CB96CDC99C845F1FB0ACC7BAFD46C5073C3CAF。run-exported.ps1 检查启动存活 5 秒通过；EXE 内未另跑完整交互回归，交互证据来自相同源码的实际 OpenGL 场景测试。
+- 最终 cleanup -StopTracked -StopUntracked 和独立 -ReportOnly 均通过，项目进程及 24560/8766 端口无残留；共享 Blender MCP 进程仅报告、不终止。Git 限定源码差异检查通过，本轮未提交/推送。
+
 ## 2026-09-29：Windows 沙箱文件编辑权限修复
 
 - 仅修复项目 .git 顶层所有者，CodexSandboxOffline → happydog。管理员脚本返回 PASS、DaclUnchanged=true、Recursive=false，原 ACL/所有者备份与结果 JSON 均在 agent_md/。

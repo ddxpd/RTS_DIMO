@@ -126,7 +126,7 @@ func _sync_ores() -> void:
             visual.name = "Ore%d" % id
             visual.set_position_2d(ore.pos, host.sim.terrain.height_at(ore.pos))
             add_child(visual)
-            if host.sim.map_id == "desert_quarry":
+            if host.sim.map_id in ["desert_quarry", "desert_sample"]:
                 for entry in visual._materials:
                     entry.material.emission_enabled = false
                     entry.material.metallic = 0.0
@@ -238,7 +238,7 @@ func _sync_units() -> void:
         _set_visual_visible(visual, u.owner == host.local_slot or host.sim.can_see(host.local_slot, u.pos))
         visual.set_position_2d(u.pos, host.sim.terrain.height_at(u.pos))
         visual.set_flash(u.flash > 0)
-        visual.set_heading(_unit_heading(u, id))
+        visual.set_heading(_unit_heading(u, id), u.type == "soldier" and not _has_combat_target(u))
         visual.set_animation(_unit_animation_state(u))
         var unit_selected: bool = host.selected_units.has(id)
         var unit_radius := _selection_ring_radius(u.type, float(Simulation.UNIT_TYPES[u.type].radius))
@@ -328,6 +328,8 @@ func _unit_in_attack_range(u: Dictionary) -> bool:
 
 
 func _unit_heading(u: Dictionary, id: int) -> Vector2:
+    if u.type == "soldier":
+        return _soldier_heading(u, id, unit_visuals[id])
     var destination := _unit_destination(u)
     var heading := destination - (u.pos as Vector2)
     if heading.length_squared() > 1.0:
@@ -335,6 +337,46 @@ func _unit_heading(u: Dictionary, id: int) -> Vector2:
     if host.render_velocities.has(id):
         return host.render_velocities[id]
     return Vector2.UP
+
+
+func _has_combat_target(u: Dictionary) -> bool:
+    if u.order not in ["attack", "attack_move"]:
+        return false
+    if u.attack_kind == "unit":
+        return host.sim.units.has(int(u.attack_id))
+    if u.attack_kind == "building":
+        return host.sim.buildings.has(int(u.attack_id))
+    return false
+
+
+func _soldier_heading(u: Dictionary, id: int, vis: Dictionary) -> Vector2:
+    var position: Vector2 = u.pos
+    var motion := position - (vis.get("last_position", position) as Vector2)
+    vis.last_position = position
+    var forward: Vector3 = vis.visual.get_visual_forward()
+    var heading: Vector2 = vis.get("last_heading", Vector2(forward.x, forward.z))
+    if _has_combat_target(u):
+        var aim := _unit_destination(u) - position
+        if aim.length_squared() > 1.0:
+            heading = aim.normalized()
+    elif u.order in ["move", "attack_move", "attack"]:
+        # Snapshot corrections can move the rendered position backwards. On
+        # guests, use the existing snapshot-derived velocity instead.
+        if host.connected and not host.is_host:
+            motion = host.render_velocities.get(id, Vector2.ZERO)
+        if motion.length_squared() > 0.0001:
+            heading = motion.normalized()
+            vis.has_moved = true
+        elif not vis.get("has_moved", false):
+            # Before the first movement tick, follow the next path segment.
+            # Never substitute the final goal when a path is unavailable.
+            for waypoint: Vector2 in u.path:
+                var direction := waypoint - position
+                if direction.length_squared() > 1.0:
+                    heading = direction.normalized()
+                    break
+    vis.last_heading = heading
+    return heading
 
 
 
@@ -535,7 +577,7 @@ func _sync_fog() -> void:
                     host.fog_image.set_pixel(x, y, Color(0, 0, 0, 0))
         host.fog_texture.update(host.fog_image)
 func _surface_rotation(point: Vector2) -> Vector3:
-    var gradient: Vector2 = host.sim.terrain.gradients[host.sim.terrain.cell_index(point)]
+    var gradient: Vector2 = host.sim.terrain.gradient_at(point)
     return Vector3(-atan(gradient.y), 0.0, atan(gradient.x))
 
 func reset_world() -> void:

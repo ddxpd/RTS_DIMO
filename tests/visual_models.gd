@@ -492,5 +492,6 @@ func run() -> void:
     check(is_equal_approx(game.build_preview_visual.scale.x, refinery_size.x / 100.0) and is_equal_approx(game.build_preview_visual.scale.z, refinery_size.y / 100.0), "Refinery preview matches its 80x80 footprint")
 
     preload("res://tests/cursor_checks.gd").visual(game, check)
+    preload("res://tests/soldier_heading_checks.gd").basic(game, check)
     print("VISUAL_MODELS_TEST failures=", failures)
     quit(0 if failures.is_empty() else 1)

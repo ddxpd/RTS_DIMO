@@ -11,14 +11,8 @@ func configure(owner) -> void:
 
 
 func _apply_snapshot_checked(state: Dictionary, context: String) -> bool:
-    if host == null or host.sim.apply_snapshot(state):
-        return host != null
-    var detail: String = host.sim.last_snapshot_error
-    disconnect_session.call_deferred()
-    host.active = false
-    host.connected = false
-    host._notify("Invalid %s snapshot%s" % [context, ": " + detail if not detail.is_empty() else ""])
-    return false
+    # Both RPC paths share map restrictions and snapshot validation.
+    return host != null and host._apply_snapshot_checked(state, context)
 
 
 func disconnect_session() -> void:

@@ -12,6 +12,7 @@ const HudController = preload("res://scripts/ui/hud_controller.gd")
 const CursorController = preload("res://scripts/ui/cursor_controller.gd")
 const MapCatalog = preload("res://scripts/maps/map_catalog.gd")
 const TerrainView = preload("res://scripts/maps/terrain_view.gd")
+const SampleView = preload("res://scripts/maps/sample_view.gd")
 const PORT := 24560
 const MAX_CLIENTS := 4
 var sim := Simulation.new()
@@ -62,6 +63,8 @@ var selected_map_id := "desert_quarry"
 var terrain_view: TerrainView
 var rendered_map_id := ""
 var rendered_match_id := -1
+var sample_host_button: Button
+var solo_button: Button
 var map_selector: OptionButton
 var map_description: Label
 var map_preview: TextureRect
@@ -166,8 +169,8 @@ func _create_terrain() -> void:
             chunk.free()
     terrain_chunks.clear()
     rendered_map_id = sim.map_id
-    if sim.map_id == "desert_quarry":
-        terrain_view = TerrainView.new()
+    if sim.map_id in ["desert_quarry", "desert_sample"]:
+        terrain_view = SampleView.new() if sim.is_test_map() else TerrainView.new()
         add_child(terrain_view)
         terrain_view.build(sim.terrain, fog_texture)
         return
@@ -237,6 +240,9 @@ func _create_fog() -> void:
 func _update_camera_transform() -> void:
     if camera_controller != null:
         camera_controller.focus = camera_controller.focus.clamp(Vector2.ZERO, Simulation.WORLD)
+        if sim.is_test_map():
+            var area: Rect2 = sim.terrain.definition.sample_bounds
+            camera_controller.focus = camera_controller.focus.clamp(area.position + Vector2(128, 128), area.end - Vector2(128, 128))
     var focus3 := Vector3(camera_controller.focus.x, sim.terrain.height_at(camera_controller.focus), camera_controller.focus.y)
     var pitch := deg_to_rad(42.0)
     var dist := 1200.0 / camera_zoom_level
@@ -632,6 +638,9 @@ func _reset_view() -> void:
     clicks.clear()
     camera_zoom_level = 2.0
     camera_controller.focus = Vector2(900, 700) if local_slot != 2 else Vector2(3900, 2500)
+    if sim.is_test_map():
+        camera_controller.focus = sim.terrain.definition.camera_focus
+        camera_zoom_level = sim.terrain.definition.camera_zoom
     _update_camera_transform()
     menu_visible    = false
     menu.visible    = false
@@ -648,6 +657,12 @@ func _disconnect() -> void:
     rates.clear()
 
 func _apply_snapshot_checked(state: Dictionary, context: String) -> bool:
+    if state.get("map_id", "") == "desert_sample":
+        _disconnect.call_deferred()
+        active = false
+        connected = false
+        _notify("样板区不支持联机。")
+        return false
     if sim.apply_snapshot(state):
         return true
     var detail: String = sim.last_snapshot_error
@@ -669,9 +684,15 @@ func play_solo() -> void:
         session.reset_clock()
     _reset_view()
     Input.mouse_mode = Input.MOUSE_MODE_CONFINED
-    _notify("Select the harvester, then right-click yellow ore. Build a barracks to train soldiers.")
+    if sim.is_test_map():
+        _notify("样板测试场：全图可见，无敌人和胜负。右键指挥单位上下坡；可测试建造与采矿。")
+    else:
+        _notify("Select the harvester, then right-click yellow ore. Build a barracks to train soldiers.")
 
 func create_host() -> void:
+    if MapCatalog.definition(selected_map_id).get("test_only", false):
+        _notify("样板区仅供单机测试，请选择正式地图创建联机。")
+        return
     _disconnect()
     peer = ENetMultiplayerPeer.new()
     var error := peer.create_server(PORT, MAX_CLIENTS)
@@ -1442,10 +1463,10 @@ func _sync_map_world() -> void:
             visual_sync.reset_world()
     fog_plane.visible = sim.map_id == "prototype"
     if terrain_view != null:
-        terrain_view.set_reveal_all(local_slot == 0)
+        terrain_view.set_reveal_all(local_slot == 0 or sim.is_test_map())
     var environment_node := get_node_or_null("BattlefieldEnvironment") as WorldEnvironment
     if environment_node != null:
-        var desert := sim.map_id == "desert_quarry"
+        var desert := sim.map_id in ["desert_quarry", "desert_sample"]
         environment_node.environment.ambient_light_energy = 0.45 if desert else 0.72
         var sunlight := get_node_or_null("BattlefieldSun") as DirectionalLight3D
         if sunlight != null:
@@ -1466,8 +1487,15 @@ func _update_map_description() -> void:
     if map_description == null:
         return
     var data := MapCatalog.definition(selected_map_id)
-    map_description.text = data.description + "\n联机加入时使用主机地图"
+    var sample: bool = data.get("test_only", false)
+    map_description.text = data.description + ("\n临时选项 · 可自由移动、采矿和建造" if sample else "\n联机加入时使用主机地图")
+    if sample_host_button != null:
+        sample_host_button.disabled = sample
+        sample_host_button.tooltip_text = "样板区仅供单机测试" if sample else ""
+    if solo_button != null:
+        solo_button.text = "进入样板测试场" if sample else "New solo match (vs AI)"
     var preview_path := "res://assets/concept_art/desert-quarry-overview.png" if selected_map_id == "desert_quarry" else "res://build/verification/gameplay.png"
+    preview_path = data.get("preview", preview_path)
     if ResourceLoader.exists(preview_path):
         map_preview.texture = load(preview_path)
     else:

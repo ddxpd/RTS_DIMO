@@ -1,5 +1,22 @@
 # 架构发现与决策
 
+## 2026-09-29：士兵移动朝向
+
+- 原视觉方向优先取终点方向，导致士兵绕道时横向行走。现改为士兵视觉记录缓存 last_position / last_heading / has_moved，无有效交战目标时按实际水平位移转身，重复渲染和停步保留方向；首次位移前仅用当前路径节点作为后备。
+- 原 EntityVisual 已有 lerp_angle 转身插值，并非即时转身；set_heading 新增默认 false 的 immediate 参数，仅对非交战士兵启用，以落实用户选择。矿车和战斗瞄准继续原有表现。
+- 客户端复用已有 render_velocities，避免快照回正被误认为向后移动。不修改模拟单位字段或网络快照；朝向记录随 unit_visuals 删除及 reset_world 清除。
+- Light Visual 覆盖同步后模型方向而非测试辅助函数手动 set_heading；样板路线需包含实际方向与终点方向明显不同的绕行段，并抵达高台/坑底。
+
+## 2026-09-29：荒漠样板区迭代入口
+
+- 初始地图仍为 desert_quarry；第三项 desert_sample 是单机测试场。局部样板为 2048×1536，世界尺寸保持 4800×3200，周围保留沙地缓冲。
+- assets/maps/desert_sample.tres 集中控制高台/矿坑中心、半径、高差、边缘宽度、坡道起终点和宽度、道路点列/宽度、材质尺度、碎石密度、种子及默认相机。改变布局主要编辑该配置；改变地形算法时同步提升 sample_surface.gd 的 REVISION。
+- sample_surface.gd 以 8 单位网格生成共享三角表面，绘制、贴地和鼠标射线查询同一高度；32 单位 AStar 网格保留保守净空检查。平面建造台保持精确平坦，坡道端点使用平滑插值。
+- 四套 1024×1024 离线材质为 sand/soil/gravel/rock，每套包含颜色与法线 RGB + 粗糙度 A。通过固定 run-godot.ps1 的 script 动作运行 res://tools/art/bake_sample_materials.gd 可重新生成，随后独立 import。运行时无需生成纹理，继续兼容 Compatibility。
+- sample_surface.gdshader 控制坡度/区域混合、三向岩壁投射、宏观色斑、中尺度变化、微观法线、距离衰减和断续双车辙；sample_view.gd 分块生成地形及 MultiMesh 碎石。固定种子保证重复生成一致。
+- 所有效果截图保存在 assets/concept_art/sample-*-v1.png；该目录有 .gdignore，菜单使用 assets/maps/sample/preview.png 的运行时副本。新的地图生成与材质只作用于样板区，正式荒漠地图仍沿用原生成器。
+- 样板地形限制：单层高度场，不能表示洞穴或悬挑；没有随机整图生成器、游戏内编辑器或正式对战平衡。180 单位实机压力测试衡量整个游戏循环，不能等同于纯地形 GPU 耗时。
+
 ## 2026-09-29：工业装甲光标接入
 
 - 当前使用系统箭头；点击字典含 action，但渲染全部为 0.55 秒黄色 billboard。
