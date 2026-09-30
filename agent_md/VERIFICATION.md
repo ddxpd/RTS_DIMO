@@ -1,5 +1,68 @@
 # 验证索引
 
+## 2026-09-30：v4 兵营版本 Windows 导出
+
+- 固定 run-godot.ps1 -Action export 成功，.godot/barracks-v4-export.log 显示 savepack DONE，stderr 空；build/IronFront.exe 为 131,752,000 字节，binary_format/embed_pck=true，无需配套 PCK。
+- run-exported.ps1 -DurationSeconds 5 输出 EXPORTED_GAME_SMOKE_PASS；固定 cleanup 清理后无项目进程与端口，共享 MCP 未停止。
+- 本轮无源码改动，不重复 Light/Full；玩法依据下方已通过的 Full、专用兵营规则和三地图实机测试。导出包验证范围为启动存活，不是导出环境完整玩法回归。
+
+## 2026-09-30：v4 兵营游戏接入
+
+- 选择 Full：本轮跨越模拟状态、快照协议、输入/UI、模型动画和占地；.godot/validation/20260930-144905-52004，260.403 秒，全部通过。运行 gameplay、arrival_formation、presentation、features、camera、action_bar、visual_models、soldier_locomotion、visual_performance（含荒漠）、terrain_maps、terrain_presentation、terrain_sample、terrain_sample_view、完整 ENet 和 cleanup。
+- ENet 在 prototype/desert_quarry 两地图验证旧协议拒绝、观战权限、逐 RPC 连续 20Hz 快照、主客机生产战斗、兵营升空/迁移/部署、重连/重开/主机断线及两轮完整快照一致。最终目录检索无 SCRIPT ERROR 或 ERROR；既有 ObjectDB 退出警告尚未修复。
+- .godot/barracks-flight-rules.log：45 项通过，包含队列/施工/权限、空地目标、状态快照及非法高度、飞行速度、停止、免费远距离部署、预约与到达复查、不可见/坡道拒绝、高台与低谷、落地正面出兵。荒漠矿区存在合法高台和低谷；样板区矿坑空间不足，按规则拒绝。
+- .godot/barracks-integration.log：三地图实际渲染 PASS，覆盖 L/D/S/右键、行动栏、空中点选、12 格及非法确认、取消、快捷键冲突、旗帜多帧变形与落地/飞行机械姿态。stderr 为空；assets/concept_art/barracks-v4-game-*.png 共 12 张，落地、飞行和红格部署图目视复核。
+- 编辑器资源扫描/导入完成且实际运行加载成功；.godot/barracks-flight-import-final.log 无 stderr，但批量导入编辑器退出仍超时（45 秒），未修复该生命周期问题，不能记作干净导入退出。残余项目进程已通过固定入口清理；共享 MCP 保留。
+- 包装/导出路径未改，本轮未请求 EXE，跳过导出和 exported smoke；未提交/推送。Markdown 与代码 scoped diff 检查通过，仅有 Git CRLF 提示。
+
+## 2026-09-30：底置推进器与收放落架 v4
+
+- .godot/barracks-v4-build.log 最终 BUILD PASS：32,900 三角形、34 网格、三段动画、贴图内嵌、导出重载。97 个姿态检查占地、离地高度、脚垫与机身/喷口、喷口与机身、液压件与机身、转臂与喷口的 BVH 表面相交；连接铰链允许正常装配接触，未做完整物理求解。
+- .godot/barracks-v4-render.log 最终 RENDER PASS：七个静态视角和两段 49 帧 APNG，由交付 GLB 的实际动画渲染。旗帜独立循环；静态图目视检查动力舱外壳、底部喷口与收纳脚垫。全部位于 assets/concept_art。
+- .godot/barracks-v4-godot.log 最终 GODOT PASS：起飞/降落各 4 秒、旗帜 2 秒；实际动画播放检查先升再收、先放再降、坡道关闭与打开终点、落架内收坐标和旗帜独立 morph 变化，61 个带法线纹理的材质表面。三张 Compatibility 引擎截图。最终三个日志 stderr 均空。
+- Light -Area Visual PASS，10.439 秒；运行 visual_models / soldier_locomotion / terrain_presentation / terrain_sample_view，清理确认无项目进程和端口。沿用套件中既有 ObjectDB 退出警告。没有玩法/网络改动，未运行 Full/ENet；没有运行模型替换，无须编辑器重导入；未导出 EXE。
+- 正式 barracks.glb、ironfront_models.blend、simulation.gd、entity_visual.gd SHA256 未变化。HTML 本地资源链接做存在性检查，浏览器端交互与 APNG 播放未自动化测试。预览入口：assets/concept_art/兵营底置推进器预览-v4.html。
+
+## 2026-09-30：兵营轻度写实 v3
+
+- 最终构建 .godot/barracks-realism-build-final.log：BARRACKS_CLEARANCE、BUILD、REALISTIC_DELIVERY 全部 PASS。四推进器与主要装甲/动力舱 BVH 表面无相交（正常连接支架排除）；不代表做了全模型物理碰撞求解。
+- 33,754 三角形/26 网格，作者坐标范围 [-5.1442,-3.4300,-0.0211] 至 [5.1442,3.9334,8.5050]，缩放 12 时在目标 128×96 范围；旗帜 13 个固定边顶点、半周期变形 0.24417、首尾误差 0。所有贴图嵌入 GLB、源文件打包，另交付主体 2K 和旗帜 512 的基础色/法线/ORM PNG。
+- .godot/barracks-realism-render-final.log：六姿态/视图、24 帧 APNG、局部近景、中性/荒漠光照及同镜头前后对比 PASS。目视复核修正了表面颗粒过重、切角漏封板和前封板超长。
+- .godot/barracks-realism-godot.log：Compatibility 实际渲染 PASS，62 个贴图表面及法线纹理有效，旗帜 morph 值随动画变化；四张引擎截图。Godot 画面与 Blender 棚拍仍有光照/阴影差异，未进行正式地图接入、海量建筑压力或浏览器端播放验证。
+- Light Visual：.godot/validation/20260930-125243-84852，10.359 秒，四套件及 cleanup 全通过。已有 ObjectDB 退出警告保留；未动模拟/网络，不运行 Full/ENet；隔离 GLB 直接加载，不执行编辑器导入或 EXE 导出。
+- 预览入口 10 个图片/链接文件均存在。运行兵营、共享源、simulation.gd、entity_visual.gd SHA256 与修改前一致。最终固定 cleanup 报无项目进程与端口，共享 MCP 不终止。
+
+## 2026-09-30：兵营旗帜飘动
+
+- .godot/barracks-flag-build.log PASS，stderr 空：34,998 三角形/26 网格；最大高度 8.505，XY 仍在 4×3 目标范围。GLB 重载后 MainFan 不存在，旗帜动画动作存在。
+- 重载后采样帧 1/13/25/49：13 个旗杆侧顶点固定，半周期最大顶点位移 0.24417，首尾差 0；四种建筑姿态仍通过有限矩阵检查。数值在独立模型目录 validation.json。
+- .godot/barracks-flag-render.log 六静态图及 24 帧/12fps APNG PASS、stderr 空；APNG 帧控制块数量检查通过。目视检查主视/飞行构图，没有浏览器实际播放验证。
+- 四个运行文件 SHA256 未变；预览未接入游戏，因此不跑 Light/Full、导入、ENet 或导出 EXE。最终固定 cleanup：PROJECT_PROCESSES none、PROJECT_PORTS none，共享 MCP 保留。
+
+## 2026-09-30：兵营入口简化复查
+
+- .godot/barracks-v2-simple-build.log：PASS，36,440 三角形/26 网格，4×3 范围与导出重载检查通过，四姿态矩阵有限；stderr 空。
+- .godot/barracks-v2-simple-render-fixed.log：六张 GLB 渲染 PASS、stderr 空。目视复查开门/关门外观，并在门扇 Y 从 2.38 内移至 2.25 后再次检查落地主视，解决打开的门板覆盖装甲表面的问题。
+- 中文 PNG 直接保存两次失败（含沙箱外重试），改为同目录 ASCII 临时图与 os.replace 后默认沙箱内成功；底层原因未完全定位。六张图仍存原 v2 路径。
+- 四个运行文件 SHA256 与修改前相同。验证仅覆盖离线样板，不运行游戏 Light/Full、导入、ENet 或 EXE；最终 cleanup 确认项目进程/端口为空，保留共享 MCP。
+
+## 2026-09-30：4×3 军用机械兵营独立样板
+
+- 固定 Blender 入口构建：.godot/barracks-v2-build-final.log 输出 BARRACKS_V2_BUILD PASS。独立 GLB 重新导入后 26 网格一致，落地/升空/飞行/部署四姿态矩阵均为有限值；最终 41,080 三角形。
+- 包围盒作者坐标最小值 [-5.0442,-3.4300,-0.0224]，最大值 [5.0442,3.9263,6.5200]，预定缩放 12 时满足宽 128、深 96 的目标范围；细节记录在 assets/concept_art/barracks_mechanical_v2/validation.json。坡板底梁初始穿地通过缩短坡板和修正角度解决，最终最低点满足地面容差。
+- .godot/barracks-v2-render-final.log 输出 BARRACKS_V2_RENDER PASS six GLB views；六张 1800×1200 PNG 逐张目视检查。修复共面骨架重叠、风扇叶片遮挡及后壁上方缺口后重渲染。图像来自实际交付模型，不代表游戏内截图。
+- SHA256 对比确认 assets/models/barracks.glb、assets/models/source/ironfront_models.blend、scripts/simulation.gd、assets/art/entity_visual.gd 未变。新样板目录有 .gdignore，运行占地和资源未接入。
+- 验证范围为离线模型几何、导出重载和静态姿态；不适用游戏 Light/Full、导入和 ENet，未测游戏性能或完整动画。最终 cleanup 报 PROJECT_PROCESSES none、PROJECT_PORTS none；共享 MCP 不终止。
+
+## 2026-09-30：方案一可升空兵营实际模型
+
+- 唯一运行资源 assets/models/barracks.glb 已替换，共享源 ironfront_models.blend 的旧兵营树已删除；其他 12 个根对象结构摘要不变。固定 Blender 入口两次构建成功，最终 25,872 三角形/12 网格，包围盒 7.62×6.85×5.71；候选 GLB 重新导入后网格数一致。游戏缩放 8，保持 64×64（2×2）占地及高度锚点 48，遵循用户保留夸张比例的选择。
+- 通过固定入口单独运行资源导入。两次资源处理完成，编辑器退出分别超时 60/30 秒被终止；此退出问题未修复。后续最终 GLB 正常加载，通过视觉断言和真实 OpenGL 渲染，不能将导入进程描述为正常退出。
+- 最终 Light Visual/Performance：.godot/validation/20260930-093140-120224，13.313 秒通过；包括 visual_models、soldier_locomotion、两地图 visual_performance、terrain_presentation、terrain_sample_view 及 cleanup。新增断言验证两门横向开启和停产关闭、新风扇转动、落地推进器保持关闭、占地/血条/阵营色，保留建设及选中圈检查。180 混合单位动态显示同步 6.43/6.39ms，CPU 指标不代表完整渲染帧率。
+- .godot/mobile-barracks-preview-final.log：通过实际 produce 指令生产一名士兵并恢复 idle；与基地、士兵同屏展示真实游戏比例，截图 assets/concept_art/兵营模型-方案一-荒漠实机-v1.png。另五张图由同一最终 GLB 在 Blender 渲染，覆盖落地、背侧、升空、飞行底部、部署，未用 AI 替代实际模型。最终渲染和实机 stderr 为空。
+- 预览修正：GLB 坡板使用四元数导致 Euler 赋值无效，改为明确 XYZ；喷焰整体缩放导致横向偏离喷口，改为固定 XY、沿 Z 缩放并补偿顶端高度；相机扩大取景避免裁切天线。最终目视复查通过。既有部分无界面套件退出 ObjectDB 警告仍存在，未在本轮定位。
+- 无模拟/协议/UI 功能改动，不跑 Full/ENet 或其他无关区域；不导出 EXE。飞行移动和选址部署玩法未实现，当前仅模型分件与姿态。最终固定 cleanup 确认项目进程及端口为空，共享 Blender MCP 保留。未提交、未推送。
+
 ## 2026-09-30：高地边缘紧凑集结与 EXE 更新
 
 - 缺陷：旧四列偏移接受崖下合法位置，失败后还向出发点修正，点击高地边缘会跨层分散。修复为地形连通平台区域内、点击点 128 世界单位范围的紧凑候选；验证体积、通路、占用及预约。容量不足保留意图等待，每单位每秒重试；战斗后恢复，停止/新命令释放预约；抵达后分离保持平台。

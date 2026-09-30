@@ -86,6 +86,8 @@ func refresh() -> void:
             b = host.sim.buildings[host.selected_buildings[host.building_tab_index]]
             tab_prefix = "%d x %s  [%d/%d]   " % [host.selected_buildings.size(), str(b.type).to_upper(), host.building_tab_index + 1, host.selected_buildings.size()]
         var rally_hint := "   |   Right-click: rally point" if b.type in ["barracks", "refinery"] else ""
+        if Simulation.BarracksFlight.state(b) == "airborne":
+            rally_hint = "   |   RMB: fly / D: deploy"
         host.selection_label.text = "BUILDING   %s%s   |   HP %d / %d%s" % [tab_prefix, str(b.type).to_upper(), b.hp, Simulation.BUILD_TYPES[b.type].hp, rally_hint]
         # Only the building's own actions: production on its producer,
         # construction orders on the base; nothing unrelated leaks in.
@@ -93,6 +95,16 @@ func refresh() -> void:
         if b.type == "barracks":
             active_actions = 5
             labels = {1: "SOLDIER ($100)", 4: "CANCEL (Refund)"}
+            var flight_state: String = Simulation.BarracksFlight.state(b)
+            if flight_state == "grounded":
+                labels[2] = "LIFT OFF (L)"
+            elif flight_state == "airborne":
+                labels = {0: "STOP (S)", 3: "DEPLOY (D)"}
+            else:
+                labels = {}
+            host.selection_label.text += "   |   " + flight_state.to_upper()
+            if not b.flight.error.is_empty():
+                host.selection_label.text += "   |   " + b.flight.error
         elif b.type == "refinery":
             active_actions = 5
             labels = {1: "MINER ($200)", 4: "CANCEL (Refund)"}
@@ -106,6 +118,12 @@ func refresh() -> void:
             else:
                 host.action_buttons[i].text = "-"
                 host.action_buttons[i].disabled = true
+        if b.type == "barracks":
+            host.action_buttons[2].disabled = b.remaining > 0 or not b.queue.is_empty() or Simulation.BarracksFlight.state(b) != "grounded"
+            host.action_buttons[1].disabled = b.remaining > 0 or Simulation.BarracksFlight.state(b) != "grounded"
+            if host.deploy_building >= 0:
+                var reason: String = host.visual_sync.deployment_preview_error
+                host.selection_label.text = "DEPLOY 4 x 3: " + ("All cells clear - click to deploy" if reason.is_empty() else reason)
         _clear_container(host.production_queue_row)
         if not b.queue.is_empty():
             var job: Dictionary = b.queue[0]

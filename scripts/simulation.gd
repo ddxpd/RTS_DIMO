@@ -1,6 +1,8 @@
 extends RefCounted
 # The host is the only writer. Clients display snapshots; they never simulate damage.
-const VERSION := "rts-terrain-4"
+const VERSION := "rts-barracks-flight-5"
+const BarracksFlight = preload("res://scripts/barracks_flight.gd")
+const WEAPON_TARGETS := {"soldier": ["ground"], "bunker": ["ground"]}
 const ArrivalPlanner = preload("res://scripts/arrival_planner.gd")
 const MapTerrain = preload("res://scripts/maps/map_terrain.gd")
 const EYE_HEIGHTS := {"soldier": 40.0, "harvester": 32.0, "base": 80.0, "barracks": 40.0, "refinery": 56.0, "bunker": 48.0}
@@ -20,7 +22,7 @@ const UNIT_TYPES := {
 }
 const BUILD_TYPES := {
     "base": {"hp": 800, "size": Vector2(160, 160), "cost": 500, "time": 140},
-    "barracks": {"hp": 420, "size": Vector2(64, 64), "cost": 250, "time": 80},
+    "barracks": {"hp": 420, "size": Vector2(128, 96), "cost": 250, "time": 80},
     "refinery": {"hp": 600, "size": Vector2(80, 80), "cost": 400, "time": 100},
     "bunker": {"hp": 500, "size": Vector2(64, 64), "cost": 300, "time": 120, "range": 190.0, "damage": 14, "cooldown": 14}
 }
@@ -146,7 +148,22 @@ func _add_building(owner: int, kind: String, pos: Vector2, complete: bool) -> in
     var stats: Dictionary = BUILD_TYPES[kind]
     buildings[id] = {"owner": owner, "type": kind, "pos": pos, "hp": stats.hp,
         "remaining": 0 if complete else stats.time, "queue": [], "flash": 0, "rally": Vector2.ZERO, "cooldown": 0}
+    if kind == "barracks":
+        BarracksFlight.initialize(buildings[id], terrain.height_at(pos))
     return id
+
+
+func can_target(attacker: Dictionary, target: Dictionary) -> bool:
+    var layers: Array = WEAPON_TARGETS.get(attacker.type, [])
+    return weapon_can_target(layers, target)
+
+
+func weapon_can_target(layers: Array, target: Dictionary) -> bool:
+    return ("air" if BarracksFlight.is_airborne(target) else "ground") in layers
+
+
+func deployment_site(owner: int, id: int, pos: Vector2) -> Dictionary:
+    return BarracksFlight.placement(self, owner, id, pos)
 
 func footprint(b: Dictionary, margin: float = 0.0) -> Rect2:
     var size: Vector2 = BUILD_TYPES[b.type].size
@@ -162,7 +179,7 @@ func _bunker_target(b: Dictionary) -> Dictionary:
     var best_distance := BUILD_TYPES.bunker.range
     for id: int in units:
         var u: Dictionary = units[id]
-        if u.owner == b.owner or u.hp <= 0 or not can_see(int(b.owner), u.pos):
+        if u.owner == b.owner or u.hp <= 0 or not can_target(b, u) or not can_see(int(b.owner), u.pos):
             continue
         var distance: float = (b.pos as Vector2).distance_to(u.pos)
         if distance <= best_distance and terrain.line_of_sight(b.pos, u.pos, EYE_HEIGHTS.bunker, EYE_HEIGHTS[u.type]):
@@ -204,9 +221,9 @@ func build_error(owner: int, kind: String, position: Vector2) -> String:
         return "Not enough credits"
     var nearby := false
     for b: Dictionary in buildings.values():
-        if footprint(b, 16).intersects(rect):
+        if BarracksFlight.blocks_ground(b) and footprint(b, 16).intersects(rect):
             return "Buildings need more space"
-        if b.owner == owner and b.remaining == 0 and pos.distance_to(b.pos) < 360:
+        if b.owner == owner and b.remaining == 0 and BarracksFlight.state(b) == "grounded" and pos.distance_to(b.pos) < 360:
             nearby = true
     if not nearby:
         return "Build within 360 px of a completed friendly building"
@@ -227,6 +244,8 @@ func command(owner: int, c: Dictionary) -> String:
     if owner not in [1, 2]:
         return "Spectators cannot issue orders"
     var action: String = str(c.get("action", ""))
+    if action in ["barracks_takeoff", "barracks_move", "barracks_stop", "barracks_deploy"]:
+        return BarracksFlight.command(self, owner, c)
     if action == "build":
         if not c.get("pos") is Vector2:
             return "Invalid position"
@@ -254,6 +273,8 @@ func command(owner: int, c: Dictionary) -> String:
         var kind: String = str(c.get("type", ""))
         if not UNIT_TYPES.has(kind):
             return "Wrong production building"
+        if BarracksFlight.state(b) != "grounded":
+            return "Land before training units"
         if kind == "soldier" and b.type != "barracks":
             return "Wrong production building"
         if kind == "harvester" and b.type != "refinery":
@@ -310,6 +331,10 @@ func command(owner: int, c: Dictionary) -> String:
         var u: Dictionary = units[id]
         if action == "attack" and u.type != "soldier":
             continue
+        if action == "attack":
+            var targets: Dictionary = units if c.get("kind") == "unit" else buildings
+            if not can_target(u, targets[int(c.target)]):
+                continue
         if action == "gather" and u.type != "harvester":
             continue
         u.order       = action if action != "stop" else "idle"
@@ -359,7 +384,8 @@ func position_free(pos: Vector2, radius: float) -> bool:
         if rock.grow(radius).has_point(pos):
             return false
     for b: Dictionary in buildings.values():
-        if footprint(b, radius).has_point(pos):
+        var reservation_margin := 16.0 if BarracksFlight.state(b) == "landing" else 0.0
+        if BarracksFlight.blocks_ground(b) and footprint(b, radius + reservation_margin).has_point(pos):
             return false
     return true
 
@@ -471,14 +497,14 @@ func _closest_enemy(u: Dictionary) -> Array:
         for id: int in collection:
             var e: Dictionary = collection[id]
             var d: float = (u.pos as Vector2).distance_to(e.pos)
-            if e.owner != u.owner and d < distance and e.hp > 0 and (map_id == "prototype" or can_see(u.owner, e.pos)) and terrain.line_of_sight(u.pos, e.pos, EYE_HEIGHTS[u.type], EYE_HEIGHTS.get(e.type, 40.0)):
+            if e.owner != u.owner and d < distance and e.hp > 0 and can_target(u, e) and (map_id == "prototype" or can_see(u.owner, e.pos)) and terrain.line_of_sight(u.pos, e.pos, EYE_HEIGHTS[u.type], EYE_HEIGHTS.get(e.type, 40.0)):
                 distance = d
                 result = [kind, id]
     return result
 
 func _fight(u: Dictionary, fallback_order: String = "idle") -> bool:
     var collection: Dictionary = units if u.attack_kind == "unit" else buildings
-    if not collection.has(int(u.attack_id)) or collection[int(u.attack_id)].hp <= 0:
+    if not collection.has(int(u.attack_id)) or collection[int(u.attack_id)].hp <= 0 or not can_target(u, collection[int(u.attack_id)]):
         u.attack_kind = ""
         u.attack_id   = -1
         u.order       = fallback_order
@@ -574,6 +600,10 @@ func step() -> void:
     for id: int in buildings.keys():
         var b: Dictionary = buildings[id]
         b.flash = maxi(0, int(b.flash) - 1)
+        if b.type == "barracks":
+            BarracksFlight.advance(self, id, b)
+            if BarracksFlight.state(b) != "grounded":
+                continue
         if b.remaining > 0:
             b.remaining -= 1
         elif b.type == "bunker":
@@ -688,6 +718,16 @@ func step() -> void:
         winner = 1
 
 func _spawn_position(b: Dictionary) -> Vector2:
+    if b.type == "barracks":
+        for offset: float in [0.0, -24.0, 24.0, -48.0, 48.0]:
+            var front: Vector2 = b.pos + Vector2(12.36 + offset, -76)
+            var clear := position_free(front, 16) and absf(terrain.height_at(front) - terrain.height_at(b.pos)) < 0.1
+            for unit: Dictionary in units.values():
+                if (unit.pos as Vector2).distance_to(front) < 34:
+                    clear = false
+            if clear:
+                return front
+        return Vector2.ZERO
     for ring in range(3, 8):
         for i in range(16):
             var p: Vector2 = b.pos + Vector2.from_angle(float(i) / 16 * TAU) * ring * 24
@@ -872,7 +912,7 @@ func _ai_attack_target() -> int:
     var best_distance := INF
     for id: int in buildings:
         var b: Dictionary = buildings[id]
-        if b.owner != 1:
+        if b.owner != 1 or not can_target({"type": "soldier"}, b):
             continue
         var distance: float = (b.pos as Vector2).distance_to(origin)
         if distance < best_distance:
@@ -1066,6 +1106,9 @@ func _validate_building_entry(value: Variant) -> bool:
             return false
     if typeof(building.flash) != TYPE_INT or int(building.flash) < 0 or int(building.flash) > 10:
         last_snapshot_error = "Snapshot building flash timer is invalid."
+        return false
+    if not BarracksFlight.valid(building, WORLD):
+        last_snapshot_error = "Invalid barracks flight state."
         return false
     var max_cooldown := int(BUILD_TYPES.bunker.cooldown)
     if typeof(building.cooldown) != TYPE_INT or int(building.cooldown) < 0 or int(building.cooldown) > max_cooldown:

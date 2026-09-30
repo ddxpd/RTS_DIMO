@@ -16,6 +16,7 @@ const SampleView = preload("res://scripts/maps/sample_view.gd")
 const PORT := 24560
 const MAX_CLIENTS := 4
 var sim := Simulation.new()
+var deploy_building := -1
 var session: GameSession
 var command_bus: CommandBus
 var audio_controller: AudioController
@@ -208,7 +209,16 @@ func _create_lighting() -> void:
     var environment := Environment.new()
     environment.background_mode = Environment.BG_COLOR
     environment.background_color = Color("#203028")
-    environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+    environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+    environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+    var sky := Sky.new()
+    var sky_material := ProceduralSkyMaterial.new()
+    sky_material.sky_top_color = Color("#708da5")
+    sky_material.sky_horizon_color = Color("#c3b7a5")
+    sky_material.ground_bottom_color = Color("#514a3e")
+    sky_material.ground_horizon_color = Color("#a99b7b")
+    sky.sky_material = sky_material
+    environment.sky = sky
     environment.ambient_light_color = Color("#9fb6a6")
     environment.ambient_light_energy = 0.72
     environment.glow_enabled = true
@@ -1034,6 +1044,10 @@ func _right_click(pos: Vector2) -> void:
     if not Rect2(Vector2.ZERO, Simulation.WORLD).has_point(pos):
         return
     if selected_units.is_empty():
+        var active_id := active_building_id()
+        if sim.buildings.has(active_id) and Simulation.BarracksFlight.state(sim.buildings[active_id]) != "grounded":
+            issue({"action": "barracks_move", "building": active_id, "pos": pos})
+            return
         var rally_targets: Array[int] = selected_buildings.duplicate()
         if rally_targets.is_empty() and selected_building >= 0:
             rally_targets.append(selected_building)
@@ -1042,6 +1056,10 @@ func _right_click(pos: Vector2) -> void:
                 issue({"action": "set_rally", "building": id, "pos": pos})
             _notify("Rally points set.")
             _show_order_feedback({"action": "rally"}, pos)
+        return
+    var air_target := airborne_building_at(_world_to_screen(pos))
+    if air_target >= 0 and sim.buildings[air_target].owner != local_slot:
+        _notify("Selected weapons cannot attack airborne targets.")
         return
     var order := {"action": "move", "units": selected_units.duplicate(), "pos": pos}
     for kind: String in ["unit", "building"]:
@@ -1094,10 +1112,81 @@ func _show_order_feedback(order: Dictionary, pos: Vector2) -> void:
     while clicks.size() > 16:
         clicks.pop_front()
 
+func active_building_id() -> int:
+    if not selected_buildings.is_empty():
+        return selected_buildings[building_tab_index % selected_buildings.size()]
+    return selected_building
+
+
+func _takeoff_barracks() -> void:
+    if active and not menu_visible and selected_units.is_empty():
+        issue({"action": "barracks_takeoff", "building": active_building_id()})
+
+
+func _begin_deploy() -> void:
+    var id := active_building_id()
+    if not active or menu_visible or local_slot == 0 or not selected_units.is_empty() or not sim.buildings.has(id):
+        return
+    var building: Dictionary = sim.buildings[id]
+    if building.owner != local_slot or building.type != "barracks" or Simulation.BarracksFlight.state(building) != "airborne":
+        _notify("Select an airborne friendly barracks.")
+        return
+    deploy_building = id
+    build_mode = ""
+    pending_command = ""
+    attack_mode = false
+    selection_dragging = false
+    _notify("Deploy: all 12 cells must be green. Left-click confirms; RMB / Esc cancels.")
+
+
+func _deploy_click(pos: Vector2) -> void:
+    var site := sim.deployment_site(local_slot, deploy_building, pos)
+    if not site.error.is_empty():
+        _notify(site.error)
+        return
+    issue({"action": "barracks_deploy", "building": deploy_building, "pos": site.pos})
+    deploy_building = -1
+
+
+func building_screen_position(id: int) -> Vector2:
+    var b: Dictionary = sim.buildings[id]
+    var height: float = b.get("flight", {}).get("height", sim.terrain.height_at(b.pos))
+    return camera.unproject_position(Vector3(b.pos.x, height + (40.0 if b.has("flight") else 0.0), b.pos.y))
+
+
+func airborne_building_at(screen: Vector2, friendly_only: bool = false) -> int:
+    if visual_sync == null:
+        return -1
+    var closest := -1
+    var depth := INF
+    var origin := camera.project_ray_origin(screen)
+    var end := origin + camera.project_ray_normal(screen) * 10000.0
+    for id: int in sim.buildings:
+        var b: Dictionary = sim.buildings[id]
+        if not Simulation.BarracksFlight.is_airborne(b) or (friendly_only and b.owner != local_slot):
+            continue
+        if not visual_sync.building_visuals.has(id):
+            continue
+        var visual: Node3D = visual_sync.building_visuals[id].visual
+        if not visual.visible:
+            continue
+        var local_origin: Vector3 = visual.to_local(origin)
+        var local_end: Vector3 = visual.to_local(end)
+        var box := AABB(Vector3(-64, 0, -48), Vector3(128, 104, 96))
+        var hit: Variant = box.intersects_segment(local_origin, local_end)
+        if hit is Vector3:
+            var distance: float = local_origin.distance_to(hit)
+            if distance < depth:
+                depth = distance
+                closest = id
+    return closest
+
+
 func _begin_build(kind: String) -> void:
     if not active or local_slot == 0 or sim.winner != 0:
         return
     build_mode = kind
+    deploy_building = -1
     pending_command = ""
     attack_mode = false
     selection_dragging = false
@@ -1118,7 +1207,15 @@ func _action_clicked(index: int) -> void:
             3:
                 _begin_pending("gather")
     elif sim.buildings.has(selected_building):
-        var building: Dictionary = sim.buildings[selected_building]
+        var building: Dictionary = sim.buildings[active_building_id()]
+        if building.type == "barracks" and index in [0, 2, 3]:
+            if index == 0:
+                _stop()
+            elif index == 2:
+                _takeoff_barracks()
+            else:
+                _begin_deploy()
+            return
         match index:
             1:
                 if building.type == "barracks":
@@ -1181,7 +1278,7 @@ func _produce(kind: String) -> void:
     var best_queue := 99
     for id: int in selected_buildings:
         var b: Dictionary = sim.buildings.get(id, {})
-        if b.is_empty() or int(b.remaining) > 0:
+        if b.is_empty() or int(b.remaining) > 0 or Simulation.BarracksFlight.state(b) != "grounded":
             continue
         if b.queue.size() < best_queue:
             best_queue = b.queue.size()
@@ -1196,6 +1293,9 @@ func _cancel_job() -> void:
     issue({"action": "cancel_production", "building": target})
 
 func _stop() -> void:
+    if selected_units.is_empty() and sim.buildings.has(active_building_id()) and sim.buildings[active_building_id()].type == "barracks":
+        issue({"action": "barracks_stop", "building": active_building_id()})
+        return
     issue({"action": "stop", "units": selected_units.duplicate()})
     if not selected_units.is_empty():
         _respond(selected_units[0], "Standing by.")

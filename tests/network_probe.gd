@@ -76,17 +76,16 @@ func guest() -> void:
     game._left_click(game.sim.units[3].pos)
     if not check(game.selected_units.is_empty(), "Enemy selection disallowed"):
         return
-    # Each applied snapshot must advance the guest by exactly one logic tick.
-    var interval_ok := true
-    var samples := 0
-    var last_frame: int = game.sim.frame
-    while samples < 30:
+    # Measure RPC applications rather than render frames, which can receive batches.
+    var received: Array[int] = []
+    var record := func(frame: int) -> void: received.append(frame)
+    game.network_session.snapshot_applied.connect(record)
+    while received.size() < 31:
         await get_tree().process_frame
-        if game.sim.frame != last_frame:
-            if game.sim.frame - last_frame != 1:
-                interval_ok = false
-            last_frame = game.sim.frame
-            samples += 1
+    game.network_session.snapshot_applied.disconnect(record)
+    var interval_ok := true
+    for index in range(1, received.size()):
+        interval_ok = interval_ok and received[index] - received[index - 1] == 1
     if not check(interval_ok, "Guest receives one snapshot per logic tick (20 Hz)"):
         return
     if not check(game.render_velocities.size() >= game.sim.units.size() - 1, "Guest computes render velocities"):
@@ -135,6 +134,30 @@ func guest() -> void:
     while game.sim.units.size() < 14:
         await get_tree().process_frame
     print("NETWORK_STAGE produced")
+    while not game.sim.buildings[barracks].queue.is_empty():
+        await get_tree().process_frame
+    game.issue({"action": "barracks_takeoff", "building": barracks})
+    var takeoff_deadline := Time.get_ticks_msec() + 8000
+    while game.sim.buildings[barracks].flight.state != "airborne":
+        if Time.get_ticks_msec() > takeoff_deadline:
+            check(false, "Takeoff timeout: " + str(game.sim.buildings[barracks].flight) + " / " + game.feedback)
+            return
+        await get_tree().process_frame
+    if not check(game.sim.buildings[barracks].flight.height > 100, "Airborne height replicated"):
+        return
+    var landing_site := Vector2(4224, 2272)
+    if not check(game.sim.deployment_site(2, barracks, landing_site).error.is_empty(), "Network landing site valid"):
+        return
+    game.issue({"action": "barracks_deploy", "building": barracks, "pos": landing_site})
+    while game.sim.buildings[barracks].flight.state != "landing":
+        await get_tree().process_frame
+    if not check(game.sim.buildings[barracks].pos == landing_site, "Deployment reservation position replicated"):
+        return
+    while game.sim.buildings[barracks].flight.state != "grounded":
+        await get_tree().process_frame
+    if not check(is_equal_approx(game.sim.buildings[barracks].flight.height, game.sim.terrain.height_at(landing_site)), "Landing height replicated"):
+        return
+    print("NETWORK_STAGE barracks relocation replicated")
     _setup_target.rpc_id(1)
     while (game.sim.units[5].pos as Vector2).distance_to(Vector2(1050, 768)) > 5.0:
         await get_tree().process_frame

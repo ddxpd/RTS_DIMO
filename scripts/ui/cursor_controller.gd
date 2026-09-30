@@ -120,12 +120,17 @@ func state_at(screen: Vector2, over_ui: bool = false) -> StringName:
     if not host.get_viewport().get_visible_rect().has_point(screen) or not host._screen_is_map(screen):
         return &"default"
     var pos: Vector2 = host._screen_to_world(screen)
+    var airborne_id: int = host.airborne_building_at(screen)
+    if airborne_id >= 0 and host.deploy_building < 0 and host.build_mode.is_empty():
+        return &"select" if host.sim.buildings[airborne_id].owner == host.local_slot else (&"blocked" if has_units() else &"default")
     return world_state(pos)
 
 
 func world_state(pos: Vector2) -> StringName:
     if not pos.is_finite() or not Rect2(Vector2.ZERO, host.sim.WORLD).has_point(pos):
         return &"blocked" if has_units() or has_buildings() or not host.build_mode.is_empty() else &"default"
+    if host.deploy_building >= 0:
+        return &"move" if host.sim.deployment_site(host.local_slot, host.deploy_building, pos).error.is_empty() else &"blocked"
     if not host.build_mode.is_empty():
         return &"default" if host.sim.build_error(host.local_slot, host.build_mode, pos).is_empty() else &"blocked"
     if not host.pending_command.is_empty():

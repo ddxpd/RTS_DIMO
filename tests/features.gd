@@ -103,12 +103,12 @@ func run() -> void:
 
     # Building double-click selects all on-screen same-type buildings.
     game.sim.reset(true)
-    game.camera_controller.focus = Vector2(800, 450)
+    game.camera_controller.focus = Vector2(608, 220)
     game._update_camera_transform()
-    game.sim.command(1, {"action": "build", "type": "barracks", "pos": Vector2(704, 320)})
+    game.sim.command(1, {"action": "build", "type": "barracks", "pos": Vector2(480, 160)})
     var first_barracks: int = game.sim.next_id - 1
     game.sim.buildings[first_barracks].remaining = 0
-    game.sim.command(1, {"action": "build", "type": "barracks", "pos": Vector2(900, 500)})
+    game.sim.command(1, {"action": "build", "type": "barracks", "pos": Vector2(736, 160)})
     var second_barracks: int = game.sim.next_id - 1
     game.sim.buildings[second_barracks].remaining = 0
     game._clear_selection()

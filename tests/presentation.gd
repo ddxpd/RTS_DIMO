@@ -29,6 +29,9 @@ func run() -> void:
     game.selected_map_id = "prototype"
     root.add_child(game)
     game.play_solo()
+    # Input assertions use a fixed camera; headless mouse (0,0) must not edge-pan
+    # during the two frames used to exercise lost-release recovery.
+    game.camera_controller.mouse_position_provider = func() -> Vector2: return Vector2(640, 400)
     game.set_process(false)
     game.sim.ai_enabled = false
     await process_frame
@@ -158,7 +161,7 @@ func run() -> void:
     game._produce("harvester")
     check(game.sim.buildings[refinery].queue.size() == 1, "Production UI callback enqueues")
     game._begin_build("barracks")
-    click(Vector2(704, 320))
+    click(Vector2(480, 160))
     check(game.sim.buildings.size() == 4 and game.build_mode == "", "Build preview click creates construction")
     var wheel := InputEventMouseButton.new()
     wheel.position     = Vector2(960, 500)

@@ -43,12 +43,12 @@ func run() -> void:
     advance(red, 900)
     check(red.money[2] > 6000, "Red harvester delivers credits")
     var before: int = s.money[1]
-    check(s.command(1, {"action": "build", "type": "barracks", "pos": Vector2(704, 320)}) == "", "Barracks placement succeeds")
+    check(s.command(1, {"action": "build", "type": "barracks", "pos": Vector2(480, 160)}) == "", "Barracks placement succeeds")
     var barracks: int = s.next_id - 1
     check(s.money[1] == before - 250, "Construction costs deducted")
     check(s.buildings[barracks].remaining > 0, "Construction is timed")
     check(s.command(1, {"action": "produce", "building": barracks, "type": "soldier"}) != "", "Incomplete building cannot produce")
-    check(s.command(1, {"action": "build", "type": "barracks", "pos": Vector2(704, 320)}) != "", "Overlapping building rejected")
+    check(s.command(1, {"action": "build", "type": "barracks", "pos": Vector2(480, 160)}) != "", "Overlapping building rejected")
     check(s.command(1, {"action": "build", "type": "barracks", "pos": Vector2(2400, 400)}) != "", "Terrain or remote construction rejected")
     s.command(1, {"action": "stop", "units": [5]})
     advance(s, 80)
@@ -73,13 +73,13 @@ func run() -> void:
     for i in range(5):
         s.command(1, {"action": "produce", "building": barracks, "type": "soldier"})
     check(s.command(1, {"action": "produce", "building": barracks, "type": "soldier"}) != "", "Queue limit enforced")
-    check(not s.position_free(Vector2(704, 320), 11), "Building footprint blocks movement")
+    check(not s.position_free(Vector2(480, 160), 11), "Building footprint blocks movement")
     # Destruction refunds queued jobs and frees its navigation footprint.
     s.buildings[barracks].hp = 0
     var refund_start: int = s.money[1]
     s.step()
     check(not s.buildings.has(barracks) and s.money[1] == refund_start + 500, "Destroyed factory clears and refunds production queue")
-    check(s.position_free(Vector2(704, 320), 11), "Destroyed building releases footprint")
+    check(s.position_free(Vector2(480, 160), 11), "Destroyed building releases footprint")
     # Navigation must route around the middle terrain obstacle.
     s.reset()
     s.units[3].pos = Vector2(1900, 400)

@@ -21,6 +21,8 @@ func _handle_escape(event: InputEventKey) -> bool:
     if host.rebinding_attack:
         host.rebinding_attack = false
         host._notify("Attack key rebind canceled.")
+    elif host.deploy_building >= 0:
+        host.deploy_building = -1
     elif not host.build_mode.is_empty() or not host.pending_command.is_empty():
         host.build_mode = ""
         host.pending_command = ""
@@ -39,6 +41,10 @@ func _unhandled_input(event: InputEvent) -> void:
             get_viewport().set_input_as_handled()
             return
         if host.rebinding_attack:
+            if event.keycode in [KEY_L, KEY_D] or event.physical_keycode in [KEY_L, KEY_D]:
+                host._notify("L and D are reserved for barracks takeoff / deploy. Choose another attack key.")
+                get_viewport().set_input_as_handled()
+                return
             host.attack_keycode = event.keycode if event.keycode != KEY_NONE else event.physical_keycode
             host.rebinding_attack = false
             host.attack_rebind_button.text = "Rebind attack key (current: %s)" % OS.get_keycode_string(host.attack_keycode)
@@ -48,6 +54,10 @@ func _unhandled_input(event: InputEvent) -> void:
         if host.active and not host.menu_visible and _is_attack_key(event):
             host.attack_mode = not host.attack_mode
             host._notify("Attack mode %s. Left-click a target or ground." % ("ON" if host.attack_mode else "OFF"))
+        elif host.active and not host.menu_visible and event.keycode == KEY_L:
+            host._takeoff_barracks()
+        elif host.active and not host.menu_visible and event.keycode == KEY_D:
+            host._begin_deploy()
         elif host.active and not host.menu_visible and event.keycode == KEY_B:
             host._begin_build("barracks")
         elif host.active and not host.menu_visible and event.keycode == KEY_S:
@@ -75,7 +85,9 @@ func _unhandled_input(event: InputEvent) -> void:
                     var press_msec := Time.get_ticks_msec()
                     if press_msec - host.last_mouse_event_msec < 1500:
                         return
-                if not host.build_mode.is_empty():
+                if host.deploy_building >= 0:
+                    host._deploy_click(pos)
+                elif not host.build_mode.is_empty():
                     host._place_building(pos)
                 else:
                     host.selection_dragging = true
@@ -87,7 +99,9 @@ func _unhandled_input(event: InputEvent) -> void:
             if not button.pressed and not button.canceled:
                 host.left_button_held = false
         elif button.button_index == MOUSE_BUTTON_RIGHT and button.pressed and host._screen_is_map(event.position):
-            if not host.build_mode.is_empty():
+            if host.deploy_building >= 0:
+                host.deploy_building = -1
+            elif not host.build_mode.is_empty():
                 host.build_mode = ""
             else:
                 host._right_click(pos)
@@ -165,6 +179,11 @@ func _left_click(pos: Vector2) -> void:
         _attack_click(pos)
         return
     host._clear_selection()
+    var airborne_id: int = host.airborne_building_at(host._world_to_screen(pos), true)
+    if airborne_id >= 0:
+        host.selected_building = airborne_id
+        host.selected_buildings.append(airborne_id)
+        return
     for id: int in host.sim.units:
         var u: Dictionary = host.sim.units[id]
         if u.owner == host.local_slot and (u.pos as Vector2).distance_to(pos) <= 20:
@@ -178,7 +197,7 @@ func _left_click(pos: Vector2) -> void:
             host.last_click_time = now
             return
     for id: int in host.sim.buildings:
-        if host.sim.buildings[id].owner == host.local_slot and host.sim.footprint(host.sim.buildings[id]).has_point(pos):
+        if host.sim.buildings[id].owner == host.local_slot and not host.sim.BarracksFlight.is_airborne(host.sim.buildings[id]) and host.sim.footprint(host.sim.buildings[id]).has_point(pos):
             var now := Time.get_ticks_msec() / 1000.0
             if id == host.last_click_building and now - host.last_click_building_time <= 0.4:
                 _select_same_type_buildings_on_screen(str(host.sim.buildings[id].type))
@@ -199,7 +218,7 @@ func _select_same_type_buildings_on_screen(kind: String) -> void:
     var view := Rect2(host.camera_controller.focus - half, half * 2.0)
     for id: int in host.sim.buildings:
         var b: Dictionary = host.sim.buildings[id]
-        if b.owner == host.local_slot and b.type == kind and host._get_map_screen_rect().has_point(host._world_to_screen(b.pos)):
+        if b.owner == host.local_slot and b.type == kind and host._get_map_screen_rect().has_point(host.building_screen_position(id)):
             host.selected_buildings.append(id)
     if not host.selected_buildings.is_empty():
         host.selected_building = host.selected_buildings[0]
@@ -219,6 +238,10 @@ func _select_same_type_on_screen(kind: String) -> void:
         host._respond(host.selected_units[0], "All %ss on screen!" % kind)
 
 func _attack_click(pos: Vector2) -> void:
+    if host.airborne_building_at(host._world_to_screen(pos)) >= 0:
+        host._notify("Selected weapons cannot attack airborne targets.")
+        host.attack_mode = false
+        return
     var kind := ""
     var target_id := -1
     for id: int in host.sim.units:
@@ -251,6 +274,12 @@ func _select_rect(rect: Rect2, screen_rect: Rect2 = Rect2()) -> void:
     for id: int in host.sim.units:
         if host.sim.units[id].owner == host.local_slot and screen_rect.has_point(host._world_to_screen(host.sim.units[id].pos)):
             host.selected_units.append(id)
+    if host.selected_units.is_empty():
+        for id: int in host.sim.buildings:
+            if host.sim.buildings[id].owner == host.local_slot and host.sim.BarracksFlight.is_airborne(host.sim.buildings[id]) and screen_rect.has_point(host.building_screen_position(id)):
+                host.selected_buildings.append(id)
+        if not host.selected_buildings.is_empty():
+            host.selected_building = host.selected_buildings[0]
 
 # Ctrl+N assigns the selection to group N, Shift+N adds to it, N alone recalls it.
 # A group can hold units and/or one building; recalling prefers units for orders.

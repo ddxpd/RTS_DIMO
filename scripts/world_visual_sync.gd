@@ -28,6 +28,8 @@ var health_grid_overlay: HealthGridOverlay
 var selection_rect_overlay: Panel
 var build_preview_visual: MeshInstance3D
 var build_preview_model: EntityVisual
+var deploy_cells: Array[MeshInstance3D] = []
+var deployment_preview_error := ""
 
 
 func _selection_ring_radius(kind: String, base_radius: float, footprint_size: Vector2 = Vector2.ZERO) -> float:
@@ -60,7 +62,7 @@ func sync(delta: float = 0.0) -> void:
     _ensure_health_grid_overlay()
     _sync_rocks()
     _sync_ores()
-    _sync_buildings()
+    _sync_buildings(delta)
     _sync_units(delta)
     _sync_effects()
     _sync_markers()
@@ -160,7 +162,7 @@ func _sync_ores() -> void:
             ore_visuals.erase(id)
 
 
-func _sync_buildings() -> void:
+func _sync_buildings(delta: float = 0.0) -> void:
     var seen := {}
     for id: int in host.sim.buildings:
         var b: Dictionary = host.sim.buildings[id]
@@ -175,7 +177,13 @@ func _sync_buildings() -> void:
 
         # Fog: enemy buildings only render when currently visible.
         _set_visual_visible(visual, b.owner == host.local_slot or host.sim.can_see(host.local_slot, b.pos))
-        visual.set_position_2d(b.pos, host.sim.terrain.height_at(b.pos))
+        var ground: float = host.sim.terrain.height_at(b.pos)
+        var height: float = b.get("flight", {}).get("height", ground)
+        var target := Vector3(b.pos.x, height, b.pos.y)
+        if b.has("flight") and delta > 0 and visual.position.distance_to(target) < 300:
+            visual.position = visual.position.lerp(target, 1.0 - exp(-18.0 * delta))
+        else:
+            visual.position = target
         visual.set_flash(b.flash > 0)
         visual.set_construction_tint(b.remaining > 0)
         if b.remaining > 0:
@@ -191,11 +199,20 @@ func _sync_buildings() -> void:
             visual.set_animation("active")
         else:
             visual.set_animation("idle")
+        if b.has("flight") and visual.barracks_motion != null:
+            if int(vis.get("flight_frame", -1)) != host.sim.frame:
+                vis.flight_frame = host.sim.frame
+                vis.flight_elapsed = 0.0
+            else:
+                vis.flight_elapsed = minf(float(vis.get("flight_elapsed", 0.0)) + delta, 0.2)
+            visual.barracks_motion.apply(b.flight, float(vis.get("flight_elapsed", 0.0)) * Simulation.TICK)
 
         var building_selected: bool = host.selected_buildings.has(id) or host.selected_building == id
         var building_size: Vector2 = Simulation.BUILD_TYPES[b.type].size
         var building_radius := _selection_ring_radius(b.type, maxf(building_size.x, building_size.y) * 0.5, building_size)
         visual.set_selected(building_selected and visual.visible, building_radius)
+        if visual.selection_ring != null:
+            visual.selection_ring.position.y = ground - visual.position.y + 0.6
 
         health_grid_overlay.upsert_entity(
             "building_%d" % id,
@@ -472,7 +489,8 @@ func _sync_effects() -> void:
             visual.position = from_point.lerp(to_point, progress)
             var direction := to_point - from_point
             if direction.length_squared() > 0.001:
-                visual.look_at(visual.position + direction.normalized(), Vector3.UP, true)
+                var up := Vector3.FORWARD if absf(direction.normalized().dot(Vector3.UP)) > 0.98 else Vector3.UP
+                visual.look_at(visual.position + direction.normalized(), up, true)
         else:
             var pos3 := Vector3((e.to as Vector2).x, host.sim.terrain.height_at(e.to) + 5 + (10 - e.life) * 2, (e.to as Vector2).y)
             visual.position = pos3
@@ -538,6 +556,13 @@ func _sync_selection_rect() -> void:
         selection_rect_overlay.visible = false
 
 func _sync_build_preview() -> void:
+    if host.deploy_building >= 0 and (not host.sim.buildings.has(host.deploy_building) or Simulation.BarracksFlight.state(host.sim.buildings[host.deploy_building]) != "airborne" or host.sim.winner != 0):
+        host.deploy_building = -1
+    for cell in deploy_cells:
+        cell.visible = false
+    if host.deploy_building >= 0 and not host.menu_visible:
+        _sync_deploy_preview()
+        return
     if not host.build_mode.is_empty() and not host.menu_visible:
         var pos: Vector2 = host.sim.snap_build(host._screen_to_world(get_viewport().get_mouse_position()))
         var size: Vector2 = Simulation.BUILD_TYPES[host.build_mode].size
@@ -570,7 +595,52 @@ func _sync_build_preview() -> void:
         if build_preview_model != null:
             build_preview_model.visible = false
         if build_preview_visual != null:
-            build_preview_visual.visible = false
+          build_preview_visual.visible = false
+
+func _site_plane(size: Vector2) -> MeshInstance3D:
+    var plane := PlaneMesh.new()
+    plane.size = size
+    var surface := StandardMaterial3D.new()
+    surface.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    surface.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    surface.no_depth_test = true
+    var mesh := MeshInstance3D.new()
+    mesh.mesh = plane
+    mesh.material_override = surface
+    mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    add_child(mesh)
+    return mesh
+
+
+func _sync_deploy_preview(position_override: Variant = null) -> void:
+    var position: Vector2 = position_override if position_override is Vector2 else host._screen_to_world(get_viewport().get_mouse_position())
+    var site: Dictionary = host.sim.deployment_site(host.local_slot, host.deploy_building, position)
+    deployment_preview_error = site.error
+    if build_preview_model != null and build_preview_model.kind != "barracks":
+        build_preview_model.queue_free()
+        build_preview_model = null
+    if build_preview_model == null:
+        build_preview_model = EntityVisual.new("barracks", host.local_slot)
+        add_child(build_preview_model)
+    build_preview_model.visible = true
+    build_preview_model.set_position_2d(site.pos, host.sim.terrain.height_at(site.pos))
+    build_preview_model.set_animation("idle")
+    if build_preview_visual == null:
+        build_preview_visual = _site_plane(Vector2(100, 100))
+    build_preview_visual.visible = true
+    build_preview_visual.position = Vector3(site.pos.x, host.sim.terrain.height_at(site.pos) + 0.6, site.pos.y)
+    build_preview_visual.scale = Vector3(1.34, 1, 1.02)
+    build_preview_visual.material_override.albedo_color = Color(0.2, 1, 0.3, 0.25) if site.error.is_empty() else Color(1, 0.1, 0.1, 0.4)
+    while deploy_cells.size() < 12:
+        deploy_cells.append(_site_plane(Vector2(29, 29)))
+    for index in range(12):
+        var entry: Dictionary = site.cells[index]
+        var center: Vector2 = entry.rect.get_center()
+        var cell := deploy_cells[index]
+        cell.visible = true
+        cell.position = Vector3(center.x, host.sim.terrain.height_at(center) + 0.8, center.y)
+        cell.material_override.albedo_color = Color(0.1, 1, 0.2, 0.5) if entry.error.is_empty() else Color(1, 0.08, 0.08, 0.7)
+
 
 func _sync_fog() -> void:
     var key := "%d:%d:%d" % [host.sim.match_id, host.local_slot, int(host.sim.frame / 4)]
@@ -603,6 +673,8 @@ func reset_world() -> void:
     marker_visuals.clear()
     build_preview_model = null
     build_preview_visual = null
+    deploy_cells.clear()
+    host.deploy_building = -1
     if health_grid_overlay != null:
         health_grid_overlay.entries.clear()
         health_grid_overlay.queue_redraw()

@@ -16,7 +16,7 @@ const MODEL_SETTINGS := {
     "soldier": {"scale": 24.0, "height": 68.0},
     "harvester": {"scale": 19.0, "height": 44.0},
     "base": {"scale": 32.0, "height": 108.0},
-    "barracks": {"scale": 19.0, "height": 48.0},
+    "barracks": {"scale": 12.0, "height": 104.0},
     "refinery": {"scale": 18.0, "height": 70.0},
     "bunker": {"scale": 23.0, "height": 62.0},
     "ore": {"scale": 45.0, "height": 40.0},
@@ -41,6 +41,7 @@ var _model_scale := 1.0
 var _materials: Array[Dictionary] = []
 var _faction_applied := false
 var soldier_motion: RefCounted
+var barracks_motion: RefCounted
 var _soldier_shadow_meshes: Array[MeshInstance3D] = []
 var _soldier_shadows := false
 var _bunker_construction_defaults: Dictionary = {}
@@ -61,6 +62,7 @@ var _selection_ring_enabled := false
 var _selection_ring_radius := 1.0
 
 static var _shared_animation_libraries: Dictionary = {}
+static var _neutral_faction_textures: Dictionary = {}
 
 
 func _init(model_kind: String, model_owner: int = 1) -> void:
@@ -79,6 +81,8 @@ func _ready() -> void:
     _instance_materials()
     _apply_lod_and_shadow_policy()
     _create_animation_player()
+    if kind == "barracks":
+        barracks_motion = preload("res://assets/art/barracks_motion.gd").new(self)
     if kind == "soldier":
         soldier_motion = preload("res://assets/art/soldier_motion.gd").new(self)
     set_faction(owner_id)
@@ -123,7 +127,7 @@ func set_animation(next_state: String) -> void:
     # Construction scales the model inner root. Reset it when leaving that
     # state so a stopped loop cannot leave a completed building double-scaled.
     if animation_state == "construction":
-        var animated_root := model.get_node_or_null(NodePath(kind))
+        var animated_root := model.get_node_or_null(NodePath("BarracksMechanicalV2" if kind == "barracks" else kind))
         if animated_root != null:
             animated_root.scale = Vector3.ONE
         if kind == "bunker":
@@ -134,6 +138,8 @@ func set_animation(next_state: String) -> void:
             base_windows_power = 1.0
             base_scan_phase = 0.0
     animation_state = next_state
+    if kind == "barracks" and barracks_motion != null:
+        barracks_motion.apply({"state": "grounded", "ticks": 0})
     if animation_player == null or not animation_player.has_animation(next_state):
         return
     animation_player.speed_scale = 1.0
@@ -258,11 +264,20 @@ func _instance_materials() -> void:
             if source == null or not source is StandardMaterial3D:
                 continue
             var material := (source as StandardMaterial3D).duplicate()
+            if kind == "barracks" and ("Faction" in material.resource_name or material.resource_name == "FlagBlueFabric") and material.albedo_texture != null:
+                var key: int = material.albedo_texture.get_instance_id()
+                if not _neutral_faction_textures.has(key):
+                    var pixels: Image = material.albedo_texture.get_image()
+                    if pixels.is_compressed():
+                        pixels.decompress()
+                    pixels.adjust_bcs(1.5, 1.0, 0.0)
+                    _neutral_faction_textures[key] = ImageTexture.create_from_image(pixels)
+                material.albedo_texture = _neutral_faction_textures[key]
             mesh_instance.set_surface_override_material(surface_index, material)
             var entry := {
                 "material": material,
                 "base_color": material.albedo_color,
-                "faction": "Faction" in material.resource_name
+                "faction": "Faction" in material.resource_name or (kind == "barracks" and material.resource_name == "FlagBlueFabric")
             }
             _materials.append(entry)
             if kind == "base" and "Base_Faction" in material.resource_name:
@@ -488,17 +503,11 @@ func _base_idle() -> Animation:
 
 
 func _barracks_idle() -> Animation:
-    var animation := _make_animation(3.0)
-    _add_value_track(animation, "barracks/RoofFan", "rotation", [Vector3.ZERO, Vector3(0, TAU, 0), Vector3(0, TAU * 2.0, 0)])
-    return animation
+    return _make_animation(2.0)
 
 
 func _barracks_active() -> Animation:
-    var animation := _make_animation(1.2)
-    _add_value_track(animation, "barracks/RoofFan", "rotation", [Vector3.ZERO, Vector3(0, TAU * 2.0, 0), Vector3(0, TAU * 4.0, 0)])
-    _add_value_track(animation, "barracks/AssemblyDoor", "position", [Vector3(1.46, 0.72, 0), Vector3(1.18, 0.72, 0), Vector3(1.46, 0.72, 0)])
-    _add_value_track(animation, "barracks/FactionLight", "scale", [Vector3.ONE, Vector3(1.4, 1.4, 1.4), Vector3.ONE])
-    return animation
+    return _make_animation(2.0)
 
 
 func _refinery_idle() -> Animation:
@@ -637,5 +646,5 @@ func _construction_animation() -> Animation:
         ])
         return animation
     var low := Vector3(1, 0.2, 1)
-    _add_value_track(animation, kind, "scale", [low, Vector3.ONE])
+    _add_value_track(animation, "BarracksMechanicalV2" if kind == "barracks" else kind, "scale", [low, Vector3.ONE])
     return animation

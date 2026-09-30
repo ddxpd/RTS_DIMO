@@ -114,6 +114,33 @@ func _check_base(visual: EntityVisual) -> void:
     check(lights[0].emission.b > lights[0].emission.r, "Base tower light switches back to blue faction")
 
 
+func _check_mobile_barracks(visual: EntityVisual) -> void:
+    var names := ["HullMesh", "DoorL", "DoorR", "Ramp", "BarracksFlag", "LiftPodLFront", "LiftPodLRear", "LiftPodRFront", "LiftPodRRear", "LegLFront", "FootLFront"]
+    for part: String in names:
+        check(visual.model.find_child(part, true, false) != null, "V4 barracks has independent part: " + part)
+    check(visual.barracks_motion != null, "V4 mechanical player exists")
+    var foot := visual.model.find_child("FootLFront", true, false) as Node3D
+    visual.barracks_motion.apply({"state": "grounded", "ticks": 0})
+    var deployed := foot.position
+    visual.barracks_motion.apply({"state": "airborne", "ticks": 0})
+    check(absf(foot.position.x) < absf(deployed.x) - 0.5, "Airborne foot retracts inward")
+    check(foot.position.y > deployed.y + 0.4, "Airborne foot stores inside chassis")
+    check(visual.barracks_motion.body.position.is_zero_approx(), "Root animation does not duplicate simulation lift")
+    visual.barracks_motion.apply({"state": "grounded", "ticks": 0})
+    visual.set_animation("idle")
+    var bounds := _visual_world_aabb(visual)
+    check(_fits_footprint(bounds, Sim.BUILD_TYPES.barracks.size, 0.1), "V4 barracks fits 4x3 footprint")
+    check(bounds.end.y <= visual.position.y + visual.get_model_height(), "Mobile barracks health anchor clears antennas")
+    visual.set_faction(2)
+    var painted := 0
+    for entry: Dictionary in visual._materials:
+        if entry.faction:
+            painted += 1
+            check(entry.material.albedo_color.r > entry.material.albedo_color.b, "Barracks panels switch to red faction")
+    check(painted > 0, "New barracks has faction materials")
+    visual.set_faction(1)
+
+
 func _check_track_count(visual: EntityVisual, animation_name: String, expected: int, message: String) -> void:
     var animation := visual.animation_player.get_animation(animation_name)
     check(animation != null and animation.get_track_count() == expected, message)
@@ -393,6 +420,7 @@ func run() -> void:
     var completed_barracks_box := _visual_world_aabb(barracks_visual)
     check(_fits_footprint(completed_barracks_box, Sim.BUILD_TYPES.barracks.size), "Completed barracks stays within its 64x64 visual footprint")
     check(barracks_visual.animation_state == "active", "Building with queue plays active animation")
+    _check_mobile_barracks(barracks_visual)
 
     var construction_cases := [
         {"kind": "refinery", "position": Vector2(1250, 900)},

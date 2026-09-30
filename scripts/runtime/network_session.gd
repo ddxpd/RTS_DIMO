@@ -1,6 +1,8 @@
 class_name NetworkSession
 extends Node
 
+signal snapshot_applied(frame: int)
+
 const Simulation = preload("res://scripts/simulation.gd")
 
 var host
@@ -171,6 +173,7 @@ func _world(state: Dictionary) -> void:
         return
     host._update_render_velocities(previous_positions, previous_frame, int(state.frame))
     host._audio_for_effects()
+    snapshot_applied.emit(int(state.frame))
 
 
 @rpc("authority", "reliable")
