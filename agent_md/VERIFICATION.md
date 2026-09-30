@@ -1,5 +1,88 @@
 # 验证索引
 
+## 2026-09-30：高地边缘紧凑集结与 EXE 更新
+
+- 缺陷：旧四列偏移接受崖下合法位置，失败后还向出发点修正，点击高地边缘会跨层分散。修复为地形连通平台区域内、点击点 128 世界单位范围的紧凑候选；验证体积、通路、占用及预约。容量不足保留意图等待，每单位每秒重试；战斗后恢复，停止/新命令释放预约；抵达后分离保持平台。
+- Light 选用 Simulation/Visual/Camera/Performance/Network，覆盖模拟、模型与运动、相机拾取、规模性能和新的快照边界；未运行无关的 Presentation/Features/ActionBar 或完整 Full，资产未变不重复导入。最终功能套件见 `.godot/validation/20260930-073444-85588/`；该轮 ENet 的 20Hz 接收断言与渲染检查并行时失败，不能称整轮通过。停止并行引擎负载后，`.godot/validation/20260930-073716-25012/` 单独 Light Network 通过（214.840 秒），包含 gameplay、terrain_maps、两张地图各两轮完整 ENet、协议不匹配/旁观者权限/断线及完整快照一致性，未放宽断言。负载影响尚属推测。
+- arrival_formation 回归通过：六人在高地四侧实际抵达、混合士兵/矿车进入矿坑、攻击移动、建筑占位、不可达命令原子拒绝、180 人溢出等待与预约保护、释放后补位、停止清理、快照恢复与非法区域拒绝。180 人分配 63.662ms；20 个逻辑帧分摊重试总 36.848ms、单帧峰值 3.234ms。此前 100 人分配超过 500ms，缓存候选及导航连通性并优先过滤占用后解决；这不是完整渲染帧率保证。
+- `.godot/arrival-preview.log`：实际游戏右键输入和地表拾取，六人在第 431 渲染帧全部抵达点击平台，`ARRIVAL_PREVIEW PASS`，stderr 为空；停步截图 `assets/concept_art/highland-edge-arrived.png`。
+- 导出 `.godot/arrival-export.log` 完成且 stderr 为空；`build/IronFront.exe` 为 130,685,072 字节，2026-09-30 07:42:15（本地），内嵌 PCK。固定入口 5 秒 EXE 启动检查通过；最终清理及 ReportOnly 无项目进程/端口残留，共享 Blender MCP 保留。协议 rts-terrain-4，联机双方必须使用新版。
+- 限制：既有 world_visual_sync.gd 的朝向与 up 向量共线警告及部分无界面套件退出时 ObjectDB 警告未在本任务修复；未覆盖每种手工操作组合的观感验收。人工复验可选择六名士兵，分别右键高地边缘和矿坑边缘，确认最终停在点击的平台；空间不足时移走先到单位观察后续补位。
+
+## 2026-09-30：垮腰修复与 EXE 更新
+
+- 已确认缺陷及修复：连续转弯时旧落脚目标不随方向更新，外侧脚超出可达范围，骨盆被压低；现在持续预测落点、按弯道缩短步幅并平滑 20Hz 朝向变化。普通抬脚保留跨越支撑相位边界的时间，消除多拖脚一帧。并非单纯屏蔽骨盆下移或取消足底锁定。
+- 修复前 .godot/gait-collapse-before.log：圆弧半径 25/50/100 最低骨盆分别 0.245/0.245/0.644，触发回归失败。最终 .godot/gait-tick-final.log：18 组圆弧全部通过，最低 1.0847，最大单帧下降 0.02281；直行/坡道/启停/校正/攻击断言仍通过，最大贴地误差 0.0502、接地漂移 0.000244。
+- `Light -Area Visual,Performance` 通过（13.084 秒），日志 `.godot/validation/20260930-010957-55356/`：模型、运动、两张地图性能、地形展示和清理。180 混合单位动态显示同步 6.52/6.72ms。源码未改模拟、RPC/快照，不跑 Full/ENet；没有重新生成模型，因此不重复资产导入。
+- 实机 `.godot/gait-collapse-render.log`：通过实际指令和寻路的圆弧路线最低骨盆 1.05091、最大下压 0.03662，`SOLDIER_PREVIEW PASS after`，stderr 为空；预览在 assets/concept_art/heavy-soldier-curve-*.png。180 纯士兵渲染平均 31.25ms、P95 51.14ms、CPU 平均 15.72ms，密集场景性能仍有明显波动，未达到稳定 60FPS。
+- EXE：固定导出入口生成 build/IronFront.exe，130,673,616 字节，2026-09-30 01:11:44（本地），PCK 内嵌；.godot/gait-collapse-export.log.err 为空，5 秒启动检查通过。最终清理和 ReportOnly 确认无项目进程/端口残留，共享 Blender MCP 保留。
+- 人工复验使用本次更新后的 EXE：在样板测试场拉近视角，让单兵持续沿弯线移动，再观察坡道与多人移动；重点看转弯换脚时腰部是否突降。测试证明已复现的连续转弯缺陷修复，不代表所有地形/拥挤组合均完成观感验收。
+
+## 2026-09-30：重装士兵版本 EXE 导出
+
+- 按用户要求通过固定 run-godot.ps1 导出 Windows Release 到 build/IronFront.exe，包含当前士兵模型和自然小跑改动；文件 130,673,088 字节，时间 2026-09-30 01:00:19（本地）。PCK 已嵌入，单个 EXE 可运行。
+- .godot/heavy-soldier-export.log 显示 savepack 完成，stderr 为空；固定 run-exported.ps1 的 5 秒启动检查通过。最终 StopTracked/StopUntracked 及 ReportOnly 均确认项目进程和端口无残留，共享 Blender MCP 保留。
+- 本轮仅导出，未改游戏源码，沿用上轮通过的 Light Visual/Performance，不重复 Full/ENet；启动检查不等同于完整游戏回归。未提交、未推送。
+
+## 2026-09-30：重装士兵模型与自然小跑
+
+- 资源：固定 Blender 入口构建成功（.godot/heavy-build.log，6174 多边形、16 骨骼）。单独执行 Godot import，资源导入完成但编辑器退出超过 35 秒，由入口终止；后续模型测试和真实渲染均成功加载新 GLB，不能将导入进程描述为正常退出。
+- 最终源码验证：`run-validation.ps1 -Level Light -Area Visual,Performance` 通过，13.627 秒；日志目录 `.godot/validation/20260930-005235-16500/`。覆盖 visual_models、soldier_locomotion、原型/荒漠 visual_performance、terrain_presentation、terrain_sample_view 和 cleanup。
+- 运动断言：30/60/144 FPS 下两秒显示距离均为 195（20Hz 显示插值落后一模拟帧）；50/100/150 速度比例、上下高地和矿坑、被挡原地停步、客户端校正不推进步频、传送/重置、90/180 度转向、攻击过渡及 3/5/12 帧短停再启动。读取实际骨骼而非控制器目标值；落脚最大水平漂移 0.000244、地面误差 0.0502 世界单位，腿长不拉伸；枪口局部逐帧位移最大 0.1343，低于 0.15。
+- CPU 压力：180 混合单位的动态同步原型 7.43ms、荒漠 6.79ms；普通单位同步 1.41/1.43ms，均满足原测试预算。血条已有掉血格子与相机投影断言通过。
+- 最终实机：`soldier_motion_preview.gd -Rendered` 输出 `SOLDIER_PREVIEW PASS after`，日志 `.godot/soldier-final-render.log`，stderr 为空。42 张基线/预览位于 `assets/concept_art/heavy-soldier-*.png`，其中新预览 36 张，覆盖平地、正面、高地、矿坑往返与转弯停步。
+- 渲染性能限制：1280×900、RTX 5070 Ti、Compatibility、180 纯士兵移动时平均 22.90ms（约 44 FPS），P95 47.87ms，游戏 CPU 平均 14.73ms。密集单位场景尚未达稳定 60 FPS；本轮没有进一步改模拟、地形或渲染架构来追求帧率。
+- 其他限制：部分无头套件退出仍报告一个 ObjectDB 实例未释放，断言与套件退出状态通过，该退出警告本轮未定位。早期测试出现过 user:// 日志访问错误，已用获授权固定入口完成重试；未修改安全或审批配置。
+- 范围选择：未改模拟规则或 RPC/快照边界，因此未跑 Full/ENet；客户端校正由局部显示测试覆盖，未声称完成跨进程联机体验验收。本轮未更新 EXE，不执行导出/打包测试。
+- 手动复验：从 Godot 运行项目（F5），选择荒漠样板测试场；拉近观察士兵沿平地移动、上下坡、连续转向，再以很短间隔停下和重新移动。重点观察落脚是否滑动、身体是否突然下沉或抬起、膝踝是否连续屈伸。现有 EXE 仍是旧构建，不能用它验收本轮动画。
+- 进程清理：最终 `cleanup-project-processes.ps1 -StopTracked -StopUntracked` 确认项目进程/端口为空，共享 Blender MCP 三个进程保留。
+
+## 用户复验：默认沙箱两次地图渲染
+
+- 按用户要求使用 use_default，依次执行固定 run-godot.ps1 的 terrain_sample_view.gd -Rendered，日志分别为 .godot/sandbox-acceptance-first.log 和 .godot/sandbox-acceptance-second.log。
+- 两次退出码均为 0，均输出 TERRAIN_SAMPLE_VIEW PASS failures=0，两个 .err 文件均为 0 字节；未发现 Path/PATH、重复键或脚本错误。
+- 本轮无 require_escalated 请求或审批等待，固定清理入口同样在默认沙箱通过；无项目进程/端口残留，共享 Blender MCP 保留。
+- 这是已修复入口的针对性复验，未改源码，不重复 Light/Full/ENet 或 EXE 导出；不将两次成功推广为所有未来命令均免审批。
+
+## Path/PATH 启动兼容修复与用户验收
+
+- 最终 Light Tooling 通过，3.055 秒：WRAPPER_SYNTAX、PROCESS_PATH_CHECK、PROCESS_PATH_NATIVE、GODOT_ARGUMENT_RULES、EXECPOLICY 和 cleanup。原生回归日志 .godot/path-native-regression.log 输出 Godot 4.7.2，stderr 为空；真实构造两项 Path 后经固定入口合并为一项、启动 Godot 并保存日志，全部环境值保持，测试后恢复原始进程环境。
+- .godot/path-check-b.log 与 path-check-c.log 为两次不同日志名的实际 OpenGL 渲染检查，均 TERRAIN_SAMPLE_VIEW PASS failures=0、stderr 为空。所有调用均为默认沙箱，未要求 require_escalated。最终无项目进程/端口残留，共享 Blender MCP 保留。
+- 仅修改启动工具和回归检查，采用 Light Tooling 加针对性渲染；不重复 Full/ENet/游戏玩法测试，不导出 EXE。未改 Codex 审批策略、系统环境变量或权限。
+- 局限：本轮修复前的版本启动也成功，未直接复现历史启动异常；验证证明真实重复环境可被修复并启动 Godot，上游注入重复项的来源仍未知。EXECPOLICY 是显式指定项目规则文件的检查，不能单凭它证明当前宿主加载情况或承诺所有未来命令免审批。
+
+用户可在项目目录重复运行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\project\godot_project\rts_host_p2p_prototype\tools\codex\run-validation.ps1 -Level Light -Area Tooling
+```
+
+预期 PROCESS_PATH_NATIVE PASS、GODOT_ARGUMENT_RULES PASS、EXECPOLICY PASS 和最终 VALIDATION_SUMMARY 的 status 为 passed。此项自动构造异常环境，不需要手工修改 Windows PATH。
+
+检查 Codex 审批体验必须让 Codex 在默认沙箱执行下面命令，然后仅将日志名 b 改为 c 再执行；手动终端运行只能检查程序功能，不能验证 Codex 的审批行为：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\project\godot_project\rts_host_p2p_prototype\tools\codex\run-godot.ps1 -Action script -Script res://tests/terrain_sample_view.gd -Rendered -LogFile .godot\path-check-b.log -TimeoutSeconds 150
+```
+
+验收：两次正常退出、对应日志均 TERRAIN_SAMPLE_VIEW PASS failures=0、.err 为空，且未因重复键申请沙箱外重试。运行结束执行固定 cleanup-project-processes.ps1 -StopTracked -StopUntracked。若未来仍弹审批，应记录具体命令和原因，区分环境异常复发与独立的权限边界。
+
+## 2026-09-29：坡道分界优化版 Windows 导出
+
+- 固定 run-godot.ps1 导出退出 0，.godot/ramp-boundary-export.log 无脚本/导出错误、stderr 为空；确认 sample_surface.gdc、sample_view.gdc、desert_sample 资源及 sample_surface.gdshader 已打包。
+- build/IronFront.exe：130555640 字节，2026-09-29 23:33:50，资源内嵌。SHA256：92F87AB12E7D4A5B7402B713AC95A7D4C49DD3A497AE7A9A458A927C14BB5999。
+- run-exported.ps1 存活 5 秒检查通过；cleanup -StopTracked -StopUntracked 及 -ReportOnly 通过，无项目进程/端口残留，共享 Blender MCP 保留。
+- 本轮未改源码，沿用上一轮 Light Simulation/Visual/Camera 与实际渲染检查；不重复 Light/Full/ENet，EXE 本轮仅验证启动。未提交或推送；替代下面实现阶段未导出的历史状态。
+
+## 2026-09-29：坡道与平地分界增强
+
+- 最终选择 Light Simulation/Visual/Camera，.godot/validation/20260929-233020-142204，耗时 14.981 秒全部通过：gameplay 71 项、camera、visual_models、terrain_maps、terrain_presentation、terrain_sample、terrain_sample_view 及 cleanup。
+- 新增断言覆盖：两侧 24 半径矿车净空、中段坡度稳定、端点坡度归零与高度连续、平路不受坡面遮罩影响、上坡/下坡的坡顶坡脚标识、装饰石整个占地避开通行核心。原平地可建造/坡面拒绝/陡崖不可穿越断言继续通过。
+- 士兵与矿车分别实际往返高台/矿坑；两条绕行路线逐步检查模型高度与同一表面高度相差小于 0.01，保持士兵面向实际位移；两端连接及坡面屏幕点选误差小于 1 单位。
+- 固定 run-godot.ps1 的 terrain_sample_view.gd -Rendered -Arguments:--ramp-before / --ramp-after 各通过，日志 .godot/ramp-boundary-before.log / ramp-boundary-after.log，stderr 为空。1920×1080 Compatibility 实机生成四个视角各一对 before-v2 / after-v2 PNG；已检查默认、远景及高台/矿坑近景，坡面色差及两侧轮廓更明确，车辙连续，无新增横向黑线或实体挡路。
+- 所有图片位于 assets/concept_art/ramp-boundary-*.png；本轮未更改纹理图片，shader 和 tres 直接运行加载，因此无需额外资源 import。仅改单机样板区且未修改网络边界，跳过 Full/ENet；未导出 EXE、提交或推送。
+- 清理确认项目进程及 24560/8766 端口无残留，共享 Blender MCP 保留。部分 headless 套件仍有既有 ObjectDB 退出警告；不将其标为本轮已修复。
+
 ## 2026-09-29：士兵朝向修复版 Windows 导出
 
 - 固定 run-godot.ps1 导出退出 0，.godot/soldier-heading-export.log 无脚本/导出错误，stderr 为空；确认更新后的 world_visual_sync.gdc 与 entity_visual.gdc 已打包。

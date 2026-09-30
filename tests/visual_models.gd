@@ -139,18 +139,16 @@ func _check_visual_forward(visual: EntityVisual, heading: Vector2, message: Stri
 
 
 func _check_attack_recoil(visual: EntityVisual, node_name: String, message: String) -> void:
-    var animation := visual.animation_player.get_animation("attack")
-    var expected_path := "soldier/%s:position" % node_name
-    for track_index: int in range(animation.get_track_count()):
-        if String(animation.track_get_path(track_index)) != expected_path:
-            continue
-        check(animation.track_get_key_count(track_index) == 3, "%s attack key count matches" % node_name)
-        var first: Vector3 = animation.track_get_key_value(track_index, 0)
-        var recoil: Vector3 = animation.track_get_key_value(track_index, 1)
-        var last: Vector3 = animation.track_get_key_value(track_index, 2)
-        check(first.z > recoil.z and is_equal_approx(first.z, last.z), message)
-        return
-    check(false, "%s attack recoil track exists" % node_name)
+    var motion = visual.soldier_motion
+    motion.attack_blend = 1.0
+    motion.clock = 0.0
+    motion._pose(Vector2.ZERO)
+    var first: Vector3 = motion.muzzle.position
+    motion.clock = 0.06
+    motion._pose(Vector2.ZERO)
+    check(motion.muzzle.position.z < first.z, message + " follows weapon bone: " + node_name)
+    motion.attack_blend = 0.0
+    motion._pose(Vector2.ZERO)
 
 
 func _check_faction_materials_on_shoulders(visual: EntityVisual) -> void:
@@ -162,8 +160,8 @@ func _check_faction_materials_on_shoulders(visual: EntityVisual) -> void:
             if material == null or "Faction" not in material.resource_name:
                 continue
             faction_meshes += 1
-            check(mesh_instance.get_parent().name in ["Shoulder_L", "Shoulder_R"], "Soldier team marking stays on the shoulders")
-    check(faction_meshes == 2, "Soldier exposes exactly two shoulder team markings")
+            check(mesh_instance.skin != null, "Team marking is bound to the skinned soldier")
+    check(faction_meshes == 1, "Soldier batches both shoulder markings into one team surface")
 
 
 func _check_attack_muzzle_forward(visual: EntityVisual, heading: Vector2, message: String) -> void:
@@ -266,13 +264,10 @@ func run() -> void:
     check(soldier_visual.kind == "soldier", "Soldier uses the 3D model visual")
     check(soldier_visual.owner_id == 1, "Soldier visual records blue ownership")
     check(_has_animations(soldier_visual.get_animation_names(), ["idle", "move", "attack"]), "Soldier exposes state animations")
-    _check_track_count(soldier_visual, "idle", 2, "Soldier idle animation keeps both tracks")
-    _check_track_count(soldier_visual, "move", 5, "Soldier move animation keeps all limb tracks")
-    _check_track_count(soldier_visual, "attack", 3, "Soldier attack animation keeps recoil tracks")
+    check(soldier_visual.soldier_motion != null, "Soldier has distance-driven locomotion")
     check(soldier_visual.model.find_children("*", "MeshInstance3D", true, false).size() <= 12, "Optimized soldier keeps at most 12 mesh nodes")
-    check(soldier_visual.model.get_node_or_null("soldier/ArmorCore") != null, "Soldier exposes the simplified armor core")
-    check(soldier_visual.model.get_node_or_null("soldier/Shoulder_L") != null, "Soldier exposes the left shoulder rig")
-    check(soldier_visual.model.get_node_or_null("soldier/Shoulder_R") != null, "Soldier exposes the right shoulder rig")
+    for bone: String in ["Pelvis", "Spine", "Head", "Weapon", "Thigh_L", "Shin_L", "Foot_L", "UpperArm_R", "Forearm_R", "Hand_R"]:
+        check(soldier_visual.soldier_motion.bones.has(bone), "Soldier articulates " + bone)
     _check_faction_materials_on_shoulders(soldier_visual)
     _check_visual_forward(soldier_visual, Vector2.RIGHT, "Soldier faces east when moving east")
     _check_visual_forward(soldier_visual, Vector2.LEFT, "Soldier faces west when moving west")

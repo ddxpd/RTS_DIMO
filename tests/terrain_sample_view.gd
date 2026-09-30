@@ -15,7 +15,7 @@ func check(value: bool, message: String) -> void:
         push_error(message)
 
 
-func capture(name: String, focus: Vector2, zoom: float) -> void:
+func capture(name: String, focus: Vector2, zoom: float, prefix: String = "sample-", version: String = "v1") -> void:
     game.camera_controller.focus = focus
     game.camera_zoom_level = zoom
     game._update_camera_transform()
@@ -24,8 +24,8 @@ func capture(name: String, focus: Vector2, zoom: float) -> void:
         await process_frame
     await RenderingServer.frame_post_draw
     var shot := root.get_texture().get_image()
-    check(shot.save_png("res://assets/concept_art/sample-" + name + "-v1.png") == OK, "Save screenshot")
-    if name == "overview":
+    check(shot.save_png("res://assets/concept_art/" + prefix + name + "-" + version + ".png") == OK, "Save screenshot")
+    if name == "overview" and prefix == "sample-":
         check(shot.save_png("res://assets/maps/sample/preview.png") == OK, "Save runtime preview copy")
 
 
@@ -65,11 +65,23 @@ func run() -> void:
     game._sync_visuals()
     check(game.sim.is_test_map() and game.local_slot == 1, "Sample is controllable")
     check(game.terrain_view != null and not game.fog_plane.visible, "Sample geometry active")
+    var rubble: MultiMesh = game.terrain_view.get_node("CliffRubble").multimesh
+    for index in range(rubble.instance_count):
+        var transform := rubble.get_instance_transform(index)
+        var p := Vector2(transform.origin.x, transform.origin.z)
+        var radius := maxf(transform.basis.x.length(), transform.basis.z.length())
+        check(game.sim.terrain.sample_surface.ramp_core_distance(p) >= radius - 0.01, "Rubble footprint stays outside ramp core")
     for point: Vector2 in [Vector2(1766,1922), Vector2(1876,1442), Vector2(3016,1782), Vector2(2876,1442)]:
         game.camera_controller.focus = point
         game.camera_zoom_level = 1.5
         game._update_camera_transform()
         check(game._screen_to_world(game._world_to_screen(point)).distance_to(point) < 1.0, "Fine terrain pick round trip %s" % point)
+    for ramp: Dictionary in game.sim.terrain.definition.ramps:
+        for t in [0.0, 0.075, 0.925, 1.0]:
+            var point: Vector2 = (ramp.start as Vector2).lerp(ramp.end, t)
+            game.camera_controller.focus = point
+            game._update_camera_transform()
+            check(game._screen_to_world(game._world_to_screen(point)).distance_to(point) < 1.0, "Ramp connection pick round trip")
     await preload("res://tests/soldier_heading_checks.gd").routes(game, check, "--heading-capture" in OS.get_cmdline_args())
     var view: Node3D = game.terrain_view
     game.restart_match()
@@ -87,6 +99,14 @@ func run() -> void:
     game._map_selected(2)
     game.play_solo()
     game._sync_visuals()
+    if "--ramp-before" in OS.get_cmdline_args() or "--ramp-after" in OS.get_cmdline_args():
+        var version := "before-v2" if "--ramp-before" in OS.get_cmdline_args() else "after-v2"
+        game.hud.visible = false
+        await capture("default", Vector2(2356,1552), 0.64, "ramp-boundary-", version)
+        await capture("far", Vector2(2356,1592), 0.54, "ramp-boundary-", version)
+        await capture("highland", Vector2(1876,1442), 1.15, "ramp-boundary-", version)
+        await capture("quarry", Vector2(2876,1432), 1.15, "ramp-boundary-", version)
+        game.hud.visible = true
     if "--capture" in OS.get_cmdline_args():
         game.hud.visible = false
         await capture("overview", Vector2(2356,1592), 0.54)

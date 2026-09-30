@@ -13,6 +13,8 @@ uniform bool reveal_all = true;
 uniform float tile_scale = 96.0;
 uniform float macro_scale = 460.0;
 uniform float detail_fade = 2200.0;
+uniform float ramp_material_strength = 0.78;
+uniform float ramp_boundary_strength = 0.30;
 uniform bool decoration = false;
 varying vec3 world_position;
 varying vec3 world_normal;
@@ -58,6 +60,17 @@ void fragment() {
     vec3 ground = mix(sand, gravel, stony);
     ground = mix(ground, soil * 1.04, road * 0.84);
     vec4 ground_nr = mix(mix(sn, gn, stony), dn, road);
+    // Alpha marks the authored gentle ramp; UV2 stores crest-minus-toe and
+    // shoulders. Road UVs remain untouched so tracks cross each end naturally.
+    float ramp = clamp(COLOR.a * (0.92 + medium * 0.12), 0.0, 1.0);
+    vec3 ramp_soil = mix(soil, gravel, 0.32) * vec3(0.86, 0.89, 0.94);
+    ground = mix(ground, ramp_soil, ramp * ramp_material_strength);
+    ground_nr = mix(ground_nr, mix(dn, gn, 0.32), ramp * ramp_material_strength);
+    float crest = max(UV2.x, 0.0);
+    float toe = max(-UV2.x, 0.0);
+    ground = mix(ground, mix(soil, gravel, 0.48) * 0.90, crest * ramp_boundary_strength);
+    ground = mix(ground, mix(sand, gravel, 0.28), toe * ramp_boundary_strength);
+    ground = mix(ground, mix(gravel, soil, 0.25) * 0.93, UV2.y * 0.42);
     vec3 color = mix(ground, rock, rocky);
     // Long wavelength color and shorter strata retain form at RTS zoom levels.
     float strata = sin(world_position.y * 0.23 + noise2(p / 75.0) * 0.75);

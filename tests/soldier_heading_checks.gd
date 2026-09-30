@@ -90,6 +90,8 @@ static func routes(game, check: Callable, capture: bool = false) -> void:
             game.sim.step()
             game._sync_units()
             var u: Dictionary = game.sim.units[id]
+            var visual_height: float = game.unit_visuals[id].visual.position.y
+            check.call(absf(visual_height - game.sim.terrain.height_at(u.pos)) < 0.01, route + " stays grounded across ramp connections")
             var motion: Vector2 = u.pos - previous
             if motion.length_squared() > 0.0001 and u.order == "move":
                 faces(game, id, motion, check, route + " faces actual path displacement")

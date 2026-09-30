@@ -926,7 +926,7 @@ func _process(delta: float) -> void:
     if selection_dragging and not left_button_held:
         _finish_drag_select(selection_current)
     _refresh_ui()
-    _sync_visuals()
+    _sync_visuals(delta)
 
     if cursor_controller != null:
         cursor_controller.update_cursor()
@@ -1413,9 +1413,9 @@ var health_grid_overlay:
     get:
         return visual_sync.health_grid_overlay if visual_sync != null else null
 
-func _sync_visuals() -> void:
+func _sync_visuals(delta: float = 0.0) -> void:
     if visual_sync != null:
-        visual_sync.sync()
+        visual_sync.sync(delta)
 
 func _sync_rocks() -> void:
     if visual_sync != null:

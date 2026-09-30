@@ -3,7 +3,7 @@ extends RefCounted
 ## The original maps do not use this sampler.
 
 const STEP := 8.0
-const REVISION := 1
+const REVISION := 2
 var definition: Dictionary
 var bounds: Rect2
 var cache_bounds: Rect2
@@ -64,16 +64,68 @@ func _authored_height(p: Vector2) -> float:
         var face := 1.0 - smoothstep(4.0, 26.0, absf(edge))
         h += sin(p.x * 0.11 + p.y * 0.017) * sin(edge * 0.35) * face * 1.8
     for ramp: Dictionary in definition.ramps:
-        var start: Vector2 = ramp.start
-        var end: Vector2 = ramp.end
-        var delta := end - start
-        var t := (p - start).dot(delta) / delta.length_squared()
-        if t < 0.0 or t > 1.0:
+        var local := ramp_coordinates(p, ramp)
+        if local.x < 0.0 or local.x > local.z:
             continue
-        var sideways := absf((p - start).cross(delta.normalized()))
-        var blend := 1.0 - smoothstep(float(ramp.width) * 0.5, float(ramp.width) * 0.5 + 48.0, sideways)
-        h = lerpf(h, float(ramp.height) * smoothstep(0.0, 1.0, t), blend)
+        var half_width := float(ramp.width) * 0.5
+        var blend := 1.0 - smoothstep(half_width, half_width + float(definition.ramp_style.side_blend), absf(local.y))
+        h = lerpf(h, float(ramp.height) * ramp_rise(local.x, local.z), blend)
     return h
+
+
+func ramp_coordinates(p: Vector2, ramp: Dictionary) -> Vector3:
+    var delta: Vector2 = ramp.end - ramp.start
+    var direction := delta.normalized()
+    var offset: Vector2 = p - ramp.start
+    return Vector3(offset.dot(direction), offset.cross(direction), delta.length())
+
+
+func ramp_rise(along: float, length: float) -> float:
+    # Integrate a trapezoidal gradient: flat at the ends, constant through the
+    # middle. The short quadratic caps meet without steps or normal breaks.
+    var cap := minf(float(definition.ramp_style.end_blend), length * 0.45)
+    var d := clampf(along, 0.0, length)
+    var scale := length - cap
+    if d < cap:
+        return d * d / (2.0 * cap * scale)
+    if d > length - cap:
+        return 1.0 - (length - d) * (length - d) / (2.0 * cap * scale)
+    return (d - cap * 0.5) / scale
+
+
+func ramp_markings(p: Vector2) -> Vector4:
+    # Coverage, crest, toe, shoulder. Reuse the authored ramp axes/width so
+    # material boundaries follow the same geometry for either rise direction.
+    var result := Vector4.ZERO
+    for ramp: Dictionary in definition.ramps:
+        var local := ramp_coordinates(p, ramp)
+        var half_width := float(ramp.width) * 0.5
+        var side_blend := float(definition.ramp_style.side_blend)
+        var band := float(definition.ramp_style.boundary_band)
+        if local.x < -band or local.x > local.z + band or absf(local.y) > half_width + side_blend + 24.0:
+            continue
+        var jitter := sin(local.y * 0.037 + 0.7) * 5.0 + sin(local.y * 0.091) * 3.0
+        var side := absf(local.y) + sin(local.x * 0.055) * 3.0
+        var lateral := 1.0 - smoothstep(half_width - 8.0, half_width + side_blend, side)
+        var coverage := smoothstep(-8.0, 32.0, local.x + jitter) * (1.0 - smoothstep(local.z - 32.0, local.z + 8.0, local.x + jitter))
+        var entry := (1.0 - smoothstep(8.0, band, absf(local.x - 16.0 + jitter))) * lateral
+        var exit_band := (1.0 - smoothstep(8.0, band, absf(local.x - local.z + 16.0 + jitter))) * lateral
+        var shoulder := (1.0 - smoothstep(6.0, side_blend + 4.0, absf(side - half_width - 8.0))) * coverage
+        result.x = maxf(result.x, coverage * lateral)
+        result.y = maxf(result.y, exit_band if float(ramp.height) > 0.0 else entry)
+        result.z = maxf(result.z, entry if float(ramp.height) > 0.0 else exit_band)
+        result.w = maxf(result.w, shoulder)
+    return result
+
+
+func ramp_core_distance(p: Vector2) -> float:
+    var distance := INF
+    for ramp: Dictionary in definition.ramps:
+        var local := ramp_coordinates(p, ramp)
+        # Also keep stones clear of the flat approach/departure at each end.
+        if local.x >= -24.0 and local.x <= local.z + 24.0:
+            distance = minf(distance, absf(local.y) - float(ramp.width) * 0.5)
+    return distance
 
 
 func vertex(x: int, z: int) -> Vector3:

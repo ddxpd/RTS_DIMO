@@ -22,10 +22,12 @@ func build(data: Terrain, _fog: Texture2D) -> void:
     var normals := PackedVector3Array()
     var colors := PackedColorArray()
     var road_uvs := PackedVector2Array()
+    var ramp_uvs := PackedVector2Array()
     var count: int = field.columns * field.rows
     normals.resize(count)
     colors.resize(count)
     road_uvs.resize(count)
+    ramp_uvs.resize(count)
     for z in range(field.rows):
         for x in range(field.columns):
             var index: int = z * field.columns + x
@@ -37,8 +39,10 @@ func build(data: Terrain, _fog: Texture2D) -> void:
             var basin := 1.0 - smoothstep(-70.0, -6.0, field.height_at(p))
             var gravel_zone := clampf(cliff_apron * 0.85 + basin * 0.38, 0.0, 1.0) * (1.0 - road.x * 0.75)
             var contact := (1.0 - smoothstep(5.0, 38.0, edge)) * (1.0 - road.x)
-            colors[index] = Color(road.x, gravel_zone, contact, 1)
+            var ramp: Vector4 = field.ramp_markings(p)
+            colors[index] = Color(road.x, gravel_zone, contact, ramp.x)
             road_uvs[index] = Vector2(road.y, road.z)
+            ramp_uvs[index] = Vector2(ramp.y - ramp.z, ramp.w)
     # Chunks share vertex samples and normals, eliminating shading seams.
     for cz in range(0, field.rows - 1, 32):
         for cx in range(0, field.columns - 1, 32):
@@ -53,6 +57,7 @@ func build(data: Terrain, _fog: Texture2D) -> void:
                         surface.set_normal(normals[index])
                         surface.set_color(colors[index])
                         surface.set_uv(road_uvs[index])
+                        surface.set_uv2(ramp_uvs[index])
                         surface.add_vertex(field.vertex(vx, vz))
                         vertex_count += 1
                     triangle_count += 2
@@ -75,7 +80,7 @@ func _buffer_ground() -> void:
         var b := Vector3(region.end.x, 0, region.position.y)
         var c := Vector3(region.end.x, 0, region.end.y)
         var d := Vector3(region.position.x, 0, region.end.y)
-        _quad(surface, [a, b, c, d], [Color(0,0,0,1), Color(0,0,0,1), Color(0,0,0,1), Color(0,0,0,1)])
+        _quad(surface, [a, b, c, d], [Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0), Color(0,0,0,0)])
         _finish(surface, ground_material)
 
 
@@ -97,10 +102,30 @@ func _sample_rubble() -> void:
             size = rng.randf_range(9.0, 23.0)
         elif rng.randf() > 0.6:
             continue
+        if field.ramp_core_distance(p) < size * 1.5:
+            continue
         var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(size * rng.randf_range(0.7, 1.5), size * 0.65, size))
         transforms.append(Transform3D(basis, Vector3(p.x, field.height_at(p) - size * 0.2, p.y)))
         var tint := rng.randf_range(0.86, 1.08)
         tints.append(Color(tint, tint * 0.99, tint * 0.96, 1))
+    # Small irregular shoulder stones also mark the ramp away from cliff rims.
+    # Their entire footprint stays outside the authored walkable core.
+    for ramp: Dictionary in terrain.definition.ramps:
+        var delta: Vector2 = ramp.end - ramp.start
+        var direction := delta.normalized()
+        var sideways := Vector2(direction.y, -direction.x)
+        var spacing := float(terrain.definition.ramp_style.rubble_spacing)
+        for step in range(1, int(delta.length() / spacing)):
+            for side in [-1.0, 1.0]:
+                if rng.randf() > clampf(density * 0.72, 0.0, 1.0):
+                    continue
+                var size := rng.randf_range(2.5, 5.0)
+                var distance := float(ramp.width) * 0.5 + rng.randf_range(12.0, 24.0)
+                var p: Vector2 = ramp.start + direction * (step * spacing + rng.randf_range(-9.0, 9.0)) + sideways * distance * side
+                var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(size, size * 0.55, size * 1.2))
+                transforms.append(Transform3D(basis, Vector3(p.x, field.height_at(p) - size * 0.2, p.y)))
+                var tint := rng.randf_range(0.90, 1.08)
+                tints.append(Color(tint, tint, tint * 0.98, 1))
     var multi := MultiMesh.new()
     multi.transform_format = MultiMesh.TRANSFORM_3D
     multi.use_colors = true

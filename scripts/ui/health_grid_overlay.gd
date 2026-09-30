@@ -36,21 +36,24 @@ func upsert_entity(
 ) -> void:
     var safe_max_hp := maxi(1, max_hp)
     var cell_count := maxi(1, ceili(float(safe_max_hp) / float(HEALTH_PER_CELL)))
-    var cell_fractions: Array[float] = []
-    for cell_index in range(cell_count):
-        var cell_hp := clampf(float(current_hp - cell_index * HEALTH_PER_CELL) / float(HEALTH_PER_CELL), 0.0, 1.0)
-        cell_fractions.append(cell_hp)
-    entries[key] = {
-        "world_position": world_position,
-        "screen_position": host.camera.unproject_position(world_position),
-        "current_hp": current_hp,
-        "max_hp": safe_max_hp,
-        "cell_count": cell_count,
-        "cell_fractions": cell_fractions,
-        "owner": owner_id,
-        "category": category,
-        "visible": visible and current_hp > 0
-    }
+    var entry: Dictionary = entries.get(key, {})
+    # Render interpolation changes the label position every frame, while HP
+    # usually stays unchanged. Rebuild the cell fills only when HP changes.
+    if entry.get("current_hp", -1) != current_hp or entry.get("max_hp", -1) != safe_max_hp:
+        var cell_fractions: Array[float] = []
+        for cell_index in range(cell_count):
+            var cell_hp := clampf(float(current_hp - cell_index * HEALTH_PER_CELL) / float(HEALTH_PER_CELL), 0.0, 1.0)
+            cell_fractions.append(cell_hp)
+        entry.cell_fractions = cell_fractions
+    entry.world_position = world_position
+    entry.screen_position = host.camera.unproject_position(world_position)
+    entry.current_hp = current_hp
+    entry.max_hp = safe_max_hp
+    entry.cell_count = cell_count
+    entry.owner = owner_id
+    entry.category = category
+    entry.visible = visible and current_hp > 0
+    entries[key] = entry
     queue_redraw()
 
 

@@ -4,6 +4,51 @@ $script:ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path.Trim
 $script:RuntimeDirectory = Join-Path $env:TEMP 'codex-project-rts-host-p2p'
 $script:TrackedProcessFile = Join-Path $script:RuntimeDirectory 'processes.json'
 
+function Get-ProcessPathState {
+    param([Parameter(Mandatory = $true)][Collections.IDictionary]$Variables)
+
+    # Windows names are case-insensitive, but inherited environment blocks can
+    # contain both Path and PATH. Never merge different values or remove the
+    # sandbox's injected directories while repairing that representation.
+    $names = @($Variables.Keys | Where-Object { [string]$_ -ieq 'Path' })
+    $value = if ($names.Count -gt 0) { [string]$Variables[$names[0]] } else { $null }
+    foreach ($name in $names) {
+        if (-not [string]::Equals($value, [string]$Variables[$name], [StringComparison]::Ordinal)) {
+            throw 'Conflicting Path/PATH values; process environment left unchanged.'
+        }
+    }
+    return [pscustomobject]@{ Count = $names.Count; Value = $value }
+}
+
+function Repair-ProcessPathCasing {
+    $before = Get-ProcessPathState -Variables ([Environment]::GetEnvironmentVariables())
+    if ($before.Count -le 1) { return }
+    if ([string]::IsNullOrEmpty($before.Value)) {
+        throw 'Duplicate empty Path entries cannot be safely normalized.'
+    }
+
+    # Process scope only: keep the exact effective value, including sandbox
+    # entries. Win32 can delete one matching entry at a time from a duplicate
+    # block, so remove at most the number observed and restore in finally.
+    try {
+        for ($index = 0; $index -lt $before.Count; $index++) {
+            [Environment]::SetEnvironmentVariable('Path', $null, 'Process')
+        }
+    } finally {
+        [Environment]::SetEnvironmentVariable('Path', $before.Value, 'Process')
+    }
+    $after = Get-ProcessPathState -Variables ([Environment]::GetEnvironmentVariables())
+    if ($after.Count -ne 1 -or
+        -not [string]::Equals($before.Value, $after.Value, [StringComparison]::Ordinal)) {
+        throw 'Process Path normalization failed; refusing to launch a child process.'
+    }
+    Write-Host "PROCESS_PATH_NORMALIZED $($before.Count) -> 1 (value preserved)"
+}
+
+# Every fixed entry point imports this file, including network and CLI checks
+# that start children without Start-TrackedProcess.
+Repair-ProcessPathCasing
+
 function ConvertTo-FullPath {
     param(
         [Parameter(Mandatory = $true)]

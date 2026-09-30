@@ -36,6 +36,36 @@ if ($parseErrors.Count -gt 0) {
 
 Write-Output 'WRAPPER_SYNTAX PASS'
 
+$pathFixture = [Collections.Hashtable]::new([StringComparer]::Ordinal)
+$pathFixture.Add('Path', 'C:\sandbox-tools;C:\Windows;C:\tools with spaces')
+$pathFixture.Add('PATH', $pathFixture['Path'])
+$pathFixture.Add('OTHER', 'untouched')
+$pathState = Get-ProcessPathState -Variables $pathFixture
+if ($pathState.Count -ne 2 -or $pathState.Value -cne $pathFixture['Path'] -or $pathFixture.Count -ne 3) {
+    throw 'Duplicate Path detection must preserve the complete value and input.'
+}
+$pathFixture['PATH'] = 'C:\different-tools'
+$conflictRejected = $false
+try {
+    $null = Get-ProcessPathState -Variables $pathFixture
+} catch {
+    if ($_.Exception.Message -notlike 'Conflicting Path/PATH values*') { throw }
+    $conflictRejected = $true
+}
+if (-not $conflictRejected) { throw 'Conflicting Path values were not rejected.' }
+$pathFixture.Remove('PATH')
+if ((Get-ProcessPathState -Variables $pathFixture).Count -ne 1) { throw 'Single Path detection failed.' }
+$pathFixture.Remove('Path')
+if ((Get-ProcessPathState -Variables $pathFixture).Count -ne 0) { throw 'Missing Path detection failed.' }
+$actualPathBefore = Get-ProcessPathState -Variables ([Environment]::GetEnvironmentVariables())
+Repair-ProcessPathCasing
+$actualPathAfter = Get-ProcessPathState -Variables ([Environment]::GetEnvironmentVariables())
+if ($actualPathAfter.Count -gt 1 -or $actualPathAfter.Value -cne $actualPathBefore.Value) {
+    throw 'Process Path normalization is not idempotent or changed the effective value.'
+}
+Write-Output 'PROCESS_PATH_CHECK PASS (duplicate/single/missing/conflict fixtures; live value preserved)'
+& (Join-Path $script:ProjectRoot 'tests\process_environment.ps1')
+
 $codex = Get-Command codex -ErrorAction SilentlyContinue
 $codexPath = if ($null -ne $codex) { $codex.Source } else { $null }
 if (-not $codexPath -and $env:LOCALAPPDATA) {
@@ -78,6 +108,15 @@ if (-not $codexPath) {
             }
         }
     }
+
+    $godotPrefix = @('powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'run-godot.ps1'))
+    foreach ($logName in @('.godot\path-check-a.log', '.godot\path-check-b.log')) {
+        $policy = Get-CommandPolicy -CommandArguments ($godotPrefix + @('-Action', 'script', '-Script', 'res://tests/terrain_sample_view.gd', '-Rendered', '-LogFile', $logName, '-TimeoutSeconds', '150'))
+        if ($policy.PSObject.Properties.Name -notcontains 'decision' -or $policy.decision -ne 'allow') {
+            throw "Godot command with variable log parameters is not allowed: $logName"
+        }
+    }
+    Write-Output 'GODOT_ARGUMENT_RULES PASS (two different log names; project rules only)'
 
     # These commands are evaluated only, never executed. A file extension is not
     # permission to run arbitrary shell code or another project's script.

@@ -31,8 +31,10 @@ $runGodot = Join-Path $PSScriptRoot 'run-godot.ps1'
 $runNetwork = Join-Path $PSScriptRoot 'run-network.ps1'
 $verifyPermissions = Join-Path $PSScriptRoot 'verify-permissions.ps1'
 $cleanup = Join-Path $PSScriptRoot 'cleanup-project-processes.ps1'
-$suiteOrder = @('gameplay', 'presentation', 'features', 'camera', 'action_bar', 'visual_models', 'visual_performance', 'terrain_maps', 'terrain_presentation', 'terrain_sample', 'terrain_sample_view')
+$suiteOrder = @('gameplay', 'arrival_formation', 'presentation', 'features', 'camera', 'action_bar', 'visual_models', 'soldier_locomotion', 'visual_performance', 'terrain_maps', 'terrain_presentation', 'terrain_sample', 'terrain_sample_view')
 $suiteScripts = @{
+    arrival_formation = 'res://tests/arrival_formation.gd'
+    soldier_locomotion = 'res://tests/soldier_locomotion.gd'
     terrain_sample     = 'res://tests/terrain_sample.gd'
     terrain_sample_view = 'res://tests/terrain_sample_view.gd'
     terrain_maps       = 'res://tests/terrain_maps.gd'
@@ -46,12 +48,12 @@ $suiteScripts = @{
     visual_performance = 'res://tests/visual_performance.gd'
 }
 $areaSuites = @{
-    Simulation   = @('gameplay', 'terrain_maps', 'terrain_sample')
+    Simulation   = @('gameplay', 'arrival_formation', 'terrain_maps', 'terrain_sample')
     Presentation = @('presentation')
     Features     = @('features', 'terrain_presentation', 'terrain_sample_view')
     Camera       = @('camera')
     ActionBar    = @('action_bar')
-    Visual       = @('visual_models', 'terrain_presentation', 'terrain_sample_view')
+    Visual       = @('visual_models', 'soldier_locomotion', 'terrain_presentation', 'terrain_sample_view')
     Performance  = @('visual_performance')
     Network      = @('gameplay', 'terrain_maps')
     Tooling      = @()
@@ -110,6 +112,8 @@ function Invoke-ValidationStage {
 
 try {
     if ($runTooling) {
+        # Tooling includes a Godot startup regression with duplicate Path keys.
+        $cleanupNeeded = $true
         Invoke-ValidationStage -Name 'tooling' -Action {
             & $verifyPermissions
         }

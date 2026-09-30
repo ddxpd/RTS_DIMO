@@ -107,11 +107,14 @@ func run() -> void:
     s.command(1, {"action": "move", "units": [east], "pos": Vector2(1000, 1900)})
     var west_arrived := false
     var east_arrived := false
+    # Compact assignment avoids the other miner's occupied destination.
+    var west_destination: Vector2 = s.units[west].target
+    var east_destination: Vector2 = s.units[east].target
     for i in range(400):
         s.step()
-        if (s.units[west].pos as Vector2).distance_to(Vector2(1400, 1900)) < 25:
+        if (s.units[west].pos as Vector2).distance_to(west_destination) < 5 and s.units[west].pos.x > 1300:
             west_arrived = true
-        if (s.units[east].pos as Vector2).distance_to(Vector2(1000, 1900)) < 25:
+        if (s.units[east].pos as Vector2).distance_to(east_destination) < 5 and s.units[east].pos.x < 1100:
             east_arrived = true
         if west_arrived and east_arrived:
             break

@@ -22,11 +22,24 @@ var materials := PackedByteArray()
 var flat_clear := PackedByteArray()
 var navigation_clear := PackedByteArray()
 var visibility_cache: Dictionary = {}
+var arrival_regions: RefCounted
+
+
+func arrival_region_at(point: Vector2) -> int:
+    if arrival_regions == null:
+        arrival_regions = preload("res://scripts/maps/arrival_regions.gd").new(self)
+    return arrival_regions.at(point)
+
+
+func arrival_candidates(point: Vector2, region: int) -> Array[Vector2]:
+    arrival_region_at(point)
+    return arrival_regions.candidates(point, region)
 
 func load_map(map_id: String) -> bool:
     return assemble(Catalog.definition(map_id))
 
 func assemble(data: Dictionary) -> bool:
+    arrival_regions = null
     error = ""
     sample_surface = null
     if data.is_empty() or data.get("size") != WORLD:

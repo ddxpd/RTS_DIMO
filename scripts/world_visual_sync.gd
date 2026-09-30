@@ -56,12 +56,12 @@ func _ensure_health_grid_overlay() -> void:
     health_grid_overlay.configure(host)
     host.hud.add_child(health_grid_overlay)
 
-func sync() -> void:
+func sync(delta: float = 0.0) -> void:
     _ensure_health_grid_overlay()
     _sync_rocks()
     _sync_ores()
     _sync_buildings()
-    _sync_units()
+    _sync_units(delta)
     _sync_effects()
     _sync_markers()
     _sync_selection_rect()
@@ -71,7 +71,7 @@ func sync() -> void:
 func _set_visual_visible(visual: EntityVisual, next_visible: bool) -> void:
     visual.visible = next_visible
     if visual.animation_player != null:
-        visual.animation_player.active = next_visible
+        visual.animation_player.active = next_visible and visual.kind != "soldier"
 
 func _sync_rocks() -> void:
     if host.sim.map_id != "prototype":
@@ -221,7 +221,7 @@ func _sync_buildings() -> void:
             building_visuals.erase(id)
 
 
-func _sync_units() -> void:
+func _sync_units(delta: float = 0.0) -> void:
     var seen := {}
     for id: int in host.sim.units:
         var u: Dictionary = host.sim.units[id]
@@ -236,15 +236,26 @@ func _sync_units() -> void:
 
         # Fog: enemy units only render when currently visible.
         _set_visual_visible(visual, u.owner == host.local_slot or host.sim.can_see(host.local_slot, u.pos))
-        visual.set_position_2d(u.pos, host.sim.terrain.height_at(u.pos))
+        if u.type != "soldier":
+            visual.set_position_2d(u.pos, host.sim.terrain.height_at(u.pos))
         visual.set_flash(u.flash > 0)
         visual.set_heading(_unit_heading(u, id), u.type == "soldier" and not _has_combat_target(u))
         visual.set_animation(_unit_animation_state(u))
+        if u.type == "soldier" and (delta > 0.0 or not visual.soldier_motion.initialized
+                or u.pos != visual.soldier_motion.current):
+            var guest: bool = host.connected and not host.is_host
+            var velocity: Vector2 = host.render_velocities.get(id, Vector2.ZERO)
+            if u.order == "idle" or visual.animation_state == "attack":
+                velocity = Vector2.ZERO
+            var aim := _unit_destination(u) - (u.pos as Vector2) if _has_combat_target(u) else Vector2.ZERO
+            visual.soldier_motion.sample(u.pos, delta, host.sim.frame, host.accumulator * Simulation.TICK,
+                host.sim.terrain, guest, velocity, aim)
+            visual.set_soldier_shadow_distance(host.camera.global_position)
         var unit_selected: bool = host.selected_units.has(id)
         var unit_radius := _selection_ring_radius(u.type, float(Simulation.UNIT_TYPES[u.type].radius))
         visual.set_selected(unit_selected and visual.visible, unit_radius)
         if visual.selection_ring != null:
-            visual.selection_ring.global_rotation = _surface_rotation(u.pos)
+            visual.selection_ring.global_rotation = _surface_rotation(Vector2(visual.position.x, visual.position.z))
         health_grid_overlay.upsert_entity(
             "unit_%d" % id,
             visual.global_position + Vector3(0, visual.get_model_height() + 12, 0),
@@ -355,7 +366,7 @@ func _soldier_heading(u: Dictionary, id: int, vis: Dictionary) -> Vector2:
     vis.last_position = position
     var forward: Vector3 = vis.visual.get_visual_forward()
     var heading: Vector2 = vis.get("last_heading", Vector2(forward.x, forward.z))
-    if _has_combat_target(u):
+    if _has_combat_target(u) and _unit_in_attack_range(u):
         var aim := _unit_destination(u) - position
         if aim.length_squared() > 1.0:
             heading = aim.normalized()

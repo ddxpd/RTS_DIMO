@@ -1,6 +1,7 @@
 extends RefCounted
 # The host is the only writer. Clients display snapshots; they never simulate damage.
-const VERSION := "rts-terrain-3"
+const VERSION := "rts-terrain-4"
+const ArrivalPlanner = preload("res://scripts/arrival_planner.gd")
 const MapTerrain = preload("res://scripts/maps/map_terrain.gd")
 const EYE_HEIGHTS := {"soldier": 40.0, "harvester": 32.0, "base": 80.0, "barracks": 40.0, "refinery": 56.0, "bunker": 48.0}
 const TICK := 20
@@ -37,6 +38,7 @@ var obstacles: Array[Rect2] = []
 var visible: Dictionary = {}
 var explored: Dictionary = {}
 var nav := AStarGrid2D.new()
+var arrival_nav_regions := PackedInt32Array()
 var last_snapshot_error := ""
 var terrain := MapTerrain.new()
 var map_id := "prototype"
@@ -286,6 +288,18 @@ func command(owner: int, c: Dictionary) -> String:
             return "Invalid enemy"
     if action == "gather" and not ores.has(int(c.get("target", -1))):
         return "Invalid ore field"
+    var allocation := {}
+    if action in ["move", "attack_move"]:
+        var ids: Array = []
+        for value: Variant in requested:
+            if (value is int or value is float) and units.has(int(value)) and units[int(value)].owner == owner and not ids.has(int(value)):
+                ids.append(int(value))
+        if ids.is_empty():
+            return "No compatible friendly units selected"
+        ids.sort()
+        allocation = ArrivalPlanner.plan(self, ids, (c.pos as Vector2).clamp(Vector2(18, 18), WORLD - Vector2(18, 18)))
+        if allocation.has("error"):
+            return allocation.error
     var accepted := 0
     for value: Variant in requested:
         if not (value is int or value is float):
@@ -304,30 +318,22 @@ func command(owner: int, c: Dictionary) -> String:
         u.attack_kind = ""
         u.attack_id   = -1
         u.stuck       = 0
+        u.erase("arrival")
         # Miners auto-seek the nearest visible ore unless explicitly stopped.
         u.auto = action != "stop"
-        if action == "move":
-            var index := accepted
-            var offset := Vector2((index % 4) * 30, (index / 4) * 30) if requested.size() > 1 else Vector2.ZERO
-            var destination: Vector2 = (c.pos + offset).clamp(Vector2(18, 18), WORLD - Vector2(18, 18))
-            # Formation offsets can land on terrain; slide them toward the
-            # clicked point until the destination is actually reachable.
-            for i in range(24):
-                if position_free(destination, UNIT_TYPES[u.type].radius):
-                    break
-                destination = destination.move_toward(u.pos, 8.0)
-            u.target = destination
+        if action in ["move", "attack_move"]:
+            u.target = allocation.orders[id].target
+            u.arrival = allocation.orders[id].arrival
         elif action == "attack":
             u.attack_kind = str(c.kind)
             u.attack_id = int(c.target)
-        elif action == "attack_move":
-            u.target = (c.pos as Vector2).clamp(Vector2(18, 18), WORLD - Vector2(18, 18))
         elif action == "gather":
             u.ore = int(c.target)
         accepted += 1
     return "" if accepted > 0 else "No compatible friendly units selected"
 
 func rebuild_navigation() -> void:
+    arrival_nav_regions.clear()
     nav.region        = Rect2i(0, 0, int(WORLD.x / CELL), int(WORLD.y / CELL))
     nav.cell_size     = Vector2(CELL, CELL)
     nav.offset        = Vector2(CELL / 2, CELL / 2)
@@ -371,12 +377,20 @@ func nearest_cell(pos: Vector2) -> Vector2i:
     return base
 
 func move_towards(u: Dictionary, destination: Vector2, stop_distance: float = 4.0) -> void:
+    if u.has("arrival") and destination == u.target:
+        stop_distance = .1
     if (u.pos as Vector2).distance_to(destination) <= stop_distance:
         return
     u.repath = int(u.repath) - 1
     if u.path.is_empty() or u.repath <= 0:
         var start := nearest_cell(u.pos)
         var goal := nearest_cell(destination)
+        if u.has("arrival") and destination == u.target:
+            start = ArrivalPlanner.goal_cell(self, u.pos, terrain.arrival_region_at(u.pos), UNIT_TYPES[u.type].radius)
+            goal = ArrivalPlanner.goal_cell(self, destination, int(u.arrival.region), UNIT_TYPES[u.type].radius)
+            if start.x < 0 or goal.x < 0:
+                u.arrival.waiting = true
+                return
         u.path = Array(nav.get_point_path(start, goal))
         if not u.path.is_empty():
             u.path.pop_front()
@@ -389,11 +403,21 @@ func move_towards(u: Dictionary, destination: Vector2, stop_distance: float = 4.
         # freezing one cell short forever.
         if (u.pos as Vector2).distance_to(destination) > stop_distance and position_free(destination, UNIT_TYPES[u.type].radius):
             var direct: Vector2 = (u.pos as Vector2).move_toward(destination, UNIT_TYPES[u.type].speed / TICK)
+            if ArrivalPlanner.reserved_for_other(self, u, direct):
+                return
+            if u.has("arrival") and _unit_blocks(u, direct):
+                _arrival_sidestep(u, destination)
+                return
             if movement_free(u.pos, direct, UNIT_TYPES[u.type].radius):
                 u.pos = direct
         return
     var waypoint: Vector2 = u.path[0]
     var next: Vector2 = (u.pos as Vector2).move_toward(waypoint, UNIT_TYPES[u.type].speed / TICK)
+    if ArrivalPlanner.reserved_for_other(self, u, next):
+        return
+    if u.has("arrival") and _unit_blocks(u, next):
+        _arrival_sidestep(u, waypoint)
+        return
     if _unit_blocks(u, next) and movement_free(u.pos, next, UNIT_TYPES[u.type].radius):
         # Oncoming traffic: steer to our right so opposing flows form lanes.
         var heading: Vector2 = (waypoint - (u.pos as Vector2)).normalized()
@@ -426,6 +450,18 @@ func move_towards(u: Dictionary, destination: Vector2, stop_distance: float = 4.
             u.path.pop_front()
     if next.distance_to(waypoint) < maxf(2.0, UNIT_TYPES[u.type].radius * 0.4) and not u.path.is_empty():
         u.path.pop_front()
+
+func _arrival_sidestep(u: Dictionary, destination: Vector2) -> void:
+    if u.arrival.waiting and int(u.attack_id) < 0:
+        return
+    var heading: Vector2 = (destination - (u.pos as Vector2)).normalized()
+    var length: float = UNIT_TYPES[u.type].speed / TICK
+    for angle: float in [PI / 4, -PI / 4, PI / 2, -PI / 2]:
+        var candidate: Vector2 = u.pos + heading.rotated(angle) * length
+        if not _unit_blocks(u, candidate) and movement_free(u.pos, candidate, UNIT_TYPES[u.type].radius):
+            u.pos = candidate
+            return
+
 
 func _closest_enemy(u: Dictionary) -> Array:
     var result: Array = []
@@ -529,6 +565,7 @@ func step() -> void:
     if winner != 0:
         return
     frame += 1
+    ArrivalPlanner.refresh(self)
     for e: Dictionary in effects:
         e.life -= 1
     effects = effects.filter(func(e: Dictionary) -> bool: return e.life > 0)
@@ -575,8 +612,10 @@ func step() -> void:
         var pos_before: Vector2 = u.pos
         if u.order == "move":
             move_towards(u, u.target)
-            if (u.pos as Vector2).distance_to(u.target) < 5:
+            if (u.pos as Vector2).distance_to(u.target) < (.2 if u.has("arrival") else 5.0) and (not u.has("arrival") or not u.arrival.waiting):
                 u.order = "idle"
+                if u.has("arrival"):
+                    u.arrival.arrived = true
         elif u.order == "attack_move":
             if int(u.attack_id) >= 0:
                 _fight(u, "attack_move")
@@ -587,8 +626,10 @@ func step() -> void:
                     u.attack_id   = nearby[1]
                 else:
                     move_towards(u, u.target)
-                    if (u.pos as Vector2).distance_to(u.target) < 5:
+                    if (u.pos as Vector2).distance_to(u.target) < (.2 if u.has("arrival") else 5.0) and (not u.has("arrival") or not u.arrival.waiting):
                         u.order = "idle"
+                        if u.has("arrival"):
+                            u.arrival.arrived = true
         elif u.order == "gather":
             _gather(u)
         elif u.order == "attack":
@@ -605,7 +646,7 @@ func step() -> void:
         # Escape hatch: a unit pressed into a corner by its group can stall
         # forever; after ~2s without progress shove it to a nearby free spot.
         if u.order in ["move", "attack_move", "gather"]:
-            if u.order == "attack_move" and int(u.attack_id) >= 0:
+            if (u.has("arrival") and u.arrival.waiting) or (u.order == "attack_move" and int(u.attack_id) >= 0):
                 u.stuck = 0
             else:
                 if (u.pos as Vector2).distance_to(pos_before) < 0.005:
@@ -674,7 +715,7 @@ func _unstick(u: Dictionary) -> void:
     for ring in range(1, 5):
         for i in range(8):
             var candidate: Vector2 = (u.pos as Vector2) + Vector2.from_angle(TAU * i / 8.0) * ring * 12.0
-            if movement_free(u.pos, candidate, radius):
+            if ArrivalPlanner.displace_free(self, u, candidate):
                 u.pos = candidate
                 u.path = []
                 u.repath = 0
@@ -738,9 +779,9 @@ func _separate_pair(a: Dictionary, b: Dictionary) -> void:
     var slide := amount * 0.6
     var pa: Vector2 = a.pos - normal * amount + tangent * slide
     var pb: Vector2 = b.pos + normal * amount + tangent * slide
-    if movement_free(a.pos, pa, UNIT_TYPES[a.type].radius):
+    if ArrivalPlanner.displace_free(self, a, pa):
         a.pos = pa
-    if movement_free(b.pos, pb, UNIT_TYPES[b.type].radius):
+    if ArrivalPlanner.displace_free(self, b, pb):
         b.pos = pb
 
 
@@ -974,6 +1015,19 @@ func _validate_unit_entry(value: Variant) -> bool:
     if typeof(unit.stuck) != TYPE_INT or int(unit.stuck) < 0 or int(unit.stuck) > 10000:
         last_snapshot_error = "Snapshot unit stuck timer is invalid."
         return false
+    if unit.has("arrival"):
+        var arrival: Variant = unit.arrival
+        if not arrival is Dictionary or arrival.size() != 4:
+            last_snapshot_error = "Snapshot arrival intent is invalid."
+            return false
+        if not _validate_vector2(arrival.get("anchor"), WORLD, "arrival anchor"):
+            return false
+        if typeof(arrival.get("region")) != TYPE_INT or arrival.region < 0 or arrival.region >= GRID_CELLS:
+            last_snapshot_error = "Snapshot arrival region is invalid."
+            return false
+        if typeof(arrival.get("waiting")) != TYPE_BOOL or typeof(arrival.get("arrived")) != TYPE_BOOL or (arrival.waiting and arrival.arrived):
+            last_snapshot_error = "Snapshot arrival status is invalid."
+            return false
     return true
 
 

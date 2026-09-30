@@ -59,6 +59,14 @@ func run() -> void:
     var sync_visuals_ms := measure(func(): game._sync_visuals(), 20)
     var refresh_ui_ms := measure(func(): game._refresh_ui(), 50)
     var simulation_ms := measure(func(): game.sim.step(), 20)
+    var animated_sync_ms := measure(func():
+        for u: Dictionary in game.sim.units.values():
+            if u.type == "soldier":
+                u.pos += Vector2(1.0, 0.0)
+        game.sim.frame += 1
+        game.accumulator = 0.025
+        game._sync_visuals(1.0 / 60.0), 60)
+    check(animated_sync_ms < 8.0, "180 units including moving skeletons stay below 8ms")
     check(game.unit_visuals.size() == game.sim.units.size(), "Every stress-test unit has a visual")
     check(mesh_count <= 2800, "180-unit stress test keeps optimized mesh count below 2800")
     check(sync_visuals_ms < 8.0, "Visual sync stays below 8ms for 180 units")
@@ -74,7 +82,8 @@ func run() -> void:
         "sync_units_ms": sync_units_ms,
         "sync_visuals_ms": sync_visuals_ms,
         "refresh_ui_ms": refresh_ui_ms,
-        "simulation_ms": simulation_ms
+        "simulation_ms": simulation_ms,
+        "animated_sync_ms": animated_sync_ms
     }
     print("VISUAL_PERFORMANCE_TEST ", JSON.stringify(result), " failures=", failures)
     quit(0 if failures.is_empty() else 1)

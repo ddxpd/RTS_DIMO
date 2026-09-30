@@ -40,7 +40,9 @@ var _target_heading := 0.0
 var _model_scale := 1.0
 var _materials: Array[Dictionary] = []
 var _faction_applied := false
-var _soldier_animation_defaults: Dictionary = {}
+var soldier_motion: RefCounted
+var _soldier_shadow_meshes: Array[MeshInstance3D] = []
+var _soldier_shadows := false
 var _bunker_construction_defaults: Dictionary = {}
 var _base_construction_defaults: Dictionary = {}
 var _base_light_materials: Array[Dictionary] = []
@@ -72,12 +74,13 @@ func _ready() -> void:
     model = MODEL_SCENES[kind].instantiate()
     add_child(model)
     model.scale = Vector3.ONE * _model_scale
-    _capture_soldier_animation_defaults()
     _capture_bunker_construction_defaults()
     _capture_base_construction_defaults()
     _instance_materials()
     _apply_lod_and_shadow_policy()
     _create_animation_player()
+    if kind == "soldier":
+        soldier_motion = preload("res://assets/art/soldier_motion.gd").new(self)
     set_faction(owner_id)
     set_animation("idle")
     _apply_selection_ring_state()
@@ -114,8 +117,9 @@ func _forward_z() -> float:
 func set_animation(next_state: String) -> void:
     if animation_state == next_state:
         return
-    if kind == "soldier" and not animation_state.is_empty():
-        _reset_soldier_animation_state()
+    if kind == "soldier":
+        animation_state = next_state
+        return
     # Construction scales the model inner root. Reset it when leaving that
     # state so a stopped loop cannot leave a completed building double-scaled.
     if animation_state == "construction":
@@ -141,6 +145,15 @@ func set_flash(enabled: bool) -> void:
         return
     flash_enabled = enabled
     _refresh_material_tint()
+
+
+func set_soldier_shadow_distance(camera_position: Vector3) -> void:
+    var enabled := global_position.distance_squared_to(camera_position) < 600.0 * 600.0
+    if enabled == _soldier_shadows:
+        return
+    _soldier_shadows = enabled
+    for mesh in _soldier_shadow_meshes:
+        mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if enabled else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 func set_construction_tint(enabled: bool) -> void:
@@ -263,6 +276,7 @@ func _apply_lod_and_shadow_policy() -> void:
     var unit_core: Dictionary = {}
     if kind == "soldier":
         unit_core = {
+            "HeavySoldierMesh": true,
             "ArmorCoreMesh": true,
             "HelmetMesh": true,
             "Shoulder_L_Mesh": true,
@@ -281,7 +295,9 @@ func _apply_lod_and_shadow_policy() -> void:
     for mesh_instance: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
         if is_unit:
             mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-            if not unit_core.has(mesh_instance.name):
+            if kind == "soldier":
+                _soldier_shadow_meshes.append(mesh_instance)
+            if not unit_core.has(mesh_instance.name) and mesh_instance.skin == null:
                 mesh_instance.visibility_range_end = 1400.0
         elif mesh_instance.name in ["FactionGlow", "FactionSensor", "FactionBeacon", "FactionLight"]:
             mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -339,48 +355,9 @@ func _create_animation_player() -> void:
     if not _shared_animation_libraries.has(kind):
         _shared_animation_libraries[kind] = _build_animation_library()
     animation_player.add_animation_library("", _shared_animation_libraries[kind])
-    animation_player.active = kind != "rock"
+    animation_player.active = kind not in ["rock", "soldier"]
 
 
-func _capture_soldier_animation_defaults() -> void:
-    if kind != "soldier":
-        return
-    for node_name: String in [
-        "soldier/ArmorCore",
-        "soldier/Helmet",
-        "soldier/Arm_L",
-        "soldier/Arm_R",
-        "soldier/Hips",
-        "soldier/Leg_L",
-        "soldier/Leg_R",
-        "soldier/Weapon",
-        "soldier/Muzzle"
-    ]:
-        var node := model.get_node_or_null(NodePath(node_name))
-        if node == null:
-            continue
-        _soldier_animation_defaults[node_name] = {
-            "position": node.position,
-            "rotation": node.rotation,
-            "scale": node.scale
-        }
-
-
-func _soldier_default_transform(node_name: String, property: String, fallback: Vector3) -> Vector3:
-    var entry: Dictionary = _soldier_animation_defaults.get(node_name, {})
-    var value = entry.get(property, fallback)
-    return value if value is Vector3 else fallback
-
-
-func _reset_soldier_animation_state() -> void:
-    for node_name: String in _soldier_animation_defaults:
-        var node := model.get_node_or_null(NodePath(node_name))
-        var defaults: Dictionary = _soldier_animation_defaults[node_name]
-        if node == null:
-            continue
-        node.position = defaults.get("position", Vector3.ZERO)
-        node.rotation = defaults.get("rotation", Vector3.ZERO)
-        node.scale = defaults.get("scale", Vector3.ONE)
 
 
 func _capture_bunker_construction_defaults() -> void:
@@ -424,9 +401,9 @@ func _build_animation_library() -> AnimationLibrary:
     var library := AnimationLibrary.new()
     match kind:
         "soldier":
-            library.add_animation("idle", _soldier_idle())
-            library.add_animation("move", _soldier_move())
-            library.add_animation("attack", _soldier_attack())
+            # State names remain compatible; the distance-driven rig owns poses.
+            for state: String in ["idle", "move", "attack"]:
+                library.add_animation(state, _make_animation(1.0))
         "harvester":
             library.add_animation("idle", _harvester_idle())
             library.add_animation("move", _harvester_move())
@@ -470,35 +447,6 @@ func _add_value_track(animation: Animation, node_name: String, property: String,
         animation.track_insert_key(track, time, values[index])
 
 
-func _soldier_idle() -> Animation:
-    var animation := _make_animation(2.4)
-    var armor_position := _soldier_default_transform("soldier/ArmorCore", "position", Vector3.ZERO)
-    var helmet_rotation := _soldier_default_transform("soldier/Helmet", "rotation", Vector3.ZERO)
-    _add_value_track(animation, "soldier/ArmorCore", "position", [armor_position, armor_position + Vector3(0, 0.018, 0), armor_position])
-    _add_value_track(animation, "soldier/Helmet", "rotation", [helmet_rotation, helmet_rotation + Vector3(0, 0.12, 0), helmet_rotation])
-    return animation
-
-
-func _soldier_move() -> Animation:
-    var animation := _make_animation(0.8)
-    _add_value_track(animation, "soldier/Leg_L", "rotation", [Vector3(0.42, 0, 0), Vector3(-0.42, 0, 0), Vector3(0.42, 0, 0)])
-    _add_value_track(animation, "soldier/Leg_R", "rotation", [Vector3(-0.42, 0, 0), Vector3(0.42, 0, 0), Vector3(-0.42, 0, 0)])
-    _add_value_track(animation, "soldier/Arm_L", "rotation", [Vector3(-0.30, 0, 0), Vector3(0.30, 0, 0), Vector3(-0.30, 0, 0)])
-    _add_value_track(animation, "soldier/Arm_R", "rotation", [Vector3(0.30, 0, 0), Vector3(-0.30, 0, 0), Vector3(0.30, 0, 0)])
-    _add_value_track(animation, "soldier/Hips", "position", [Vector3(0, 1.10, 0), Vector3(0, 1.15, 0), Vector3(0, 1.10, 0)])
-    return animation
-
-
-func _soldier_attack() -> Animation:
-    var animation := _make_animation(0.45)
-    var weapon_position := _soldier_default_transform("soldier/Weapon", "position", Vector3.ZERO)
-    var muzzle_position := _soldier_default_transform("soldier/Muzzle", "position", Vector3(0, 0, 1))
-    var right_arm_rotation := _soldier_default_transform("soldier/Arm_R", "rotation", Vector3.ZERO)
-    # The visible soldier front and corrected weapon both use local +Z.
-    _add_value_track(animation, "soldier/Weapon", "position", [weapon_position, weapon_position + Vector3(0, 0, -0.14), weapon_position])
-    _add_value_track(animation, "soldier/Muzzle", "position", [muzzle_position, muzzle_position + Vector3(0, 0, -0.14), muzzle_position])
-    _add_value_track(animation, "soldier/Arm_R", "rotation", [right_arm_rotation + Vector3(-0.16, 0, 0), right_arm_rotation + Vector3(0.10, 0, 0), right_arm_rotation + Vector3(-0.16, 0, 0)])
-    return animation
 
 
 func _harvester_idle() -> Animation:
