@@ -20,6 +20,11 @@ func run() -> void:
     var s := Sim.new()
     s.reset()
     check(s.units.size() == 12 and s.buildings.size() == 2, "Starting armies / bases")
+    check(s.footprint(s.buildings[1]).size == Vector2(160, 160), "Command base occupies 5x5 cells")
+    check(not s.position_free(Vector2(454, 384), 0), "New outer base area blocks movement")
+    check(s.position_free(Vector2(480, 384), 0), "Ground beyond the enlarged base stays passable")
+    check(s.build_error(1, "base", Vector2(544, 384)) == "Buildings need more space", "Enlarged base rejects too-close placement")
+    check(s.build_error(1, "base", Vector2(160, 384)).is_empty(), "Enlarged base accepts separated placement")
     check(s.command(0, {"action": "move", "units": [3], "pos": Vector2(400, 300)}) != "", "Spectator rejected")
     check(s.command(2, {"action": "move", "units": [3], "pos": Vector2(400, 300)}) != "", "Enemy control rejected")
     check(s.command(1, {"action": "move", "units": [3], "pos": Vector2(NAN, 1)}) != "", "Non-finite position rejected")
@@ -38,12 +43,12 @@ func run() -> void:
     advance(red, 900)
     check(red.money[2] > 6000, "Red harvester delivers credits")
     var before: int = s.money[1]
-    check(s.command(1, {"action": "build", "type": "barracks", "pos": Vector2(704, 320)}) == "", "Barracks placement succeeds")
+    check(s.command(1, {"action": "build", "type": "barracks", "pos": Vector2(480, 160)}) == "", "Barracks placement succeeds")
     var barracks: int = s.next_id - 1
     check(s.money[1] == before - 250, "Construction costs deducted")
     check(s.buildings[barracks].remaining > 0, "Construction is timed")
     check(s.command(1, {"action": "produce", "building": barracks, "type": "soldier"}) != "", "Incomplete building cannot produce")
-    check(s.command(1, {"action": "build", "type": "barracks", "pos": Vector2(704, 320)}) != "", "Overlapping building rejected")
+    check(s.command(1, {"action": "build", "type": "barracks", "pos": Vector2(480, 160)}) != "", "Overlapping building rejected")
     check(s.command(1, {"action": "build", "type": "barracks", "pos": Vector2(2400, 400)}) != "", "Terrain or remote construction rejected")
     s.command(1, {"action": "stop", "units": [5]})
     advance(s, 80)
@@ -68,13 +73,13 @@ func run() -> void:
     for i in range(5):
         s.command(1, {"action": "produce", "building": barracks, "type": "soldier"})
     check(s.command(1, {"action": "produce", "building": barracks, "type": "soldier"}) != "", "Queue limit enforced")
-    check(not s.position_free(Vector2(704, 320), 11), "Building footprint blocks movement")
+    check(not s.position_free(Vector2(480, 160), 11), "Building footprint blocks movement")
     # Destruction refunds queued jobs and frees its navigation footprint.
     s.buildings[barracks].hp = 0
     var refund_start: int = s.money[1]
     s.step()
     check(not s.buildings.has(barracks) and s.money[1] == refund_start + 500, "Destroyed factory clears and refunds production queue")
-    check(s.position_free(Vector2(704, 320), 11), "Destroyed building releases footprint")
+    check(s.position_free(Vector2(480, 160), 11), "Destroyed building releases footprint")
     # Navigation must route around the middle terrain obstacle.
     s.reset()
     s.units[3].pos = Vector2(1900, 400)
@@ -102,11 +107,14 @@ func run() -> void:
     s.command(1, {"action": "move", "units": [east], "pos": Vector2(1000, 1900)})
     var west_arrived := false
     var east_arrived := false
+    # Compact assignment avoids the other miner's occupied destination.
+    var west_destination: Vector2 = s.units[west].target
+    var east_destination: Vector2 = s.units[east].target
     for i in range(400):
         s.step()
-        if (s.units[west].pos as Vector2).distance_to(Vector2(1400, 1900)) < 25:
+        if (s.units[west].pos as Vector2).distance_to(west_destination) < 5 and s.units[west].pos.x > 1300:
             west_arrived = true
-        if (s.units[east].pos as Vector2).distance_to(Vector2(1000, 1900)) < 25:
+        if (s.units[east].pos as Vector2).distance_to(east_destination) < 5 and s.units[east].pos.x < 1100:
             east_arrived = true
         if west_arrived and east_arrived:
             break
@@ -192,16 +200,54 @@ func run() -> void:
     advance(s, 2)
     check(s.units[4].hp < 100, "Force attack damages selected friendly target")
     s.reset()
-    s.units[3].pos   = Vector2(1000, 400)
-    s.units[4].pos   = Vector2(800, 400)
-    s.units[4].owner = 2
-    check(s.command(1, {"action": "attack_move", "units": [3], "pos": Vector2(600, 160)}) == "", "Attack-move order accepted")
-    advance(s, 80)
-    check((not s.units.has(4) or s.units[4].hp < 100) and s.units[3].pos.x > 600, "Attack-move stops and engages encountered enemy")
+    s.units.clear()
+    var attack_move_destination := Vector2(500, 400)
+    var attack_mover: int = s.add_unit(1, "soldier", Vector2(1000, 400))
+    var first_enemy: int  = s.add_unit(2, "soldier", Vector2(850, 400))
+    var second_enemy: int = s.add_unit(2, "soldier", Vector2(650, 400))
+    s.units[first_enemy].hp  = 16
+    s.units[second_enemy].hp = 16
+    check(s.command(1, {"action": "attack_move", "units": [attack_mover], "pos": attack_move_destination}) == "", "Attack-move order accepted")
+    var attack_move_targets: Dictionary = {}
+    for i in range(200):
+        s.step()
+        if s.units.has(attack_mover) and int(s.units[attack_mover].attack_id) in [first_enemy, second_enemy]:
+            attack_move_targets[int(s.units[attack_mover].attack_id)] = true
+        if not s.units.has(first_enemy) and not s.units.has(second_enemy) and s.units[attack_mover].order == "idle":
+            break
+    check(attack_move_targets.has(first_enemy) and attack_move_targets.has(second_enemy), "Attack-move engages consecutive encountered enemies")
+    check(not s.units.has(first_enemy) and not s.units.has(second_enemy), "Attack-move destroys encountered enemies")
+    check(s.units[attack_mover].order == "idle" and (s.units[attack_mover].pos as Vector2).distance_to(attack_move_destination) < 5, "Attack-move resumes and reaches its original destination")
     var mirror := Sim.new()
     mirror.reset()
     mirror.apply_snapshot(s.snapshot())
     check(mirror.snapshot() == s.snapshot(), "Snapshot carries combat, economy, buildings, effects, result")
+    var snapshot_source := Sim.new()
+    snapshot_source.reset()
+    var valid_snapshot: Dictionary = snapshot_source.snapshot()
+    check(snapshot_source.validate_snapshot(valid_snapshot), "Authoritative snapshot passes schema validation")
+    var snapshot_target := Sim.new()
+    snapshot_target.reset()
+    var target_before: Dictionary = snapshot_target.snapshot()
+    var missing_units: Dictionary = valid_snapshot.duplicate(true)
+    missing_units.erase("units")
+    check(not snapshot_target.apply_snapshot(missing_units) and snapshot_target.snapshot() == target_before, "Missing snapshot tables are rejected without mutation")
+    var wrong_unit_type: Dictionary = valid_snapshot.duplicate(true)
+    wrong_unit_type.units[3].owner = "1"
+    check(not snapshot_target.apply_snapshot(wrong_unit_type) and snapshot_target.last_snapshot_error != "", "Snapshot numeric coercion is rejected")
+    var out_of_bounds: Dictionary = valid_snapshot.duplicate(true)
+    out_of_bounds.units[3].pos = Vector2(99999, 10)
+    check(not snapshot_target.apply_snapshot(out_of_bounds), "Out-of-bounds entity positions are rejected")
+    var malformed_effect: Dictionary = valid_snapshot.duplicate(true)
+    malformed_effect.effects = [{"kind": "shot", "from": Vector2.ZERO, "to": Vector2.ONE}]
+    check(not snapshot_target.apply_snapshot(malformed_effect), "Incomplete effect records are rejected")
+    var missing_visibility_owner: Dictionary = valid_snapshot.duplicate(true)
+    missing_visibility_owner.visible.erase(2)
+    check(not snapshot_target.apply_snapshot(missing_visibility_owner), "Incomplete visibility buffers are rejected")
+    var oversized_units: Dictionary = valid_snapshot.duplicate(true)
+    for id in range(10000, 14097):
+        oversized_units.units[id] = valid_snapshot.units[3].duplicate(true)
+    check(not snapshot_target.apply_snapshot(oversized_units), "Oversized snapshot tables are rejected")
     s.reset(true)
     check(s.can_see(1, Vector2(384, 384)) and not s.can_see(1, Vector2(4416, 2816)), "Fog starts around own army only")
     s.units[3].pos = Vector2(1000, 700)

@@ -1,10 +1,29 @@
-extends Node2D
+extends Node3D
 const Simulation = preload("res://scripts/simulation.gd")
 const Art = preload("res://assets/art/pixel_art.gd")
 const CameraController = preload("res://scripts/camera_controller.gd")
+const WorldVisualSync = preload("res://scripts/world_visual_sync.gd")
+const GameSession = preload("res://scripts/runtime/game_session.gd")
+const CommandBus = preload("res://scripts/runtime/command_bus.gd")
+const AudioController = preload("res://scripts/audio/audio_controller.gd")
+const InputController = preload("res://scripts/controllers/input_controller.gd")
+const NetworkSession = preload("res://scripts/runtime/network_session.gd")
+const HudController = preload("res://scripts/ui/hud_controller.gd")
+const CursorController = preload("res://scripts/ui/cursor_controller.gd")
+const MapCatalog = preload("res://scripts/maps/map_catalog.gd")
+const TerrainView = preload("res://scripts/maps/terrain_view.gd")
+const SampleView = preload("res://scripts/maps/sample_view.gd")
 const PORT := 24560
 const MAX_CLIENTS := 4
 var sim := Simulation.new()
+var deploy_building := -1
+var session: GameSession
+var command_bus: CommandBus
+var audio_controller: AudioController
+var input_controller: InputController
+var network_session: NetworkSession
+var hud_controller: HudController
+var cursor_controller: CursorController
 var peer: ENetMultiplayerPeer
 var is_host := false
 var connected := false
@@ -38,9 +57,22 @@ var selection_current := Vector2.ZERO
 var middle_dragging := false
 var build_mode := ""
 var menu_visible := true
-var camera: Camera2D
+var camera: Camera3D
+var camera_zoom_level := 1.0
 var camera_controller: CameraController
-var tiles: TileMapLayer
+var selected_map_id := "desert_quarry"
+var terrain_view: TerrainView
+var rendered_map_id := ""
+var rendered_match_id := -1
+var sample_host_button: Button
+var solo_button: Button
+var map_selector: OptionButton
+var map_description: Label
+var map_preview: TextureRect
+var terrain_chunks: Array[MeshInstance3D] = []
+var fog_plane: MeshInstance3D
+var fog_texture: ImageTexture
+var fog_image: Image
 var hud: CanvasLayer
 var top_label: Label
 var resource_label: Label
@@ -57,8 +89,8 @@ var menu_buttons: VBoxContainer
 var resume_button: Button
 var address: LineEdit
 var build_buttons: Array[Button] = []
-var sprites: Dictionary = {}
 var clicks: Array = []
+var next_click_id := 0
 var feedback := ""
 var feedback_time := 0.0
 var audio_player: AudioStreamPlayer
@@ -77,9 +109,10 @@ var last_click_time := 0.0
 var last_click_unit := -1
 var production_bar: ProgressBar
 var production_queue_label: Label
-var camera_speed_multiplier := 1.4
+var camera_speed_multiplier := 1.8
 var camera_speed_slider: HSlider
 var camera_speed_value_label: Label
+var visual_sync: WorldVisualSync
 
 # Scene bootstrap: create the simulation, world tiles, camera, HUD, and audio.
 # Remove and free all children immediately so refreshes can rebuild inline.
@@ -127,41 +160,191 @@ func _add_bottom_zone(row: HBoxContainer, key: String, min_size: Vector2, captio
     bottom_zones[key] = zone
     return zone
 
+# Bake the procedural tile pattern into four ground planes (Don't Starve stage).
+func _create_terrain() -> void:
+    if terrain_view != null:
+        terrain_view.free()
+        terrain_view = null
+    for chunk in terrain_chunks:
+        if is_instance_valid(chunk):
+            chunk.free()
+    terrain_chunks.clear()
+    rendered_map_id = sim.map_id
+    if sim.map_id in ["desert_quarry", "desert_sample"]:
+        terrain_view = SampleView.new() if sim.is_test_map() else TerrainView.new()
+        add_child(terrain_view)
+        terrain_view.build(sim.terrain, fog_texture)
+        return
+    # Single continuous ground plane: no seams, no floating patches.
+    var tex := ImageTexture.create_from_image(Art.terrain_image())
+    var mesh := PlaneMesh.new()
+    mesh.size = Simulation.WORLD
+    var surface := StandardMaterial3D.new()
+    surface.albedo_texture = tex
+    surface.albedo_color = Color("#425238")
+    surface.roughness = 0.88
+    surface.metallic = 0.0
+    surface.cull_mode = BaseMaterial3D.CULL_DISABLED
+    # Repeat the 48x16 tileset across the whole 4800x3200 world.
+    surface.texture_repeat = true
+    surface.uv1_scale = Vector3(Simulation.WORLD.x / 144.0, Simulation.WORLD.y / 16.0, 1.0)
+    var mi := MeshInstance3D.new()
+    mi.mesh = mesh
+    mi.material_override = surface
+    mi.position = Vector3(Simulation.WORLD.x / 2.0, 0, Simulation.WORLD.y / 2.0)
+    add_child(mi)
+    terrain_chunks.append(mi)
+
+# Clear battlefield lighting makes the mechanical models readable from above.
+func _create_lighting() -> void:
+    var sun := DirectionalLight3D.new()
+    sun.name = "BattlefieldSun"
+    sun.rotation_degrees = Vector3(-55, -32, 0)
+    sun.light_color = Color("#fff1d6")
+    sun.light_energy = 1.12
+    sun.shadow_enabled = true
+    sun.directional_shadow_max_distance = 1600.0
+    add_child(sun)
+
+    var environment := Environment.new()
+    environment.background_mode = Environment.BG_COLOR
+    environment.background_color = Color("#203028")
+    environment.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+    environment.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+    var sky := Sky.new()
+    var sky_material := ProceduralSkyMaterial.new()
+    sky_material.sky_top_color = Color("#708da5")
+    sky_material.sky_horizon_color = Color("#c3b7a5")
+    sky_material.ground_bottom_color = Color("#514a3e")
+    sky_material.ground_horizon_color = Color("#a99b7b")
+    sky.sky_material = sky_material
+    environment.sky = sky
+    environment.ambient_light_color = Color("#9fb6a6")
+    environment.ambient_light_energy = 0.72
+    environment.glow_enabled = true
+    environment.glow_intensity = 0.35
+    var world_environment := WorldEnvironment.new()
+    world_environment.name = "BattlefieldEnvironment"
+    world_environment.environment = environment
+    add_child(world_environment)
+
+
+# One low-res alpha texture covers the whole map fog (nearest-filtered).
+func _create_fog() -> void:
+    fog_image = Image.create(Simulation.GRID.x, Simulation.GRID.y, false, Image.FORMAT_RGBA8)
+    fog_texture = ImageTexture.create_from_image(fog_image)
+
+    var mesh := PlaneMesh.new()
+    mesh.size = Simulation.WORLD
+    var surface := StandardMaterial3D.new()
+    surface.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    surface.albedo_texture = fog_texture
+    surface.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    fog_plane = MeshInstance3D.new()
+    fog_plane.mesh = mesh
+    fog_plane.material_override = surface
+    fog_plane.position = Vector3(Simulation.WORLD.x / 2.0, 1.0, Simulation.WORLD.y / 2.0)
+    add_child(fog_plane)
+
+# Fixed-pitch perspective camera looking at the focus point on the ground.
+func _update_camera_transform() -> void:
+    if camera_controller != null:
+        camera_controller.focus = camera_controller.focus.clamp(Vector2.ZERO, Simulation.WORLD)
+        if sim.is_test_map():
+            var area: Rect2 = sim.terrain.definition.sample_bounds
+            camera_controller.focus = camera_controller.focus.clamp(area.position + Vector2(128, 128), area.end - Vector2(128, 128))
+    var focus3 := Vector3(camera_controller.focus.x, sim.terrain.height_at(camera_controller.focus), camera_controller.focus.y)
+    var pitch := deg_to_rad(42.0)
+    var dist := 1200.0 / camera_zoom_level
+    camera.position = focus3 + Vector3(0, dist * sin(pitch), -dist * cos(pitch))
+    camera.look_at(focus3)
+
+# Project a ground point back to screen space (for input event construction).
+func _world_to_screen(world: Vector2) -> Vector2:
+    return camera.unproject_position(Vector3(world.x, sim.terrain.height_at(world), world.y))
+
+# Project a screen point onto the y=0 ground plane.
+func _screen_to_world(screen: Vector2) -> Vector2:
+    var from := camera.project_ray_origin(screen)
+    var dir := camera.project_ray_normal(screen)
+    if sim.map_id != "prototype":
+        var terrain_hit := sim.terrain.ray_hit(from, dir)
+        if terrain_hit.is_finite():
+            return Vector2(terrain_hit.x, terrain_hit.z)
+        return Vector2(-1, -1)
+    if absf(dir.y) < 0.001:
+        return camera_controller.focus
+    var t := -from.y / dir.y
+    if t < 0.0:
+        return camera_controller.focus
+    var hit := from + dir * t
+    return Vector2(hit.x, hit.z)
+
 func _ready() -> void:
     _load_settings()
-    texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-    sim.reset(false)
-    sprites        = {1: Art.sprites(Color("#5fa5e0")), 2: Art.sprites(Color("#d66551"))}
-    tiles          = TileMapLayer.new()
-    tiles.tile_set = Art.terrain()
-    tiles.scale    = Vector2(2, 2)
-    tiles.z_index  = -10
-    add_child(tiles)
-    for x in range(Simulation.GRID.x):
-        for y in range(Simulation.GRID.y):
-            tiles.set_cell(Vector2i(x, y), 0, Vector2i((x * 7 + y * 11) % 3, 0))
-    camera = Camera2D.new()
+    session = GameSession.new()
+    session.configure(sim)
+    session.simulation_tick.connect(_on_session_tick)
+    add_child(session)
+    command_bus = CommandBus.new()
+    command_bus.configure(_execute_order)
+    command_bus.command_rejected.connect(_notify)
+    input_controller = InputController.new()
+    input_controller.name = "InputController"
+    input_controller.configure(self)
+    add_child(input_controller)
+    # Main owns the engine callbacks and delegates once through the compatibility
+    # wrappers below. Disable the child callbacks to avoid processing each event twice.
+    input_controller.set_process_input(false)
+    input_controller.set_process_unhandled_input(false)
+    network_session = NetworkSession.new()
+    network_session.name = "NetworkSession"
+    network_session.configure(self)
+    add_child(network_session)
+    sim.reset(false, selected_map_id)
+    _create_fog()
+    _create_terrain()
+    _create_lighting()
+    camera = Camera3D.new()
+    camera.fov = 38.0
+    camera.near = 1.0
+    camera.far = 12000.0
     add_child(camera)
-    camera.position = Vector2(500, 350)
-    camera.zoom = Vector2.ONE
+    camera.make_current()
     camera_controller = CameraController.new(camera, Simulation.WORLD,
-        func() -> Vector2: return get_viewport_rect().size,
-        func() -> Vector2: return camera.get_viewport().get_mouse_position())
+        func() -> Vector2: return get_viewport().get_visible_rect().size,
+        func() -> Vector2: return get_viewport().get_mouse_position())
+    camera_controller.surface_picker = _screen_to_world
     camera_controller.speed_multiplier = camera_speed_multiplier
+    camera_controller.focus = Vector2(900, 700)
+    _update_camera_transform()
+    hud_controller = HudController.new()
+    hud_controller.name = "HudController"
+    hud_controller.configure(self)
+    add_child(hud_controller)
     _create_ui()
+    audio_controller = AudioController.new()
+    audio_controller.configure(sim, local_slot)
+    add_child(audio_controller)
     _create_audio()
+    visual_sync = WorldVisualSync.new()
+    visual_sync.name = "WorldVisualSync"
+    visual_sync.configure(self)
+    add_child(visual_sync)
+    cursor_controller = CursorController.new()
+    cursor_controller.name = "CursorController"
+    cursor_controller.configure(self)
+    add_child(cursor_controller)
     multiplayer.peer_connected.connect(_peer_joined)
     multiplayer.peer_disconnected.connect(_peer_left)
     multiplayer.connected_to_server.connect(_connected_to_server)
     multiplayer.connection_failed.connect(_connection_failed)
     multiplayer.server_disconnected.connect(_server_left)
     _refresh_ui()
-
-# Persisted user preferences live in user://settings.cfg.
 func _load_settings() -> void:
     var config := ConfigFile.new()
     if config.load("user://settings.cfg") == OK:
-        camera_speed_multiplier = clampf(float(config.get_value("camera", "speed_multiplier", 1.4)), 0.5, 3.0)
+        camera_speed_multiplier = clampf(float(config.get_value("camera", "speed_multiplier", 1.8)), 0.5, 3.0)
 
 func _save_settings() -> void:
     var config := ConfigFile.new()
@@ -178,10 +361,14 @@ func _camera_speed_changed(value: float) -> void:
 
 # Never leave the cursor confined when the game node leaves the tree.
 func _exit_tree() -> void:
+    if camera_controller != null:
+        camera_controller.surface_picker = Callable()
+        camera_controller.viewport_size_provider = Callable()
+        camera_controller.mouse_position_provider = Callable()
     Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 # Build the HUD in code so the exported scene stays lightweight.
-func _create_ui() -> void:
+func _create_ui_legacy() -> void:
     hud = CanvasLayer.new()
     add_child(hud)
     var theme := Theme.new()
@@ -388,32 +575,31 @@ func _create_ui() -> void:
     speed_row.add_child(camera_speed_value_label)
     _button(menu_buttons, "Quit", get_tree().quit)
 
+func _create_ui() -> void:
+    if hud_controller != null:
+        hud_controller.build()
+    else:
+        _create_ui_legacy()
+
+
 func _create_audio() -> void:
-    var stream := AudioStreamGenerator.new()
-    stream.mix_rate      = 44100
-    stream.buffer_length = 1.0
-    audio_player         = AudioStreamPlayer.new()
-    audio_player.stream  = stream
-    add_child(audio_player)
-    audio_player.play()
-    audio_playback = audio_player.get_stream_playback() as AudioStreamGeneratorPlayback
+    if audio_controller == null:
+        return
+    audio_controller.initialize()
+    audio_player = audio_controller.audio_player
+    audio_playback = audio_controller.audio_playback
 
 func _play_tone(frequency: float, duration: float, volume: float = 0.16, slide: float = 0.0) -> void:
-    if audio_playback == null:
-        return
-    var frames := mini(int(duration * 44100.0), 16000)
-    for i in range(frames):
-        var t := float(i) / 44100.0
-        var envelope := minf(1.0, float(i) / 220.0) * minf(1.0, float(frames - i) / 900.0)
-        var phase := TAU * (frequency * t + slide * t * t * 0.5)
-        var sample := sin(phase) * volume * envelope
-        audio_playback.push_frame(Vector2(sample, sample))
+    if audio_controller != null:
+        audio_controller.play_tone(frequency, duration, volume, slide)
 
 func _play_attack_sound() -> void:
-    _play_tone(180.0, 0.055, 0.16, 420.0)
+    if audio_controller != null:
+        audio_controller.play_attack_sound()
 
 func _play_hit_sound() -> void:
-    _play_tone(78.0, 0.10, 0.20, -25.0)
+    if audio_controller != null:
+        audio_controller.play_hit_sound()
 
 func _respond(unit_id: int, words: String) -> void:
     if not sim.units.has(unit_id) or sim.units[unit_id].owner != local_slot:
@@ -441,15 +627,20 @@ func _clear_selection() -> void:
 # Keep the world strictly larger than the viewport on both axes so the
 # camera always has room to move; otherwise it clamps dead at the center.
 func _min_zoom() -> float:
-    var size := get_viewport_rect().size
-    return maxf(size.x / Simulation.WORLD.x, size.y / Simulation.WORLD.y) + 0.05
+    # 0.45 caps at ~2670 dist (~1780 height, ~1x world width visible).
+    return 0.45
 
 func _reset_view() -> void:
+    _sync_map_world()
     _clear_selection()
     build_mode = ""
     clicks.clear()
-    camera.zoom     = Vector2.ONE * maxf(1.0, _min_zoom())
-    camera.position = Vector2(900, 700) if local_slot != 2 else Vector2(3900, 2500)
+    camera_zoom_level = 2.0
+    camera_controller.focus = Vector2(900, 700) if local_slot != 2 else Vector2(3900, 2500)
+    if sim.is_test_map():
+        camera_controller.focus = sim.terrain.definition.camera_focus
+        camera_zoom_level = sim.terrain.definition.camera_zoom
+    _update_camera_transform()
     menu_visible    = false
     menu.visible    = false
 
@@ -464,17 +655,43 @@ func _disconnect() -> void:
     handshakes.clear()
     rates.clear()
 
+func _apply_snapshot_checked(state: Dictionary, context: String) -> bool:
+    if state.get("map_id", "") == "desert_sample":
+        _disconnect.call_deferred()
+        active = false
+        connected = false
+        _notify("样板区不支持联机。")
+        return false
+    if sim.apply_snapshot(state):
+        return true
+    var detail: String = sim.last_snapshot_error
+    _disconnect.call_deferred()
+    active = false
+    connected = false
+    _notify("Invalid %s snapshot%s" % [context, ": " + detail if not detail.is_empty() else ""])
+    return false
+
 func play_solo() -> void:
     _disconnect()
-    sim.reset(true)
+    if not sim.reset(true, selected_map_id):
+        _notify(sim.last_snapshot_error)
+        return
     active      = true
     local_slot  = 1
     accumulator = 0.0
+    if session != null:
+        session.reset_clock()
     _reset_view()
     Input.mouse_mode = Input.MOUSE_MODE_CONFINED
-    _notify("Select the harvester, then right-click yellow ore. Build a barracks to train soldiers.")
+    if sim.is_test_map():
+        _notify("样板测试场：全图可见，无敌人和胜负。右键指挥单位上下坡；可测试建造与采矿。")
+    else:
+        _notify("Select the harvester, then right-click yellow ore. Build a barracks to train soldiers.")
 
 func create_host() -> void:
+    if MapCatalog.definition(selected_map_id).get("test_only", false):
+        _notify("样板区仅供单机测试，请选择正式地图创建联机。")
+        return
     _disconnect()
     peer = ENetMultiplayerPeer.new()
     var error := peer.create_server(PORT, MAX_CLIENTS)
@@ -487,7 +704,13 @@ func create_host() -> void:
     connected = true
     active = true
     local_slot = 1
-    sim.reset(false)
+    if session != null:
+        session.reset_clock()
+    if not sim.reset(false, selected_map_id):
+        _disconnect()
+        active = false
+        _notify(sim.last_snapshot_error)
+        return
     _reset_view()
     _notify("LAN host ready on UDP 24560. Waiting for the red player.")
 
@@ -504,12 +727,12 @@ func join_host() -> void:
     _notify("Connecting to " + host_ip + "...")
 
 func _peer_joined(id: int) -> void:
-    if is_host:
-        handshakes[id] = Time.get_ticks_msec()
+    if network_session != null:
+        network_session.peer_joined(id)
 
 func _connected_to_server() -> void:
-    Input.mouse_mode = Input.MOUSE_MODE_CONFINED
-    _hello.rpc_id(1, Simulation.VERSION)
+    if network_session != null:
+        network_session.connected_to_server()
 
 @rpc("any_peer", "reliable")
 
@@ -536,7 +759,8 @@ func _accepted(version: String, slot: int, state: Dictionary) -> void:
     connected  = true
     active     = true
     local_slot = slot
-    sim.apply_snapshot(state)
+    if not _apply_snapshot_checked(state, "accepted"):
+        return
     sim.rebuild_navigation()
     _reset_view()
     _notify("Red army assigned." if slot == 2 else "Spectator mode: no orders allowed.")
@@ -549,63 +773,62 @@ func _rejected(reason: String) -> void:
     _notify(reason)
 
 func _peer_left(id: int) -> void:
-    handshakes.erase(id)
-    rates.erase(id)
-    if is_host:
-        var was_player: bool = slots.get(id, 0) == 2
-        slots.erase(id)
-        if was_player:
-            for other: int in slots:
-                if slots[other] == 0:
-                    slots[other] = 2
-                    _accepted.rpc_id(other, Simulation.VERSION, 2, sim.snapshot())
-                    break
-            _notify("Red player disconnected; army retained for reconnect.")
+    if network_session != null:
+        network_session.peer_left(id)
 
 func _connection_failed() -> void:
-    _disconnect()
-    Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-    active       = false
-    menu_visible = true
-    menu.visible = true
-    _notify("Connection failed. Check host address and UDP 24560.")
+    if network_session != null:
+        network_session.connection_failed()
 
 func _server_left() -> void:
-    _disconnect()
-    Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-    active       = false
-    menu_visible = true
-    menu.visible = true
-    _clear_selection()
-    _notify("Host disconnected. Match stopped; return to title or start a new match.")
+    if network_session != null:
+        network_session.server_left()
 
 @rpc("authority", "call_remote", "reliable", 1)
 
 func _world(state: Dictionary) -> void:
-    if state.get("version") == Simulation.VERSION and state.get("match") == sim.match_id and int(state.frame) >= sim.frame:
-        var previous_positions: Dictionary = {}
-        for id: int in sim.units:
-            previous_positions[id] = sim.units[id].pos
-        var previous_frame: int = sim.frame
-        sim.apply_snapshot(state)
-        _update_render_velocities(previous_positions, previous_frame, int(state.frame))
-        _audio_for_effects()
+    if state.get("version") != Simulation.VERSION or state.get("match") != sim.match_id:
+        return
+    if typeof(state.get("frame")) != TYPE_INT:
+        _apply_snapshot_checked(state, "world")
+        return
+    if int(state.frame) < sim.frame:
+        return
+    var previous_positions: Dictionary = {}
+    for id: int in sim.units:
+        previous_positions[id] = sim.units[id].pos
+    var previous_frame: int = sim.frame
+    if not _apply_snapshot_checked(state, "world"):
+        return
+    _update_render_velocities(previous_positions, previous_frame, int(state.frame))
+    _audio_for_effects()
 
 @rpc("authority", "reliable")
 
 func _final_state(state: Dictionary) -> void:
     if state.get("match") == sim.match_id:
-        sim.apply_snapshot(state)
+        _apply_snapshot_checked(state, "final")
 
 @rpc("authority", "reliable")
 
 func _new_match(state: Dictionary) -> void:
-    sim.apply_snapshot(state)
+    if not _apply_snapshot_checked(state, "new match"):
+        return
     sim.rebuild_navigation()
     _reset_view()
 
-# Send a player order locally or to the authoritative host.
+# Submit a player order through the command boundary.
 func issue(order: Dictionary) -> void:
+    if command_bus != null:
+        command_bus.submit(order)
+    else:
+        _execute_order(order)
+
+# Execute a validated order locally or send it to the authoritative host.
+func _execute_order(order: Dictionary) -> void:
+    if network_session != null:
+        network_session.submit_order(order)
+        return
     if not active or local_slot == 0:
         _notify("Spectators cannot issue orders.")
         return
@@ -647,10 +870,13 @@ func restart_match() -> void:
     if not active:
         play_solo()
         return
-    sim.reset(not connected)
+    sim.reset(not connected, sim.map_id)
     _reset_view()
     if is_host:
-        _new_match.rpc(sim.snapshot())
+        if network_session != null:
+            network_session.broadcast_new_match(sim.snapshot())
+        else:
+            _new_match.rpc(sim.snapshot())
     _notify("New match.")
 
 func return_to_title() -> void:
@@ -658,7 +884,8 @@ func return_to_title() -> void:
     Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
     active = false
     local_slot = 1
-    sim.reset(false)
+    sim.reset(false, selected_map_id)
+    _sync_map_world()
     _clear_selection()
     build_mode   = ""
     menu_visible = true
@@ -667,6 +894,9 @@ func return_to_title() -> void:
 
 # Main loop: advance host simulation, refresh HUD, and redraw the battlefield.
 func _process(delta: float) -> void:
+    _sync_map_world()
+    if map_selector != null:
+        map_selector.disabled = active or connected
     for click: Dictionary in clicks:
         click.life -= delta
     clicks        = clicks.filter(func(c: Dictionary) -> bool: return c.life > 0)
@@ -674,19 +904,10 @@ func _process(delta: float) -> void:
     speech_time   = maxf(0.0, speech_time - delta)
     if speech_time <= 0.0:
         speech_unit = -1
-    if active and (is_host or not connected):
-        accumulator += minf(delta, 0.25)
-        while accumulator >= 0.05:
-            accumulator -= 0.05
-            var previous_winner: int = sim.winner
-            sim.step()
-            _audio_for_effects()
-            if is_host and previous_winner == 0 and sim.winner > 0:
-                _final_state.rpc(sim.snapshot())
-            if is_host and not slots.is_empty():
-                # One snapshot per logic tick (20 Hz) keeps guest motion fluid.
-                _world.rpc(sim.snapshot())
-    elif active and connected and not is_host:
+    if session != null:
+        session.advance(delta, active, is_host, connected)
+        accumulator = session.accumulator
+    if active and connected and not is_host:
         _smooth_guest_motion(delta)
     if is_host:
         for id: int in handshakes.keys():
@@ -695,7 +916,7 @@ func _process(delta: float) -> void:
                 handshakes.erase(id)
     if active and not menu_visible:
         var direction := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
-        camera.position += direction * delta * 500 * camera_speed_multiplier / camera.zoom.x
+        camera_controller.focus -= direction * delta * 500 * camera_speed_multiplier / camera_zoom_level
         camera_controller.update(delta)
     _limit_camera()
     _clean_selection()
@@ -704,7 +925,11 @@ func _process(delta: float) -> void:
     if selection_dragging and not left_button_held:
         _finish_drag_select(selection_current)
     _refresh_ui()
-    queue_redraw()
+    _sync_visuals(delta)
+
+    if cursor_controller != null:
+        cursor_controller.update_cursor()
+
 
 func _clean_selection() -> void:
     var valid: Array[int] = []
@@ -718,290 +943,67 @@ func _clean_selection() -> void:
             valid_buildings.append(id)
     selected_buildings = valid_buildings
     if selected_buildings.is_empty():
-        selected_building = -1
+        if selected_building >= 0 and sim.buildings.has(selected_building) and sim.buildings[selected_building].owner == local_slot:
+            selected_buildings.append(selected_building)
+        else:
+            selected_building = -1
     elif not selected_buildings.has(selected_building):
         selected_building = selected_buildings[0]
     if not sim.buildings.has(selected_building) or sim.buildings[selected_building].owner != local_slot:
         selected_building = -1
 
 func _get_camera_viewport_size() -> Vector2:
-    return get_viewport_rect().size
+    return get_viewport().get_visible_rect().size
 
 func _get_map_screen_rect() -> Rect2:
-        var size := get_viewport_rect().size
+        var size := get_viewport().get_visible_rect().size
         return Rect2(Vector2(0, 52), Vector2(size.x - 260, size.y - 184))
 
 func _limit_camera() -> void:
-    var half := get_viewport_rect().size / (2.0 * camera.zoom.x)
-    var max_center := Simulation.WORLD - half
-    camera.position = camera.position.clamp(half.min(Simulation.WORLD / 2), max_center.max(Simulation.WORLD / 2))
+    if camera_controller != null:
+        camera_controller._limit_camera()
+        _update_camera_transform()
 
 func _screen_is_map(pos: Vector2) -> bool:
-    var size := get_viewport_rect().size
+    var size := get_viewport().get_visible_rect().size
     return pos.x < size.x - 260 and pos.y > 52 and pos.y < size.y - 132
 
-# Translate keyboard and mouse input into selection and simulation orders.
+# Compatibility wrappers delegate input handling to InputController.
 func _unhandled_input(event: InputEvent) -> void:
-    if event is InputEventKey and event.pressed and not event.echo:
-        if rebinding_attack:
-            if event.keycode != KEY_ESCAPE:
-                attack_keycode = event.keycode
-                rebinding_attack = false
-                attack_rebind_button.text = "Rebind attack key (current: %s)" % OS.get_keycode_string(attack_keycode)
-                _notify("Attack key set to %s." % OS.get_keycode_string(attack_keycode))
-            get_viewport().set_input_as_handled()
-            return
-        if event.keycode == KEY_ESCAPE:
-            if not build_mode.is_empty() or not pending_command.is_empty():
-                build_mode = ""
-                pending_command = ""
-            else:
-                _toggle_menu()
-        elif active and not menu_visible and event.keycode == attack_keycode:
-            attack_mode = not attack_mode
-            _notify("Attack mode %s. Left-click a target or ground." % ("ON" if attack_mode else "OFF"))
-        elif active and not menu_visible and event.keycode == KEY_B:
-            _begin_build("barracks")
-        elif active and not menu_visible and event.keycode == KEY_S:
-            _stop()
-        elif active and not menu_visible and event.keycode >= KEY_1 and event.keycode <= KEY_9:
-            _control_group_key(int(event.keycode) - int(KEY_1) + 1, event.ctrl_pressed, event.shift_pressed)
-        elif active and not menu_visible and event.keycode == KEY_TAB:
-            if selected_buildings.size() > 1:
-                building_tab_index = (building_tab_index + 1) % selected_buildings.size()
-                _notify("Building %d / %d" % [building_tab_index + 1, selected_buildings.size()])
-    if not active or menu_visible:
-        return
-    if event is InputEventMouseButton:
-        var pos: Vector2 = get_global_transform_with_canvas().affine_inverse() * event.position
-        if event.button_index == MOUSE_BUTTON_LEFT:
-            if event.pressed and _screen_is_map(event.position):
-                if not build_mode.is_empty():
-                    _place_building(pos)
-                else:
-                    selection_dragging = true
-                    selection_start    = pos
-                    selection_current  = pos
-            elif not event.pressed and selection_dragging:
-                var button := event as InputEventMouseButton
-                if not button.canceled and not left_button_held:
-                    _finish_drag_select(pos)
-        elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed and _screen_is_map(event.position):
-            if not build_mode.is_empty():
-                build_mode = ""
-            else:
-                _right_click(pos)
-        elif event.button_index == MOUSE_BUTTON_MIDDLE:
-            middle_dragging = event.pressed
-        elif event.pressed and _screen_is_map(event.position) and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
-            var before := get_global_mouse_position()
-            var factor := 1.15 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / 1.15
-            camera.zoom = Vector2.ONE * clampf(camera.zoom.x * factor, _min_zoom(), 2.5)
-            camera.force_update_scroll()
-            camera.position += before - get_global_mouse_position()
-    elif event is InputEventMouseMotion:
-        if middle_dragging:
-            camera.position -= event.relative / camera.zoom.x
-        if selection_dragging:
-            selection_current = get_global_transform_with_canvas().affine_inverse() * event.position
+    if input_controller != null:
+        input_controller._unhandled_input(event)
 
 func _input(event: InputEvent) -> void:
-    # _input runs before the HUD consumes events, so an active drag keeps
-    # tracking (and can complete) even while the cursor is over HUD panels.
-    if event is InputEventMouseMotion:
-        last_mouse_event_msec = Time.get_ticks_msec()
-        if selection_dragging:
-            selection_current = get_global_transform_with_canvas().affine_inverse() * event.position
-    if event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_MIDDLE:
-        middle_dragging = false
-    if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-        var button := event as InputEventMouseButton
-        var now := Time.get_ticks_msec()
-        # A second press while the button is already held mid-drag is a
-        # spurious duplicate from the input stack (seen with confined cursor
-        # on Windows): swallow it so the original box start is preserved.
-        # Stale drags (release event lost entirely) restart from this press.
-        if button.pressed and selection_dragging and left_button_held and not button.canceled:
-            if now - last_mouse_event_msec < 1500:
-                get_viewport().set_input_as_handled()
-                return
-            _finish_drag_select(selection_current)
-        last_mouse_event_msec = now
-        # Track the button ourselves: Godot's Input state is also corrupted by
-        # canceled events, so only non-canceled presses/releases update it.
-        if not button.canceled:
-            left_button_held = button.pressed
-        if not button.pressed and selection_dragging:
-            # Canceled releases (focus quirks, confined-cursor edge pressure)
-            # must not end a drag while the button is still physically held.
-            if button.canceled or left_button_held:
-                return
-            _finish_drag_select(get_global_transform_with_canvas().affine_inverse() * event.position)
+    if input_controller != null:
+        input_controller._input(event)
 
-# Complete a box drag: treat tiny drags as clicks, larger ones as selections.
 func _finish_drag_select(pos: Vector2) -> void:
-    selection_dragging = false
-    if (pos - selection_start).length() * camera.zoom.x < 8:
-        _left_click(pos)
-    else:
-        _select_rect(Rect2(selection_start, pos - selection_start).abs())
+    if input_controller != null:
+        input_controller._finish_drag_select(pos)
 
 func _left_click(pos: Vector2) -> void:
-    if not pending_command.is_empty():
-        _pending_click(pos)
-        return
-    if attack_mode:
-        _attack_click(pos)
-        return
-    _clear_selection()
-    for id: int in sim.units:
-        var u: Dictionary = sim.units[id]
-        if u.owner == local_slot and (u.pos as Vector2).distance_to(pos) <= 20:
-            var now := Time.get_ticks_msec() / 1000.0
-            if id == last_click_unit and now - last_click_time <= 0.4:
-                _select_same_type_on_screen(str(u.type))
-                last_click_unit = -1
-            else:
-                selected_units.append(id)
-                last_click_unit = id
-            last_click_time = now
-            return
-    for id: int in sim.buildings:
-        if sim.buildings[id].owner == local_slot and sim.footprint(sim.buildings[id]).has_point(pos):
-            var now := Time.get_ticks_msec() / 1000.0
-            if id == last_click_building and now - last_click_building_time <= 0.4:
-                _select_same_type_buildings_on_screen(str(sim.buildings[id].type))
-                last_click_building = -1
-            else:
-                selected_building = id
-                selected_buildings.clear()
-                selected_buildings.append(id)
-                last_click_building = id
-            last_click_building_time = now
-            return
+    if input_controller != null:
+        input_controller._left_click(pos)
 
-# Double-click: grab every on-screen building of the same kind as the clicked one.
 func _select_same_type_buildings_on_screen(kind: String) -> void:
-    selected_units.clear()
-    selected_buildings.clear()
-    var half := get_viewport().get_visible_rect().size / (2.0 * camera.zoom)
-    var view := Rect2(camera.position - half, half * 2.0)
-    for id: int in sim.buildings:
-        var b: Dictionary = sim.buildings[id]
-        if b.owner == local_slot and b.type == kind and view.has_point(b.pos):
-            selected_buildings.append(id)
-    if not selected_buildings.is_empty():
-        selected_building = selected_buildings[0]
-        _notify("All %ss on screen!" % kind)
+    if input_controller != null:
+        input_controller._select_same_type_buildings_on_screen(kind)
 
-# Double-click: grab every on-screen unit of the same kind as the clicked one.
 func _select_same_type_on_screen(kind: String) -> void:
-    selected_units.clear()
-    selected_building = -1
-    var half := get_viewport().get_visible_rect().size / (2.0 * camera.zoom)
-    var view := Rect2(camera.position - half, half * 2.0)
-    for id: int in sim.units:
-        var u: Dictionary = sim.units[id]
-        if u.owner == local_slot and u.type == kind and view.has_point(u.pos):
-            selected_units.append(id)
-    if not selected_units.is_empty():
-        _respond(selected_units[0], "All %ss on screen!" % kind)
+    if input_controller != null:
+        input_controller._select_same_type_on_screen(kind)
 
 func _attack_click(pos: Vector2) -> void:
-    var kind := ""
-    var target_id := -1
-    for id: int in sim.units:
-        if (sim.units[id].pos as Vector2).distance_to(pos) <= 24:
-            kind = "unit"
-            target_id = id
-            break
-    if target_id < 0:
-        for id: int in sim.buildings:
-            if sim.footprint(sim.buildings[id]).has_point(pos):
-                kind = "building"
-                target_id = id
-                break
-    if target_id >= 0:
-        issue({"action": "attack", "units": selected_units.duplicate(), "kind": kind, "target": target_id, "force": true})
-        clicks.append({"pos": pos, "life": 0.55, "action": "attack"})
-    else:
-        issue({"action": "attack_move", "units": selected_units.duplicate(), "pos": pos})
-        clicks.append({"pos": pos, "life": 0.55, "action": "attack_move"})
-    if not selected_units.is_empty():
-        _respond(selected_units[0], "Attack order!")
-    attack_mode = false
+    if input_controller != null:
+        input_controller._attack_click(pos)
 
 func _select_rect(rect: Rect2) -> void:
-    _clear_selection()
-    for id: int in sim.units:
-        if sim.units[id].owner == local_slot and rect.has_point(sim.units[id].pos):
-            selected_units.append(id)
+    if input_controller != null:
+        input_controller._select_rect(rect)
 
-# Ctrl+N assigns the selection to group N, Shift+N adds to it, N alone recalls it.
-# A group can hold units and/or one building; recalling prefers units for orders.
 func _control_group_key(group: int, ctrl: bool, shift: bool) -> void:
-    if ctrl:
-        if selected_units.is_empty() and selected_building < 0:
-            control_groups.erase(group)
-            _notify("Group %d cleared." % group)
-            return
-        var members: Array[int] = []
-        for id: int in selected_units:
-            members.append(id)
-        var building_list: Array[int] = selected_buildings.duplicate()
-        if building_list.is_empty() and selected_building >= 0:
-            building_list.append(selected_building)
-        control_groups[group] = {"units": members, "building": selected_building, "buildings": building_list}
-        var label := "%d unit(s)" % members.size() if not members.is_empty() else "%d building(s)" % selected_buildings.size()
-        _notify("Group %d assigned: %s." % [group, label])
-        return
-    if shift:
-        if selected_units.is_empty() and selected_building < 0:
-            return
-        var merged: Dictionary = {"units": [], "building": -1}
-        if control_groups.has(group):
-            merged = (control_groups[group] as Dictionary).duplicate()
-        var current: Array[int] = []
-        for value: Variant in merged.get("units", []):
-            current.append(int(value))
-        for id: int in selected_units:
-            if not current.has(id):
-                current.append(id)
-        merged.units = current
-        if selected_building >= 0:
-            merged.building = selected_building
-        control_groups[group] = merged
-        _notify("Group %d now has %d unit(s)." % [group, current.size()])
-        return
-    if not control_groups.has(group):
-        return
-    var state: Dictionary = control_groups[group]
-    var group_units: Array[int] = []
-    for value: Variant in state.get("units", []):
-        var id := int(value)
-        if sim.units.has(id) and sim.units[id].owner == local_slot and not group_units.has(id):
-            group_units.append(id)
-    var group_building := int(state.get("building", -1))
-    if group_building >= 0 and (not sim.buildings.has(group_building) or sim.buildings[group_building].owner != local_slot):
-        group_building = -1
-    if group_units.is_empty() and group_building < 0:
-        control_groups.erase(group)
-        return
-    if not group_units.is_empty():
-        selected_units = group_units
-        selected_building = -1
-        selected_buildings.clear()
-        _respond(group_units[0], "Group %d reporting." % group)
-    else:
-        var group_buildings: Array[int] = []
-        for value: Variant in state.get("buildings", []):
-            var bid := int(value)
-            if sim.buildings.has(bid) and sim.buildings[bid].owner == local_slot and not group_buildings.has(bid):
-                group_buildings.append(bid)
-        selected_units.clear()
-        selected_buildings = group_buildings
-        selected_building = group_buildings[0] if not group_buildings.is_empty() else -1
-        _notify("Group %d building ready." % group)
+    if input_controller != null:
+        input_controller._control_group_key(group, ctrl, shift)
 
 # Guest-side smoothing: derive per-unit velocity from consecutive snapshots.
 func _update_render_velocities(previous: Dictionary, previous_frame: int, current_frame: int) -> void:
@@ -1031,6 +1033,10 @@ func _right_click(pos: Vector2) -> void:
     if not Rect2(Vector2.ZERO, Simulation.WORLD).has_point(pos):
         return
     if selected_units.is_empty():
+        var active_id := active_building_id()
+        if sim.buildings.has(active_id) and Simulation.BarracksFlight.state(sim.buildings[active_id]) != "grounded":
+            issue({"action": "barracks_move", "building": active_id, "pos": pos})
+            return
         var rally_targets: Array[int] = selected_buildings.duplicate()
         if rally_targets.is_empty() and selected_building >= 0:
             rally_targets.append(selected_building)
@@ -1038,7 +1044,11 @@ func _right_click(pos: Vector2) -> void:
             for id: int in rally_targets:
                 issue({"action": "set_rally", "building": id, "pos": pos})
             _notify("Rally points set.")
-            clicks.append({"pos": pos, "life": 0.55, "action": "rally"})
+            _show_order_feedback({"action": "rally"}, pos)
+        return
+    var air_target := airborne_building_at(_world_to_screen(pos))
+    if air_target >= 0 and sim.buildings[air_target].owner != local_slot:
+        _notify("Selected weapons cannot attack airborne targets.")
         return
     var order := {"action": "move", "units": selected_units.duplicate(), "pos": pos}
     for kind: String in ["unit", "building"]:
@@ -1060,12 +1070,112 @@ func _right_click(pos: Vector2) -> void:
         elif order.action == "gather":
             reply = "Mining operation!"
         _respond(selected_units[0], reply)
-    clicks.append({"pos": pos, "life": 0.55, "action": order.action})
+    _show_order_feedback(order, pos)
+
+
+func _show_order_feedback(order: Dictionary, pos: Vector2) -> void:
+    # An intent marker, not authoritative acceptance or a reachability guarantee.
+    if not active or menu_visible or local_slot == 0 or sim.winner != 0:
+        return
+    if not pos.is_finite() or not Rect2(Vector2.ZERO, Simulation.WORLD).has_point(pos):
+        return
+    var action := str(order.get("action", ""))
+    if action not in ["move", "attack_move", "attack", "gather", "rally"]:
+        return
+    var compatible := false
+    if action == "rally":
+        compatible = cursor_controller.has_buildings()
+    else:
+        var required := "soldier" if action == "attack" else ("harvester" if action == "gather" else "")
+        for id: int in order.get("units", []):
+            if sim.units.has(id):
+                var unit: Dictionary = sim.units[id]
+                if unit.owner == local_slot and unit.hp > 0 and (required.is_empty() or unit.type == required):
+                    compatible = true
+                    break
+    if not compatible:
+        return
+    var duration := 0.70 if action in ["move", "attack_move", "attack"] else 0.55
+    next_click_id += 1
+    clicks.append({"id": next_click_id, "pos": pos, "life": duration, "duration": duration, "action": action})
+    while clicks.size() > 16:
+        clicks.pop_front()
+
+func active_building_id() -> int:
+    if not selected_buildings.is_empty():
+        return selected_buildings[building_tab_index % selected_buildings.size()]
+    return selected_building
+
+
+func _takeoff_barracks() -> void:
+    if active and not menu_visible and selected_units.is_empty():
+        issue({"action": "barracks_takeoff", "building": active_building_id()})
+
+
+func _begin_deploy() -> void:
+    var id := active_building_id()
+    if not active or menu_visible or local_slot == 0 or not selected_units.is_empty() or not sim.buildings.has(id):
+        return
+    var building: Dictionary = sim.buildings[id]
+    if building.owner != local_slot or building.type != "barracks" or Simulation.BarracksFlight.state(building) != "airborne":
+        _notify("Select an airborne friendly barracks.")
+        return
+    deploy_building = id
+    build_mode = ""
+    pending_command = ""
+    attack_mode = false
+    selection_dragging = false
+    _notify("Deploy: all 12 cells must be green. Left-click confirms; RMB / Esc cancels.")
+
+
+func _deploy_click(pos: Vector2) -> void:
+    var site := sim.deployment_site(local_slot, deploy_building, pos)
+    if not site.error.is_empty():
+        _notify(site.error)
+        return
+    issue({"action": "barracks_deploy", "building": deploy_building, "pos": site.pos})
+    deploy_building = -1
+
+
+func building_screen_position(id: int) -> Vector2:
+    var b: Dictionary = sim.buildings[id]
+    var height: float = b.get("flight", {}).get("height", sim.terrain.height_at(b.pos))
+    return camera.unproject_position(Vector3(b.pos.x, height + (40.0 if b.has("flight") else 0.0), b.pos.y))
+
+
+func airborne_building_at(screen: Vector2, friendly_only: bool = false) -> int:
+    if visual_sync == null:
+        return -1
+    var closest := -1
+    var depth := INF
+    var origin := camera.project_ray_origin(screen)
+    var end := origin + camera.project_ray_normal(screen) * 10000.0
+    for id: int in sim.buildings:
+        var b: Dictionary = sim.buildings[id]
+        if not Simulation.BarracksFlight.is_airborne(b) or (friendly_only and b.owner != local_slot):
+            continue
+        if not visual_sync.building_visuals.has(id):
+            continue
+        var visual: Node3D = visual_sync.building_visuals[id].visual
+        if not visual.visible:
+            continue
+        var local_origin: Vector3 = visual.to_local(origin)
+        var local_end: Vector3 = visual.to_local(end)
+        var box := AABB(Vector3(-64, 0, -48), Vector3(128, 104, 96))
+        var hit: Variant = box.intersects_segment(local_origin, local_end)
+        if hit is Vector3:
+            var distance: float = local_origin.distance_to(hit)
+            if distance < depth:
+                depth = distance
+                closest = id
+    return closest
+
 
 func _begin_build(kind: String) -> void:
     if not active or local_slot == 0 or sim.winner != 0:
         return
     build_mode = kind
+    deploy_building = -1
     pending_command = ""
     attack_mode = false
     selection_dragging = false
@@ -1086,7 +1196,15 @@ func _action_clicked(index: int) -> void:
             3:
                 _begin_pending("gather")
     elif sim.buildings.has(selected_building):
-        var building: Dictionary = sim.buildings[selected_building]
+        var building: Dictionary = sim.buildings[active_building_id()]
+        if building.type == "barracks" and index in [0, 2, 3]:
+            if index == 0:
+                _stop()
+            elif index == 2:
+                _takeoff_barracks()
+            else:
+                _begin_deploy()
+            return
         match index:
             1:
                 if building.type == "barracks":
@@ -1125,8 +1243,9 @@ func _pending_click(pos: Vector2) -> void:
             return
         order = {"action": "gather", "units": selected_units.duplicate(), "target": ore_id}
     issue(order)
-    _respond(selected_units[0], "Moving out!" if pending_command == "move" else "Mining operation!")
-    clicks.append({"pos": pos, "life": 0.55, "action": pending_command})
+    if not selected_units.is_empty():
+        _respond(selected_units[0], "Moving out!" if pending_command == "move" else "Mining operation!")
+    _show_order_feedback(order, pos)
     pending_command = ""
 
 func _begin_rebind() -> void:
@@ -1148,7 +1267,7 @@ func _produce(kind: String) -> void:
     var best_queue := 99
     for id: int in selected_buildings:
         var b: Dictionary = sim.buildings.get(id, {})
-        if b.is_empty() or int(b.remaining) > 0:
+        if b.is_empty() or int(b.remaining) > 0 or Simulation.BarracksFlight.state(b) != "grounded":
             continue
         if b.queue.size() < best_queue:
             best_queue = b.queue.size()
@@ -1163,20 +1282,30 @@ func _cancel_job() -> void:
     issue({"action": "cancel_production", "building": target})
 
 func _stop() -> void:
+    if selected_units.is_empty() and sim.buildings.has(active_building_id()) and sim.buildings[active_building_id()].type == "barracks":
+        issue({"action": "barracks_stop", "building": active_building_id()})
+        return
     issue({"action": "stop", "units": selected_units.duplicate()})
     if not selected_units.is_empty():
         _respond(selected_units[0], "Standing by.")
 
 func _audio_for_effects() -> void:
-    for effect: Dictionary in sim.effects:
-        var effect_frame := int(effect.get("frame", -1))
-        if effect_frame <= audio_effect_frame or not sim.can_see(local_slot, effect.to):
-            continue
-        audio_effect_frame = maxi(audio_effect_frame, effect_frame)
-        if effect.kind == "shot":
-            _play_attack_sound()
-        elif effect.kind == "death":
-            _play_hit_sound()
+    if audio_controller != null:
+        audio_controller.set_local_slot(local_slot)
+        audio_controller.consume_effects()
+
+func _on_session_tick(previous_winner: int, _current_winner: int) -> void:
+    _audio_for_effects()
+    if is_host and previous_winner == 0 and sim.winner > 0:
+        if network_session != null:
+            network_session.broadcast_final_state(sim.snapshot())
+        else:
+            _final_state.rpc(sim.snapshot())
+    if is_host and not slots.is_empty():
+        if network_session != null:
+            network_session.broadcast_world(sim.snapshot())
+        else:
+            _world.rpc(sim.snapshot())
 
 func _toggle_menu() -> void:
     menu_visible       = not menu_visible
@@ -1195,6 +1324,9 @@ func _notify(message: String) -> void:
 
 # Keep all HUD text and command-card state in one place.
 func _refresh_ui() -> void:
+    if hud_controller != null:
+        hud_controller.refresh()
+        return
     var role := "BLUE" if local_slot == 1 else ("RED" if local_slot == 2 else "SPECTATOR")
     top_label.text = "IRON FRONT   /   %s     CREDITS: %d     %02d:%02d" % [role, int(sim.money.get(local_slot, 0)), sim.frame / 1200, (sim.frame / 20) % 60]
     resource_label.text = "MINERALS  %d" % int(sim.money.get(local_slot, 0))
@@ -1328,97 +1460,132 @@ func _refresh_ui() -> void:
         info_label.text = "No selection\nSelect units or a building.\nHarvesters return ore to a base."
         queue_label.text = "Buildings cost credits.\nPlace near your existing base."
 
-# Render world geometry and entities; UI is rendered by CanvasLayer controls.
-func _draw() -> void:
-    for rock: Rect2 in sim.obstacles:
-        draw_rect(rock, Color("#29352e"))
-        for x in range(int(rock.position.x), int(rock.end.x), 32):
-            for y in range(int(rock.position.y), int(rock.end.y), 32):
-                draw_texture_rect(sprites[1].rock, Rect2(Vector2(x, y), Vector2(36, 36)), false)
-    for ore: Dictionary in sim.ores.values():
-        if ore.amount > 0:
-            draw_texture_rect(sprites[1].ore, Rect2(ore.pos - Vector2(32, 24), Vector2(64, 48)), false)
-            draw_string(ThemeDB.fallback_font, ore.pos + Vector2(-22, 36), str(ore.amount), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#f5d677"))
-    for id: int in sim.buildings:
-        var b: Dictionary = sim.buildings[id]
-        if b.owner != local_slot and not sim.can_see(local_slot, b.pos):
-            continue
-        var rect: Rect2 = sim.footprint(b)
-        draw_rect(Rect2(rect.position + Vector2(6, 10), rect.size), Color(0, 0, 0, 0.3))
-        var tint := Color(0.65, 0.65, 0.65) if b.remaining > 0 else Color.WHITE
-        if b.flash > 0:
-            tint = Color(2, 2, 2)
-        draw_texture_rect(sprites[b.owner][b.type], rect, false, tint)
-        _bar(rect.position - Vector2(0, 8), rect.size.x, float(b.hp) / Simulation.BUILD_TYPES[b.type].hp, Color("#75c46e"))
-        if b.remaining > 0:
-            _bar(rect.position + Vector2(0, rect.size.y + 4), rect.size.x, 1.0 - float(b.remaining) / Simulation.BUILD_TYPES[b.type].time, Color("#eac75b"))
-        if selected_buildings.has(id) or selected_building == id:
-            draw_rect(rect.grow(3), Color("#dfe995"), false, 2)
-            if b.type == "bunker":
-                draw_arc(b.pos, Simulation.BUILD_TYPES.bunker.range, 0, TAU, 48, Color(0.55, 0.85, 1.0, 0.35), 1)
-            if b.has("rally") and (b.rally as Vector2) != Vector2.ZERO:
-                draw_line(b.pos, b.rally, Color(0.55, 0.85, 1.0, 0.5), 1)
-                draw_circle(b.rally, 9, Color(0.55, 0.85, 1.0, 0.35))
-                draw_circle(b.rally, 4, Color("#c8ecff"))
-                draw_string(ThemeDB.fallback_font, b.rally + Vector2(10, -8), "R", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color("#c8ecff"))
-    for id: int in sim.units:
-        var u: Dictionary = sim.units[id]
-        if u.owner != local_slot and not sim.can_see(local_slot, u.pos):
-            continue
-        var pos: Vector2 = u.pos
-        if selected_units.has(id):
-            draw_arc(pos, 19, 0, TAU, 24, Color("#cbef84"), 2)
-            if u.order == "attack":
-                var targets: Dictionary = sim.units if u.attack_kind == "unit" else sim.buildings
-                if targets.has(int(u.attack_id)):
-                    draw_line(pos, targets[int(u.attack_id)].pos, Color(0.9, 0.25, 0.15, 0.45), 1)
-        draw_rect(Rect2(pos + Vector2(-11, 8), Vector2(24, 8)), Color(0, 0, 0, 0.3))
-        var size := Vector2(30, 30) if u.type == "soldier" else Vector2(36, 36)
-        draw_texture_rect(sprites[u.owner][u.type], Rect2(pos - size / 2, size), false, Color(2, 2, 2) if u.flash > 0 else Color.WHITE)
-        _bar(pos + Vector2(-15, -24), 30, float(u.hp) / Simulation.UNIT_TYPES[u.type].hp, Color("#75c46e"))
-        if u.type == "harvester" and u.cargo > 0:
-            _bar(pos + Vector2(-15, 23), 30, float(u.cargo) / 60, Color("#eac75b"))
-        if id == speech_unit and speech_time > 0.0:
-            var bubble := Rect2(pos + Vector2(18, -48), Vector2(126, 25))
-            draw_rect(bubble, Color("#eef2d8"), true)
-            draw_rect(bubble, Color("#27352f"), false, 1)
-            draw_string(ThemeDB.fallback_font, bubble.position + Vector2(5, 17), speech_text, HORIZONTAL_ALIGNMENT_LEFT, 116, 11, Color("#18231f"))
-    for e: Dictionary in sim.effects:
-        if not sim.can_see(local_slot, e.to):
-            continue
-        if e.kind == "shot":
-            var progress := 1.0 - float(e.life) / 5.0
-            var point: Vector2 = (e.from as Vector2).lerp(e.to, progress)
-            draw_line(e.from, point, Color("#dfb66a"), 1)
-            draw_circle(point, 3, Color("#ffe9a2"))
-            draw_circle(e.to, 5 * (1.0 - progress), Color("#ff8c50"))
-        else:
-            draw_circle(e.to, 5 + (10 - e.life) * 2, Color(1, 0.6, 0.2, float(e.life) / 10))
-    if local_slot in [1, 2]:
-        for y in range(Simulation.GRID.y):
-            for x in range(Simulation.GRID.x):
-                var index := y * Simulation.GRID.x + x
-                if sim.visible[local_slot][index] == 0:
-                    var alpha := 0.62 if sim.explored[local_slot][index] == 1 else 1.0
-                    draw_rect(Rect2(x * 32, y * 32, 32, 32), Color(0.035, 0.055, 0.055, alpha))
-    for click: Dictionary in clicks:
-        var p: float = 1.0 - click.life / 0.55
-        var color := Color("#ffc359") if click.action != "attack" else Color("#ff725e")
-        color.a = 1 - p
-        draw_arc(click.pos, lerpf(8, 32, p), 0, TAU, 24, color, 2)
-        draw_line(click.pos - Vector2(7, 0), click.pos + Vector2(7, 0), color, 2)
-        draw_line(click.pos - Vector2(0, 7), click.pos + Vector2(0, 7), color, 2)
-    if selection_dragging:
-        var rect := Rect2(selection_start, selection_current - selection_start).abs()
-        draw_rect(rect, Color(0.7, 1, 0.5, 0.15))
-        draw_rect(rect, Color("#c5e79d"), false, 1)
-    if not build_mode.is_empty() and not menu_visible:
-        var pos: Vector2 = sim.snap_build(get_global_mouse_position())
-        var size: Vector2 = Simulation.BUILD_TYPES[build_mode].size
-        var color := Color(0.45, 1, 0.45, 0.6) if sim.build_error(local_slot, build_mode, pos).is_empty() else Color(1, 0.3, 0.3, 0.6)
-        draw_texture_rect(sprites[local_slot][build_mode], Rect2(pos - size / 2, size), false, color)
-        draw_rect(Rect2(pos - size / 2, size).grow(16), color, false, 2)
+# World presentation is owned by WorldVisualSync. These properties and methods
+# preserve the existing test/debug surface while the runtime is split incrementally.
+var unit_visuals: Dictionary:
+    get:
+        return visual_sync.unit_visuals if visual_sync != null else {}
 
-func _bar(pos: Vector2, width: float, fraction: float, color: Color) -> void:
-    draw_rect(Rect2(pos, Vector2(width, 4)), Color("#182219"))
-    draw_rect(Rect2(pos, Vector2(width * clampf(fraction, 0, 1), 4)), color)
+var building_visuals: Dictionary:
+    get:
+        return visual_sync.building_visuals if visual_sync != null else {}
+
+var ore_visuals: Dictionary:
+    get:
+        return visual_sync.ore_visuals if visual_sync != null else {}
+
+var rock_visuals:
+    get:
+        return visual_sync.rock_visuals if visual_sync != null else []
+
+var effect_visuals: Dictionary:
+    get:
+        return visual_sync.effect_visuals if visual_sync != null else {}
+
+var marker_visuals: Dictionary:
+    get:
+        return visual_sync.marker_visuals if visual_sync != null else {}
+
+var selection_rect_overlay: Panel:
+    get:
+        return visual_sync.selection_rect_overlay if visual_sync != null else null
+
+var build_preview_visual: MeshInstance3D:
+    get:
+        return visual_sync.build_preview_visual if visual_sync != null else null
+
+var build_preview_model:
+    get:
+        return visual_sync.build_preview_model if visual_sync != null else null
+
+var health_grid_overlay:
+    get:
+        return visual_sync.health_grid_overlay if visual_sync != null else null
+
+func _sync_visuals(delta: float = 0.0) -> void:
+    if visual_sync != null:
+        visual_sync.sync(delta)
+
+func _sync_rocks() -> void:
+    if visual_sync != null:
+        visual_sync._sync_rocks()
+
+func _sync_ores() -> void:
+    if visual_sync != null:
+        visual_sync._sync_ores()
+
+func _sync_buildings() -> void:
+    if visual_sync != null:
+        visual_sync._sync_buildings()
+
+func _sync_units() -> void:
+    if visual_sync != null:
+        visual_sync._sync_units()
+
+func _sync_effects() -> void:
+    if visual_sync != null:
+        visual_sync._sync_effects()
+
+func _sync_markers() -> void:
+    if visual_sync != null:
+        visual_sync._sync_markers()
+
+func _sync_selection_rect() -> void:
+    if visual_sync != null:
+        visual_sync._sync_selection_rect()
+
+func _sync_build_preview() -> void:
+    if visual_sync != null:
+        visual_sync._sync_build_preview()
+
+func _sync_fog() -> void:
+    if visual_sync != null:
+        visual_sync._sync_fog()
+# Rebuild only at map/match boundaries; snapshots never recreate static terrain.
+func _sync_map_world() -> void:
+    if rendered_map_id != sim.map_id:
+        _create_terrain()
+    if rendered_match_id != sim.match_id:
+        rendered_match_id = sim.match_id
+        render_velocities.clear()
+        if visual_sync != null:
+            visual_sync.reset_world()
+    fog_plane.visible = sim.map_id == "prototype"
+    if terrain_view != null:
+        terrain_view.set_reveal_all(local_slot == 0 or sim.is_test_map())
+    var environment_node := get_node_or_null("BattlefieldEnvironment") as WorldEnvironment
+    if environment_node != null:
+        var desert := sim.map_id in ["desert_quarry", "desert_sample"]
+        environment_node.environment.ambient_light_energy = 0.45 if desert else 0.72
+        var sunlight := get_node_or_null("BattlefieldSun") as DirectionalLight3D
+        if sunlight != null:
+            sunlight.light_energy = 0.85 if desert else 1.12
+            sunlight.light_color = Color("#fff5e8") if desert else Color("#fff1d6")
+        environment_node.environment.ambient_light_color = Color("#c3b7a5") if desert else Color("#9fb6a6")
+        environment_node.environment.background_color = Color("#493c2c") if desert else Color("#203028")
+    if map_selector != null:
+        map_selector.select(MapCatalog.IDS.find(sim.map_id) if active else MapCatalog.IDS.find(selected_map_id))
+
+func _map_selected(index: int) -> void:
+    if active or connected:
+        return
+    selected_map_id = MapCatalog.IDS[index]
+    _update_map_description()
+
+func _update_map_description() -> void:
+    if map_description == null:
+        return
+    var data := MapCatalog.definition(selected_map_id)
+    var sample: bool = data.get("test_only", false)
+    map_description.text = data.description + ("\n临时选项 · 可自由移动、采矿和建造" if sample else "\n联机加入时使用主机地图")
+    if sample_host_button != null:
+        sample_host_button.disabled = sample
+        sample_host_button.tooltip_text = "样板区仅供单机测试" if sample else ""
+    if solo_button != null:
+        solo_button.text = "进入样板测试场" if sample else "New solo match (vs AI)"
+    var preview_path := "res://assets/concept_art/desert-quarry-overview.png" if selected_map_id == "desert_quarry" else "res://build/verification/gameplay.png"
+    preview_path = data.get("preview", preview_path)
+    if ResourceLoader.exists(preview_path):
+        map_preview.texture = load(preview_path)
+    else:
+        map_preview.texture = null

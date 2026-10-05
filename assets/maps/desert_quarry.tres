@@ -1,0 +1,40 @@
+[gd_resource type="Resource" script_class="" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/maps/map_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+data = {
+"id": "desert_quarry", "version": 1, "seed": 29471,
+"title": "荒漠矿区 / Desert Quarry",
+"description": "对称矿区 · 三线交战 · 坡道、高台与阶梯矿坑",
+"size": Vector2(4800, 3200),
+"spawns": [Vector2(384, 384), Vector2(4416, 2816)],
+"modules": [
+{"kind": "plateau", "position": Vector2(1216, 768), "size": Vector2(640, 640), "height": 96.0},
+{"kind": "ramp", "position": Vector2(832, 992), "size": Vector2(384, 192), "height": 96.0, "rotation": 0},
+{"kind": "plateau", "position": Vector2(2944, 1792), "size": Vector2(640, 640), "height": 96.0},
+{"kind": "ramp", "position": Vector2(3584, 2016), "size": Vector2(384, 192), "height": 96.0, "rotation": 2},
+{"kind": "quarry", "position": Vector2(3296, 320), "size": Vector2(1024, 768), "rotation": 0},
+{"kind": "quarry", "position": Vector2(480, 2112), "size": Vector2(1024, 768), "rotation": 2},
+{"kind": "gravel", "position": Vector2(2016, 1248), "size": Vector2(768, 704)},
+{"kind": "rock", "position": Vector2(2112, 384), "size": Vector2(192, 320), "height": 144.0},
+{"kind": "rock", "position": Vector2(2496, 2496), "size": Vector2(192, 320), "height": 144.0},
+{"kind": "rock", "position": Vector2(128, 1184), "size": Vector2(192, 384), "height": 128.0},
+{"kind": "rock", "position": Vector2(4480, 1632), "size": Vector2(192, 384), "height": 128.0}
+],
+"roads": [
+{"points": [Vector2(384, 384), Vector2(672, 704), Vector2(672, 1568), Vector2(2112, 1568), Vector2(2688, 1632), Vector2(4128, 1632), Vector2(4128, 2496), Vector2(4416, 2816)], "width": 256.0},
+{"points": [Vector2(704, 704), Vector2(672, 1088), Vector2(1024, 1088), Vector2(1536, 1088)], "width": 192.0},
+{"points": [Vector2(4096, 2496), Vector2(4128, 2112), Vector2(3776, 2112), Vector2(3264, 2112)], "width": 192.0},
+{"points": [Vector2(2400, 1600), Vector2(2912, 1184), Vector2(3104, 704), Vector2(3872, 704)], "width": 192.0},
+{"points": [Vector2(2400, 1600), Vector2(1888, 2016), Vector2(1696, 2496), Vector2(928, 2496)], "width": 192.0}
+],
+"ores": [
+{"pos": Vector2(704, 704), "amount": 4000}, {"pos": Vector2(4096, 2496), "amount": 4000},
+{"pos": Vector2(2400, 1600), "amount": 6000},
+{"pos": Vector2(704, 1568), "amount": 5000}, {"pos": Vector2(4096, 1632), "amount": 5000},
+{"pos": Vector2(1536, 1088), "amount": 6000}, {"pos": Vector2(3264, 2112), "amount": 6000},
+{"pos": Vector2(3936, 704), "amount": 7000}, {"pos": Vector2(864, 2496), "amount": 7000}
+]
+}

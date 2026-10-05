@@ -3,3 +3,11 @@ export_templates/
 *.tpz
 # Large binaries are published via Releases, not git history
 build/IronFront.exe
+build/IronFront3D-review.exe
+# Concept art and previews are managed separately by the user.
+/assets/concept_art/
+/assets/concept_art.zip
+
+# Machine-local tool registration and exact command rules.
+/.codex/toolchain.local.json
+/.codex/rules/local-toolchain.rules

@@ -8,6 +8,10 @@ func _initialize() -> void:
 func run() -> void:
     Engine.max_fps = 120
     var game := MAIN.instantiate()
+    game.selected_map_id = "prototype"
+    for argument: String in OS.get_cmdline_user_args():
+        if argument.begins_with("--map="):
+            game.selected_map_id = argument.trim_prefix("--map=")
     root.add_child(game)
     var probe := PROBE.new()
     probe.name = "NetworkProbe"

@@ -1,18 +1,28 @@
 extends RefCounted
 # The host is the only writer. Clients display snapshots; they never simulate damage.
-const VERSION := "rts-economy-2"
+const VERSION := "rts-barracks-flight-5"
+const BarracksFlight = preload("res://scripts/barracks_flight.gd")
+const WEAPON_TARGETS := {"soldier": ["ground"], "bunker": ["ground"]}
+const ArrivalPlanner = preload("res://scripts/arrival_planner.gd")
+const MapTerrain = preload("res://scripts/maps/map_terrain.gd")
+const EYE_HEIGHTS := {"soldier": 40.0, "harvester": 32.0, "base": 80.0, "barracks": 40.0, "refinery": 56.0, "bunker": 48.0}
 const TICK := 20
 const CELL := 32
 const WORLD := Vector2(4800, 3200)
 const GRID := Vector2i(150, 100)
 const GRID_CELLS := GRID.x * GRID.y
+const MAX_SNAPSHOT_UNITS := 4096
+const MAX_SNAPSHOT_BUILDINGS := 1024
+const MAX_SNAPSHOT_ORES := 256
+const MAX_SNAPSHOT_EFFECTS := 4096
+const MAX_SNAPSHOT_ORE_AMOUNT := 100000
 const UNIT_TYPES := {
     "soldier": {"hp": 100, "speed": 100.0, "range": 125.0, "damage": 16, "cooldown": 12, "radius": 11.0, "cost": 100, "time": 50},
     "harvester": {"hp": 160, "speed": 75.0, "range": 0.0, "damage": 0, "cooldown": 20, "radius": 14.0, "cost": 200, "time": 70}
 }
 const BUILD_TYPES := {
-    "base": {"hp": 800, "size": Vector2(96, 96), "cost": 500, "time": 140},
-    "barracks": {"hp": 420, "size": Vector2(64, 64), "cost": 250, "time": 80},
+    "base": {"hp": 800, "size": Vector2(160, 160), "cost": 500, "time": 140},
+    "barracks": {"hp": 420, "size": Vector2(128, 96), "cost": 250, "time": 80},
     "refinery": {"hp": 600, "size": Vector2(80, 80), "cost": 400, "time": 100},
     "bunker": {"hp": 500, "size": Vector2(64, 64), "cost": 300, "time": 120, "range": 190.0, "damage": 14, "cooldown": 14}
 }
@@ -30,8 +40,18 @@ var obstacles: Array[Rect2] = []
 var visible: Dictionary = {}
 var explored: Dictionary = {}
 var nav := AStarGrid2D.new()
+var arrival_nav_regions := PackedInt32Array()
+var last_snapshot_error := ""
+var terrain := MapTerrain.new()
+var map_id := "prototype"
 
-func reset(with_ai: bool = false) -> void:
+func reset(with_ai: bool = false, selected_map: String = "prototype") -> bool:
+    var next_terrain := MapTerrain.new()
+    if not next_terrain.load_map(selected_map):
+        last_snapshot_error = next_terrain.error
+        return false
+    terrain = next_terrain
+    map_id = selected_map
     match_id += 1
     units.clear()
     buildings.clear()
@@ -40,7 +60,7 @@ func reset(with_ai: bool = false) -> void:
     frame      = 0
     winner     = 0
     next_id    = 1
-    ai_enabled = with_ai
+    ai_enabled = with_ai and not is_test_map()
     effects.clear()
     for owner in [1, 2]:
         var cells := PackedByteArray()
@@ -48,32 +68,40 @@ func reset(with_ai: bool = false) -> void:
         cells.fill(0)
         visible[owner] = cells.duplicate()
         explored[owner] = cells.duplicate()
-    obstacles = [Rect2(2112, 192, 384, 576), Rect2(2208, 2016, 384, 672), Rect2(2976, 1248, 288, 288), Rect2(1344, 1344, 288, 288)]
-    _add_building(1, "base", Vector2(384, 384), true)
-    _add_building(2, "base", Vector2(4416, 2816), true)
-    add_unit(1, "soldier", Vector2(640, 256))
-    add_unit(1, "soldier", Vector2(640, 320))
-    add_unit(1, "soldier", Vector2(640, 384))
-    add_unit(1, "soldier", Vector2(640, 448))
-    add_unit(1, "soldier", Vector2(640, 512))
-    add_unit(1, "soldier", Vector2(640, 576))
-    add_unit(2, "soldier", Vector2(4160, 2944))
-    add_unit(2, "soldier", Vector2(4160, 2880))
-    add_unit(2, "soldier", Vector2(4160, 2816))
-    add_unit(2, "soldier", Vector2(4160, 2752))
-    add_unit(2, "soldier", Vector2(4160, 2688))
-    add_unit(2, "soldier", Vector2(4160, 2624))
-    ores = {
-        1: {"pos": Vector2(704, 704), "amount": 4000}, 2: {"pos": Vector2(4096, 2496), "amount": 4000},
-        3: {"pos": Vector2(2400, 1600), "amount": 6000},
-        4: {"pos": Vector2(704, 1600), "amount": 5000}, 5: {"pos": Vector2(4096, 1600), "amount": 5000},
-        6: {"pos": Vector2(1600, 500), "amount": 6000}, 7: {"pos": Vector2(3200, 2700), "amount": 6000},
-        8: {"pos": Vector2(3800, 700), "amount": 7000}, 9: {"pos": Vector2(1000, 2500), "amount": 7000}
-    }
+    obstacles.assign(terrain.definition.get("obstacles", []))
+    for owner in ([1] if is_test_map() else [1, 2]):
+        var spawn: Vector2 = terrain.definition.spawns[owner - 1]
+        _add_building(owner, "base", spawn, true)
+    for owner in ([1] if is_test_map() else [1, 2]):
+        var spawn: Vector2 = terrain.definition.spawns[owner - 1]
+        var facing := 1.0 if owner == 1 else -1.0
+        for index in range(6):
+            var position := spawn + Vector2(256.0, -128.0 + index * 64.0) * facing
+            if is_test_map():
+                position = terrain.definition.sample_bounds.position + Vector2(720 + index * 36, 520)
+            add_unit(owner, "soldier", position)
+    if is_test_map():
+        var origin: Vector2 = terrain.definition.sample_bounds.position
+        money = {1: 10000, 2: 0}
+        _add_building(1, "barracks", origin + Vector2(140, 520), true)
+        _add_building(1, "refinery", origin + Vector2(300, 160), true)
+        add_unit(1, "harvester", origin + Vector2(400, 160))
+    for index in range(terrain.definition.ores.size()):
+        ores[index + 1] = terrain.definition.ores[index].duplicate(true)
     rebuild_navigation()
     update_visibility()
+    return true
+
+func is_test_map() -> bool:
+    return bool(terrain.definition.get("test_only", false))
+
 
 func update_visibility() -> void:
+    if is_test_map():
+        for owner in [1, 2]:
+            visible[owner].fill(1)
+            explored[owner].fill(1)
+        return
     for owner in [1, 2]:
         var cells: PackedByteArray = visible[owner]
         cells.fill(0)
@@ -82,6 +110,10 @@ func update_visibility() -> void:
                 if entity.owner != owner or entity.hp <= 0:
                     continue
                 var center: Vector2 = entity.pos
+                if map_id != "prototype":
+                    for index in terrain.visible_cells(center, EYE_HEIGHTS.get(entity.type, 40.0)):
+                        cells[index] = 1
+                    continue
                 for x in range(maxi(0, int(center.x / CELL) - 11), mini(GRID.x, int(center.x / CELL) + 12)):
                     for y in range(maxi(0, int(center.y / CELL) - 11), mini(GRID.y, int(center.y / CELL) + 12)):
                         if center.distance_to(Vector2(x * CELL + 16, y * CELL + 16)) <= 340:
@@ -116,7 +148,22 @@ func _add_building(owner: int, kind: String, pos: Vector2, complete: bool) -> in
     var stats: Dictionary = BUILD_TYPES[kind]
     buildings[id] = {"owner": owner, "type": kind, "pos": pos, "hp": stats.hp,
         "remaining": 0 if complete else stats.time, "queue": [], "flash": 0, "rally": Vector2.ZERO, "cooldown": 0}
+    if kind == "barracks":
+        BarracksFlight.initialize(buildings[id], terrain.height_at(pos))
     return id
+
+
+func can_target(attacker: Dictionary, target: Dictionary) -> bool:
+    var layers: Array = WEAPON_TARGETS.get(attacker.type, [])
+    return weapon_can_target(layers, target)
+
+
+func weapon_can_target(layers: Array, target: Dictionary) -> bool:
+    return ("air" if BarracksFlight.is_airborne(target) else "ground") in layers
+
+
+func deployment_site(owner: int, id: int, pos: Vector2) -> Dictionary:
+    return BarracksFlight.placement(self, owner, id, pos)
 
 func footprint(b: Dictionary, margin: float = 0.0) -> Rect2:
     var size: Vector2 = BUILD_TYPES[b.type].size
@@ -132,10 +179,10 @@ func _bunker_target(b: Dictionary) -> Dictionary:
     var best_distance := BUILD_TYPES.bunker.range
     for id: int in units:
         var u: Dictionary = units[id]
-        if u.owner == b.owner or u.hp <= 0 or not can_see(int(b.owner), u.pos):
+        if u.owner == b.owner or u.hp <= 0 or not can_target(b, u) or not can_see(int(b.owner), u.pos):
             continue
         var distance: float = (b.pos as Vector2).distance_to(u.pos)
-        if distance <= best_distance:
+        if distance <= best_distance and terrain.line_of_sight(b.pos, u.pos, EYE_HEIGHTS.bunker, EYE_HEIGHTS[u.type]):
             best = u
             best_distance = distance
     return best
@@ -167,13 +214,16 @@ func build_error(owner: int, kind: String, position: Vector2) -> String:
     var rect := Rect2(pos - BUILD_TYPES[kind].size / 2, BUILD_TYPES[kind].size).grow(16)
     if not Rect2(Vector2.ZERO, WORLD).encloses(rect):
         return "Outside map"
+    var ground_error := terrain.build_error(rect)
+    if not ground_error.is_empty():
+        return ground_error
     if int(money[owner]) < int(BUILD_TYPES[kind].cost):
         return "Not enough credits"
     var nearby := false
     for b: Dictionary in buildings.values():
-        if footprint(b, 16).intersects(rect):
+        if BarracksFlight.blocks_ground(b) and footprint(b, 16).intersects(rect):
             return "Buildings need more space"
-        if b.owner == owner and b.remaining == 0 and pos.distance_to(b.pos) < 360:
+        if b.owner == owner and b.remaining == 0 and BarracksFlight.state(b) == "grounded" and pos.distance_to(b.pos) < 360:
             nearby = true
     if not nearby:
         return "Build within 360 px of a completed friendly building"
@@ -194,6 +244,8 @@ func command(owner: int, c: Dictionary) -> String:
     if owner not in [1, 2]:
         return "Spectators cannot issue orders"
     var action: String = str(c.get("action", ""))
+    if action in ["barracks_takeoff", "barracks_move", "barracks_stop", "barracks_deploy"]:
+        return BarracksFlight.command(self, owner, c)
     if action == "build":
         if not c.get("pos") is Vector2:
             return "Invalid position"
@@ -221,6 +273,8 @@ func command(owner: int, c: Dictionary) -> String:
         var kind: String = str(c.get("type", ""))
         if not UNIT_TYPES.has(kind):
             return "Wrong production building"
+        if BarracksFlight.state(b) != "grounded":
+            return "Land before training units"
         if kind == "soldier" and b.type != "barracks":
             return "Wrong production building"
         if kind == "harvester" and b.type != "refinery":
@@ -255,6 +309,18 @@ func command(owner: int, c: Dictionary) -> String:
             return "Invalid enemy"
     if action == "gather" and not ores.has(int(c.get("target", -1))):
         return "Invalid ore field"
+    var allocation := {}
+    if action in ["move", "attack_move"]:
+        var ids: Array = []
+        for value: Variant in requested:
+            if (value is int or value is float) and units.has(int(value)) and units[int(value)].owner == owner and not ids.has(int(value)):
+                ids.append(int(value))
+        if ids.is_empty():
+            return "No compatible friendly units selected"
+        ids.sort()
+        allocation = ArrivalPlanner.plan(self, ids, (c.pos as Vector2).clamp(Vector2(18, 18), WORLD - Vector2(18, 18)))
+        if allocation.has("error"):
+            return allocation.error
     var accepted := 0
     for value: Variant in requested:
         if not (value is int or value is float):
@@ -265,36 +331,34 @@ func command(owner: int, c: Dictionary) -> String:
         var u: Dictionary = units[id]
         if action == "attack" and u.type != "soldier":
             continue
+        if action == "attack":
+            var targets: Dictionary = units if c.get("kind") == "unit" else buildings
+            if not can_target(u, targets[int(c.target)]):
+                continue
         if action == "gather" and u.type != "harvester":
             continue
-        u.order     = action if action != "stop" else "idle"
-        u.path      = []
-        u.repath    = 0
-        u.attack_id = -1
+        u.order       = action if action != "stop" else "idle"
+        u.path        = []
+        u.repath      = 0
+        u.attack_kind = ""
+        u.attack_id   = -1
+        u.stuck       = 0
+        u.erase("arrival")
         # Miners auto-seek the nearest visible ore unless explicitly stopped.
         u.auto = action != "stop"
-        if action == "move":
-            var index := accepted
-            var offset := Vector2((index % 4) * 30, (index / 4) * 30) if requested.size() > 1 else Vector2.ZERO
-            var destination: Vector2 = (c.pos + offset).clamp(Vector2(18, 18), WORLD - Vector2(18, 18))
-            # Formation offsets can land on terrain; slide them toward the
-            # clicked point until the destination is actually reachable.
-            for i in range(24):
-                if position_free(destination, UNIT_TYPES[u.type].radius):
-                    break
-                destination = destination.move_toward(u.pos, 8.0)
-            u.target = destination
+        if action in ["move", "attack_move"]:
+            u.target = allocation.orders[id].target
+            u.arrival = allocation.orders[id].arrival
         elif action == "attack":
             u.attack_kind = str(c.kind)
             u.attack_id = int(c.target)
-        elif action == "attack_move":
-            u.target = (c.pos as Vector2).clamp(Vector2(18, 18), WORLD - Vector2(18, 18))
         elif action == "gather":
             u.ore = int(c.target)
         accepted += 1
     return "" if accepted > 0 else "No compatible friendly units selected"
 
 func rebuild_navigation() -> void:
+    arrival_nav_regions.clear()
     nav.region        = Rect2i(0, 0, int(WORLD.x / CELL), int(WORLD.y / CELL))
     nav.cell_size     = Vector2(CELL, CELL)
     nav.offset        = Vector2(CELL / 2, CELL / 2)
@@ -303,19 +367,25 @@ func rebuild_navigation() -> void:
     for x in range(nav.region.size.x):
         for y in range(nav.region.size.y):
             var point := Vector2(x * CELL + 16, y * CELL + 16)
-            nav.set_point_solid(Vector2i(x, y), not position_free(point, 15))
+            nav.set_point_solid(Vector2i(x, y), not position_free(point, 15) or terrain.navigation_clear[y * GRID.x + x] == 0)
     for u: Dictionary in units.values():
         u.path = []
         u.repath = 0
 
+func movement_free(from: Vector2, to: Vector2, radius: float) -> bool:
+    return position_free(to, radius) and terrain.segment_clear(from, to, radius)
+
 func position_free(pos: Vector2, radius: float) -> bool:
+    if map_id != "prototype" and not terrain.position_clear(pos, radius):
+        return false
     if not Rect2(Vector2(radius, radius), WORLD - Vector2.ONE * radius * 2).has_point(pos):
         return false
     for rock: Rect2 in obstacles:
         if rock.grow(radius).has_point(pos):
             return false
     for b: Dictionary in buildings.values():
-        if footprint(b, radius).has_point(pos):
+        var reservation_margin := 16.0 if BarracksFlight.state(b) == "landing" else 0.0
+        if BarracksFlight.blocks_ground(b) and footprint(b, radius + reservation_margin).has_point(pos):
             return false
     return true
 
@@ -333,38 +403,56 @@ func nearest_cell(pos: Vector2) -> Vector2i:
     return base
 
 func move_towards(u: Dictionary, destination: Vector2, stop_distance: float = 4.0) -> void:
+    if u.has("arrival") and destination == u.target:
+        stop_distance = .1
     if (u.pos as Vector2).distance_to(destination) <= stop_distance:
         return
     u.repath = int(u.repath) - 1
     if u.path.is_empty() or u.repath <= 0:
         var start := nearest_cell(u.pos)
         var goal := nearest_cell(destination)
+        if u.has("arrival") and destination == u.target:
+            start = ArrivalPlanner.goal_cell(self, u.pos, terrain.arrival_region_at(u.pos), UNIT_TYPES[u.type].radius)
+            goal = ArrivalPlanner.goal_cell(self, destination, int(u.arrival.region), UNIT_TYPES[u.type].radius)
+            if start.x < 0 or goal.x < 0:
+                u.arrival.waiting = true
+                return
         u.path = Array(nav.get_point_path(start, goal))
         if not u.path.is_empty():
             u.path.pop_front()
-        if position_free(destination, UNIT_TYPES[u.type].radius):
+        if not u.path.is_empty() and movement_free(u.path.back(), destination, UNIT_TYPES[u.type].radius):
             u.path.append(destination)
-        u.repath = 20
+        u.repath = 20 + absi(hash(str(destination.x) + "_" + str(destination.y))) % 20
     if u.path.is_empty():
         # Final approach: same nav cell as the goal but the exact point is
         # still away — walk straight to it while terrain allows, instead of
         # freezing one cell short forever.
         if (u.pos as Vector2).distance_to(destination) > stop_distance and position_free(destination, UNIT_TYPES[u.type].radius):
             var direct: Vector2 = (u.pos as Vector2).move_toward(destination, UNIT_TYPES[u.type].speed / TICK)
-            if position_free(direct, UNIT_TYPES[u.type].radius):
+            if ArrivalPlanner.reserved_for_other(self, u, direct):
+                return
+            if u.has("arrival") and _unit_blocks(u, direct):
+                _arrival_sidestep(u, destination)
+                return
+            if movement_free(u.pos, direct, UNIT_TYPES[u.type].radius):
                 u.pos = direct
         return
     var waypoint: Vector2 = u.path[0]
     var next: Vector2 = (u.pos as Vector2).move_toward(waypoint, UNIT_TYPES[u.type].speed / TICK)
-    if _unit_blocks(u, next) and position_free(next, UNIT_TYPES[u.type].radius):
+    if ArrivalPlanner.reserved_for_other(self, u, next):
+        return
+    if u.has("arrival") and _unit_blocks(u, next):
+        _arrival_sidestep(u, waypoint)
+        return
+    if _unit_blocks(u, next) and movement_free(u.pos, next, UNIT_TYPES[u.type].radius):
         # Oncoming traffic: steer to our right so opposing flows form lanes.
         var heading: Vector2 = (waypoint - (u.pos as Vector2)).normalized()
         var lane: Vector2 = (u.pos as Vector2) + heading.rotated(PI / 4.0) * (UNIT_TYPES[u.type].speed / TICK)
-        if position_free(lane, UNIT_TYPES[u.type].radius):
+        if movement_free(u.pos, lane, UNIT_TYPES[u.type].radius):
             u.pos = lane
         else:
             u.path.pop_front()
-    elif position_free(next, UNIT_TYPES[u.type].radius):
+    elif movement_free(u.pos, next, UNIT_TYPES[u.type].radius):
         u.pos = next
     else:
         # Blocked (a corner clip or an oncoming unit): escalate sidesteps
@@ -380,7 +468,7 @@ func move_towards(u: Dictionary, destination: Vector2, stop_distance: float = 4.
         ]
         var escaped := false
         for sidestep: Vector2 in sidesteps:
-            if position_free(sidestep, radius):
+            if movement_free(u.pos, sidestep, radius):
                 u.pos = sidestep
                 escaped = true
                 break
@@ -388,6 +476,18 @@ func move_towards(u: Dictionary, destination: Vector2, stop_distance: float = 4.
             u.path.pop_front()
     if next.distance_to(waypoint) < maxf(2.0, UNIT_TYPES[u.type].radius * 0.4) and not u.path.is_empty():
         u.path.pop_front()
+
+func _arrival_sidestep(u: Dictionary, destination: Vector2) -> void:
+    if u.arrival.waiting and int(u.attack_id) < 0:
+        return
+    var heading: Vector2 = (destination - (u.pos as Vector2)).normalized()
+    var length: float = UNIT_TYPES[u.type].speed / TICK
+    for angle: float in [PI / 4, -PI / 4, PI / 2, -PI / 2]:
+        var candidate: Vector2 = u.pos + heading.rotated(angle) * length
+        if not _unit_blocks(u, candidate) and movement_free(u.pos, candidate, UNIT_TYPES[u.type].radius):
+            u.pos = candidate
+            return
+
 
 func _closest_enemy(u: Dictionary) -> Array:
     var result: Array = []
@@ -397,22 +497,33 @@ func _closest_enemy(u: Dictionary) -> Array:
         for id: int in collection:
             var e: Dictionary = collection[id]
             var d: float = (u.pos as Vector2).distance_to(e.pos)
-            if e.owner != u.owner and d < distance and e.hp > 0:
+            if e.owner != u.owner and d < distance and e.hp > 0 and can_target(u, e) and (map_id == "prototype" or can_see(u.owner, e.pos)) and terrain.line_of_sight(u.pos, e.pos, EYE_HEIGHTS[u.type], EYE_HEIGHTS.get(e.type, 40.0)):
                 distance = d
                 result = [kind, id]
     return result
 
-func _fight(u: Dictionary) -> void:
+func _fight(u: Dictionary, fallback_order: String = "idle") -> bool:
     var collection: Dictionary = units if u.attack_kind == "unit" else buildings
-    if not collection.has(int(u.attack_id)):
-        u.attack_id = -1
-        u.order = "idle"
-        return
+    if not collection.has(int(u.attack_id)) or collection[int(u.attack_id)].hp <= 0 or not can_target(u, collection[int(u.attack_id)]):
+        u.attack_kind = ""
+        u.attack_id   = -1
+        u.order       = fallback_order
+        return false
     var enemy: Dictionary = collection[int(u.attack_id)]
     var edge: Vector2 = enemy.pos
     if u.attack_kind == "building":
         edge = (u.pos as Vector2).clamp(footprint(enemy).position, footprint(enemy).end)
     var distance: float = (u.pos as Vector2).distance_to(edge)
+    var clear_shot := terrain.line_of_sight(u.pos, edge, EYE_HEIGHTS[u.type], EYE_HEIGHTS.get(enemy.type, 40.0))
+    if map_id != "prototype" and (not can_see(u.owner, enemy.pos) or not clear_shot):
+        if fallback_order == "attack_move":
+            u.attack_kind = ""
+            u.attack_id = -1
+            return false
+        var firing_position := _firing_position(u, edge)
+        if firing_position.is_finite():
+            move_towards(u, firing_position)
+        return true
     if distance > UNIT_TYPES[u.type].range:
         move_towards(u, edge, 70)
     elif u.cooldown <= 0:
@@ -420,6 +531,25 @@ func _fight(u: Dictionary) -> void:
         enemy.hp -= UNIT_TYPES[u.type].damage
         enemy.flash = 3
         effects.append({"from": u.pos, "to": edge, "life": 5, "kind": "shot", "owner": u.owner, "frame": frame})
+    return true
+
+func _firing_position(u: Dictionary, target: Vector2) -> Vector2:
+    var best := Vector2(INF, INF)
+    var distance := INF
+    for index in range(16):
+        var point := target + Vector2.from_angle(index * TAU / 16.0) * 100.0
+        if not position_free(point, 15) or not terrain.line_of_sight(point, target):
+            continue
+        var route := nav.get_point_path(nearest_cell(u.pos), nearest_cell(point))
+        if route.is_empty():
+            continue
+        var length := 0.0
+        for step in range(1, route.size()):
+            length += route[step].distance_to(route[step - 1])
+        if length < distance:
+            best = point
+            distance = length
+    return best
 
 func _gather(u: Dictionary) -> void:
     if u.cargo >= 60 or (u.cargo > 0 and (not ores.has(int(u.ore)) or ores[int(u.ore)].amount <= 0)):
@@ -461,6 +591,7 @@ func step() -> void:
     if winner != 0:
         return
     frame += 1
+    ArrivalPlanner.refresh(self)
     for e: Dictionary in effects:
         e.life -= 1
     effects = effects.filter(func(e: Dictionary) -> bool: return e.life > 0)
@@ -469,6 +600,10 @@ func step() -> void:
     for id: int in buildings.keys():
         var b: Dictionary = buildings[id]
         b.flash = maxi(0, int(b.flash) - 1)
+        if b.type == "barracks":
+            BarracksFlight.advance(self, id, b)
+            if BarracksFlight.state(b) != "grounded":
+                continue
         if b.remaining > 0:
             b.remaining -= 1
         elif b.type == "bunker":
@@ -507,18 +642,24 @@ func step() -> void:
         var pos_before: Vector2 = u.pos
         if u.order == "move":
             move_towards(u, u.target)
-            if (u.pos as Vector2).distance_to(u.target) < 5:
+            if (u.pos as Vector2).distance_to(u.target) < (.2 if u.has("arrival") else 5.0) and (not u.has("arrival") or not u.arrival.waiting):
                 u.order = "idle"
+                if u.has("arrival"):
+                    u.arrival.arrived = true
         elif u.order == "attack_move":
-            var nearby := _closest_enemy(u)
-            if not nearby.is_empty():
-                u.attack_kind = nearby[0]
-                u.attack_id   = nearby[1]
-                u.order       = "attack"
-            else:
-                move_towards(u, u.target)
-                if (u.pos as Vector2).distance_to(u.target) < 5:
-                    u.order = "idle"
+            if int(u.attack_id) >= 0:
+                _fight(u, "attack_move")
+            if int(u.attack_id) < 0:
+                var nearby := _closest_enemy(u)
+                if not nearby.is_empty():
+                    u.attack_kind = nearby[0]
+                    u.attack_id   = nearby[1]
+                else:
+                    move_towards(u, u.target)
+                    if (u.pos as Vector2).distance_to(u.target) < (.2 if u.has("arrival") else 5.0) and (not u.has("arrival") or not u.arrival.waiting):
+                        u.order = "idle"
+                        if u.has("arrival"):
+                            u.arrival.arrived = true
         elif u.order == "gather":
             _gather(u)
         elif u.order == "attack":
@@ -535,12 +676,15 @@ func step() -> void:
         # Escape hatch: a unit pressed into a corner by its group can stall
         # forever; after ~2s without progress shove it to a nearby free spot.
         if u.order in ["move", "attack_move", "gather"]:
-            if (u.pos as Vector2).distance_to(pos_before) < 0.005:
-                u.stuck = int(u.stuck) + 1
-            else:
+            if (u.has("arrival") and u.arrival.waiting) or (u.order == "attack_move" and int(u.attack_id) >= 0):
                 u.stuck = 0
-            if int(u.stuck) >= 40:
-                _unstick(u)
+            else:
+                if (u.pos as Vector2).distance_to(pos_before) < 0.005:
+                    u.stuck = int(u.stuck) + 1
+                else:
+                    u.stuck = 0
+                if int(u.stuck) >= 40:
+                    _unstick(u)
     _separate_units()
     var removed_building := false
     for kind: String in ["unit", "building"]:
@@ -558,6 +702,9 @@ func step() -> void:
         rebuild_navigation()
     if frame % 4 == 0:
         update_visibility()
+    if is_test_map():
+        winner = 0
+        return
     # Victory: a player is eliminated only when every friendly building is gone.
     var has_building := {1: false, 2: false}
     for b: Dictionary in buildings.values():
@@ -571,10 +718,20 @@ func step() -> void:
         winner = 1
 
 func _spawn_position(b: Dictionary) -> Vector2:
+    if b.type == "barracks":
+        for offset: float in [0.0, -24.0, 24.0, -48.0, 48.0]:
+            var front: Vector2 = b.pos + Vector2(12.36 + offset, -76)
+            var clear := position_free(front, 16) and absf(terrain.height_at(front) - terrain.height_at(b.pos)) < 0.1
+            for unit: Dictionary in units.values():
+                if (unit.pos as Vector2).distance_to(front) < 34:
+                    clear = false
+            if clear:
+                return front
+        return Vector2.ZERO
     for ring in range(3, 8):
         for i in range(16):
             var p: Vector2 = b.pos + Vector2.from_angle(float(i) / 16 * TAU) * ring * 24
-            var clear := position_free(p, 16)
+            var clear := position_free(p, 16) and absf(terrain.height_at(p) - terrain.height_at(b.pos)) < 1.0
             for u: Dictionary in units.values():
                 if (u.pos as Vector2).distance_to(p) < 34:
                     clear = false
@@ -598,7 +755,7 @@ func _unstick(u: Dictionary) -> void:
     for ring in range(1, 5):
         for i in range(8):
             var candidate: Vector2 = (u.pos as Vector2) + Vector2.from_angle(TAU * i / 8.0) * ring * 12.0
-            if position_free(candidate, radius):
+            if ArrivalPlanner.displace_free(self, u, candidate):
                 u.pos = candidate
                 u.path = []
                 u.repath = 0
@@ -607,32 +764,66 @@ func _unstick(u: Dictionary) -> void:
     u.stuck = 0
 
 func _separate_units() -> void:
-    var ids: Array = units.keys()
-    ids.sort()
-    for iteration in range(8):
-        for i in range(ids.size()):
-            for j in range(i + 1, ids.size()):
-                var a: Dictionary = units[ids[i]]
-                var b: Dictionary = units[ids[j]]
-                var delta: Vector2 = b.pos - a.pos
-                var minimum: float = UNIT_TYPES[a.type].radius + UNIT_TYPES[b.type].radius + 1
-                var distance := delta.length()
-                # Touching units let the move sidesteps form lanes; separation
-                # only resolves deeper overlaps so it cannot fight the path.
-                if distance >= minimum - 1.0:
+    # Spatial-hash unit separation keeps dense armies from becoming an O(N^2)
+    # scan every iteration. The maximum combined radius is below one cell.
+    var cell_size := 64.0
+    var grid: Dictionary = {}
+    for id: int in units:
+        var unit: Dictionary = units[id]
+        if unit.hp <= 0:
+            continue
+        var cell := Vector2i(((unit.pos as Vector2) / cell_size).floor())
+        if not grid.has(cell):
+            grid[cell] = []
+        grid[cell].append(id)
+
+    var offsets := [
+        Vector2i.ZERO,
+        Vector2i.RIGHT,
+        Vector2i.DOWN,
+        Vector2i(1, 1),
+        Vector2i(-1, 1)
+    ]
+    for iteration in range(3):
+        for cell: Vector2i in grid:
+            var cell_ids: Array = grid[cell]
+            for i in range(cell_ids.size()):
+                var a: Dictionary = units[cell_ids[i]]
+                if a.hp <= 0:
                     continue
-                var normal := Vector2.RIGHT if distance < 0.001 else delta / distance
-                var amount := (minimum - distance) / 2.0
-                # Slide tangentially as well so head-on units circle around each
-                # other instead of pushing straight back and stalling.
-                var tangent := normal.rotated(PI / 2.0)
-                var slide := amount * 0.6
-                var pa: Vector2 = a.pos - normal * amount + tangent * slide
-                var pb: Vector2 = b.pos + normal * amount + tangent * slide
-                if position_free(pa, UNIT_TYPES[a.type].radius):
-                    a.pos = pa
-                if position_free(pb, UNIT_TYPES[b.type].radius):
-                    b.pos = pb
+                for j in range(i + 1, cell_ids.size()):
+                    _separate_pair(a, units[cell_ids[j]])
+                for offset: Vector2i in offsets:
+                    if offset == Vector2i.ZERO:
+                        continue
+                    var neighbor_ids: Array = grid.get(cell + offset, [])
+                    for j in range(neighbor_ids.size()):
+                        _separate_pair(a, units[neighbor_ids[j]])
+
+
+func _separate_pair(a: Dictionary, b: Dictionary) -> void:
+    if a.hp <= 0 or b.hp <= 0:
+        return
+    var delta: Vector2 = b.pos - a.pos
+    var minimum: float = UNIT_TYPES[a.type].radius + UNIT_TYPES[b.type].radius + 1
+    var distance := delta.length()
+    # Touching units let move sidesteps form lanes; separation only resolves
+    # deeper overlaps so it cannot fight the path.
+    if distance >= minimum - 1.0:
+        return
+    var normal := Vector2.RIGHT if distance < 0.001 else delta / distance
+    var amount := (minimum - distance) / 2.0
+    # Slide tangentially as well so head-on units circle around each other
+    # instead of pushing straight back and stalling.
+    var tangent := normal.rotated(PI / 2.0)
+    var slide := amount * 0.6
+    var pa: Vector2 = a.pos - normal * amount + tangent * slide
+    var pb: Vector2 = b.pos + normal * amount + tangent * slide
+    if ArrivalPlanner.displace_free(self, a, pa):
+        a.pos = pa
+    if ArrivalPlanner.displace_free(self, b, pb):
+        b.pos = pb
+
 
 func _ai_step() -> void:
     var base := -1
@@ -721,7 +912,7 @@ func _ai_attack_target() -> int:
     var best_distance := INF
     for id: int in buildings:
         var b: Dictionary = buildings[id]
-        if b.owner != 1:
+        if b.owner != 1 or not can_target({"type": "soldier"}, b):
             continue
         var distance: float = (b.pos as Vector2).distance_to(origin)
         if distance < best_distance:
@@ -730,18 +921,283 @@ func _ai_attack_target() -> int:
     return best
 
 func snapshot() -> Dictionary:
-    return {"version": VERSION, "match": match_id, "frame": frame, "units": units.duplicate(true), "buildings": buildings.duplicate(true),
+    return {"version": VERSION, "map_id": map_id, "map_version": terrain.definition.version, "map_checksum": terrain.checksum, "match": match_id, "frame": frame, "units": units.duplicate(true), "buildings": buildings.duplicate(true),
         "ores": ores.duplicate(true), "money": money.duplicate(true), "winner": winner, "effects": effects.duplicate(true),
         "visible": visible.duplicate(true), "explored": explored.duplicate(true)}
 
-func apply_snapshot(state: Dictionary) -> void:
+func validate_snapshot(state: Dictionary) -> bool:
+    last_snapshot_error = ""
+    for field in ["version", "map_id", "map_version", "map_checksum", "match", "frame", "units", "buildings", "ores", "money", "winner", "effects", "visible", "explored"]:
+        if not state.has(field):
+            last_snapshot_error = "Snapshot is missing %s." % field
+            return false
+    if typeof(state.version) != TYPE_STRING or state.version != VERSION:
+        last_snapshot_error = "Snapshot version mismatch."
+        return false
+    if typeof(state.map_id) != TYPE_STRING or typeof(state.map_version) != TYPE_INT or typeof(state.map_checksum) != TYPE_STRING:
+        last_snapshot_error = "Invalid map identity."
+        return false
+    var candidate = terrain
+    if state.map_id != map_id:
+        candidate = MapTerrain.new()
+        if not candidate.load_map(state.map_id):
+            last_snapshot_error = "Unknown or invalid map."
+            return false
+    if candidate.definition.is_empty() or state.map_version != candidate.definition.version or state.map_checksum != candidate.checksum:
+        last_snapshot_error = "Map content mismatch. Both players need identical maps."
+        return false
+    if typeof(state.match) != TYPE_INT or int(state.match) < 0:
+        last_snapshot_error = "Snapshot match id is invalid."
+        return false
+    if typeof(state.frame) != TYPE_INT or int(state.frame) < 0:
+        last_snapshot_error = "Snapshot frame is invalid."
+        return false
+    if typeof(state.winner) != TYPE_INT or int(state.winner) not in [0, 1, 2, 3]:
+        last_snapshot_error = "Snapshot winner is invalid."
+        return false
+    if not _validate_snapshot_dictionary(state.units, MAX_SNAPSHOT_UNITS, "units", true):
+        return false
+    if not _validate_snapshot_dictionary(state.buildings, MAX_SNAPSHOT_BUILDINGS, "buildings", false):
+        return false
+    if not _validate_snapshot_dictionary(state.ores, MAX_SNAPSHOT_ORES, "ores", false):
+        return false
+    if not _validate_money(state.money):
+        return false
+    if not _validate_effects(state.effects, int(state.frame)):
+        return false
+    if not _validate_visibility(state.visible, "visible"):
+        return false
+    if not _validate_visibility(state.explored, "explored"):
+        return false
+    return true
+
+
+func _validate_snapshot_dictionary(value: Variant, limit: int, label: String, units_table: bool) -> bool:
+    if not (value is Dictionary):
+        last_snapshot_error = "Snapshot %s table is not a dictionary." % label
+        return false
+    var table: Dictionary = value
+    if table.size() > limit:
+        last_snapshot_error = "Snapshot %s table is too large." % label
+        return false
+    for raw_id: Variant in table.keys():
+        if typeof(raw_id) != TYPE_INT or int(raw_id) <= 0:
+            last_snapshot_error = "Snapshot %s id is invalid." % label
+            return false
+        var entry: Variant = table[raw_id]
+        if units_table:
+            if not _validate_unit_entry(entry):
+                return false
+        elif label == "buildings":
+            if not _validate_building_entry(entry):
+                return false
+        else:
+            if not _validate_ore_entry(entry):
+                return false
+    return true
+
+
+func _validate_unit_entry(value: Variant) -> bool:
+    if not (value is Dictionary):
+        last_snapshot_error = "Snapshot unit entry is not a dictionary."
+        return false
+    var unit: Dictionary = value
+    for field in ["owner", "type", "pos", "hp", "order", "target", "attack_kind", "attack_id", "ore", "cargo", "cooldown", "work", "path", "repath", "flash", "auto", "stuck"]:
+        if not unit.has(field):
+            last_snapshot_error = "Snapshot unit is missing %s." % field
+            return false
+    if typeof(unit.owner) != TYPE_INT or int(unit.owner) not in [1, 2] or typeof(unit.type) != TYPE_STRING or not UNIT_TYPES.has(unit.type):
+        last_snapshot_error = "Snapshot unit owner or type is invalid."
+        return false
+    var kind: String = str(unit.type)
+    if not _validate_vector2(unit.pos, WORLD, "unit position") or not _validate_vector2(unit.target, WORLD * 2.0, "unit target"):
+        return false
+    var max_hp: int = int(UNIT_TYPES[kind].hp)
+    if typeof(unit.hp) != TYPE_INT or int(unit.hp) < 0 or int(unit.hp) > max_hp:
+        last_snapshot_error = "Snapshot unit hp is invalid."
+        return false
+    if typeof(unit.order) != TYPE_STRING or unit.order not in ["idle", "move", "attack", "attack_move", "gather"]:
+        last_snapshot_error = "Snapshot unit order is invalid."
+        return false
+    if typeof(unit.attack_kind) != TYPE_STRING or unit.attack_kind not in ["", "unit", "building"]:
+        last_snapshot_error = "Snapshot unit attack kind is invalid."
+        return false
+    if typeof(unit.attack_id) != TYPE_INT or int(unit.attack_id) < -1 or int(unit.attack_id) > 1000000:
+        last_snapshot_error = "Snapshot unit attack id is invalid."
+        return false
+    if typeof(unit.ore) != TYPE_INT or int(unit.ore) < -1 or int(unit.ore) > MAX_SNAPSHOT_ORES:
+        last_snapshot_error = "Snapshot unit ore id is invalid."
+        return false
+    if typeof(unit.cargo) != TYPE_INT or int(unit.cargo) < 0 or int(unit.cargo) > 60:
+        last_snapshot_error = "Snapshot unit cargo is invalid."
+        return false
+    if typeof(unit.cooldown) != TYPE_INT or int(unit.cooldown) < 0 or int(unit.cooldown) > int(UNIT_TYPES[kind].cooldown):
+        last_snapshot_error = "Snapshot unit cooldown is invalid."
+        return false
+    if typeof(unit.work) != TYPE_INT or int(unit.work) < 0 or int(unit.work) > 20:
+        last_snapshot_error = "Snapshot unit work timer is invalid."
+        return false
+    if typeof(unit.path) != TYPE_ARRAY or unit.path.size() > 2048:
+        last_snapshot_error = "Snapshot unit path is invalid."
+        return false
+    for point: Variant in unit.path:
+        if not _validate_vector2(point, WORLD * 2.0, "unit path point"):
+            return false
+    if typeof(unit.repath) != TYPE_INT or int(unit.repath) < -100 or int(unit.repath) > 10000:
+        last_snapshot_error = "Snapshot unit repath timer is invalid."
+        return false
+    if typeof(unit.flash) != TYPE_INT or int(unit.flash) < 0 or int(unit.flash) > 10:
+        last_snapshot_error = "Snapshot unit flash timer is invalid."
+        return false
+    if typeof(unit.auto) != TYPE_BOOL:
+        last_snapshot_error = "Snapshot unit auto flag is invalid."
+        return false
+    if typeof(unit.stuck) != TYPE_INT or int(unit.stuck) < 0 or int(unit.stuck) > 10000:
+        last_snapshot_error = "Snapshot unit stuck timer is invalid."
+        return false
+    if unit.has("arrival"):
+        var arrival: Variant = unit.arrival
+        if not arrival is Dictionary or arrival.size() != 4:
+            last_snapshot_error = "Snapshot arrival intent is invalid."
+            return false
+        if not _validate_vector2(arrival.get("anchor"), WORLD, "arrival anchor"):
+            return false
+        if typeof(arrival.get("region")) != TYPE_INT or arrival.region < 0 or arrival.region >= GRID_CELLS:
+            last_snapshot_error = "Snapshot arrival region is invalid."
+            return false
+        if typeof(arrival.get("waiting")) != TYPE_BOOL or typeof(arrival.get("arrived")) != TYPE_BOOL or (arrival.waiting and arrival.arrived):
+            last_snapshot_error = "Snapshot arrival status is invalid."
+            return false
+    return true
+
+
+func _validate_building_entry(value: Variant) -> bool:
+    if not (value is Dictionary):
+        last_snapshot_error = "Snapshot building entry is not a dictionary."
+        return false
+    var building: Dictionary = value
+    for field in ["owner", "type", "pos", "hp", "remaining", "queue", "flash", "rally", "cooldown"]:
+        if not building.has(field):
+            last_snapshot_error = "Snapshot building is missing %s." % field
+            return false
+    if typeof(building.owner) != TYPE_INT or int(building.owner) not in [1, 2] or typeof(building.type) != TYPE_STRING or not BUILD_TYPES.has(building.type):
+        last_snapshot_error = "Snapshot building owner or type is invalid."
+        return false
+    var kind: String = str(building.type)
+    if not _validate_vector2(building.pos, WORLD, "building position") or not _validate_vector2(building.rally, WORLD * 2.0, "building rally"):
+        return false
+    var max_hp: int = int(BUILD_TYPES[kind].hp)
+    var max_remaining: int = int(BUILD_TYPES[kind].time)
+    if typeof(building.hp) != TYPE_INT or int(building.hp) < 0 or int(building.hp) > max_hp:
+        last_snapshot_error = "Snapshot building hp is invalid."
+        return false
+    if typeof(building.remaining) != TYPE_INT or int(building.remaining) < 0 or int(building.remaining) > max_remaining:
+        last_snapshot_error = "Snapshot construction timer is invalid."
+        return false
+    if typeof(building.queue) != TYPE_ARRAY or building.queue.size() > 5:
+        last_snapshot_error = "Snapshot production queue is invalid."
+        return false
+    for job: Variant in building.queue:
+        if not (job is Dictionary) or not job.has("type") or not job.has("remaining") or typeof(job.type) != TYPE_STRING or not UNIT_TYPES.has(job.type) or typeof(job.remaining) != TYPE_INT:
+            last_snapshot_error = "Snapshot production job is invalid."
+            return false
+        if int(job.remaining) < 0 or int(job.remaining) > int(UNIT_TYPES[job.type].time):
+            last_snapshot_error = "Snapshot production timer is invalid."
+            return false
+    if typeof(building.flash) != TYPE_INT or int(building.flash) < 0 or int(building.flash) > 10:
+        last_snapshot_error = "Snapshot building flash timer is invalid."
+        return false
+    if not BarracksFlight.valid(building, WORLD):
+        last_snapshot_error = "Invalid barracks flight state."
+        return false
+    var max_cooldown := int(BUILD_TYPES.bunker.cooldown)
+    if typeof(building.cooldown) != TYPE_INT or int(building.cooldown) < 0 or int(building.cooldown) > max_cooldown:
+        last_snapshot_error = "Snapshot building cooldown is invalid."
+        return false
+    return true
+
+
+func _validate_ore_entry(value: Variant) -> bool:
+    if not (value is Dictionary):
+        last_snapshot_error = "Snapshot ore entry is not a dictionary."
+        return false
+    var ore: Dictionary = value
+    if not ore.has("pos") or not ore.has("amount") or not _validate_vector2(ore.pos, WORLD, "ore position") or typeof(ore.amount) != TYPE_INT or int(ore.amount) < 0 or int(ore.amount) > MAX_SNAPSHOT_ORE_AMOUNT:
+        last_snapshot_error = "Snapshot ore entry is invalid."
+        return false
+    return true
+
+
+func _validate_money(value: Variant) -> bool:
+    if not (value is Dictionary) or value.size() != 2 or not value.has(1) or not value.has(2):
+        last_snapshot_error = "Snapshot money table is invalid."
+        return false
+    for owner: Variant in value.keys():
+        if typeof(owner) != TYPE_INT or int(owner) not in [1, 2] or typeof(value[owner]) != TYPE_INT or int(value[owner]) < 0 or int(value[owner]) > 1000000000:
+            last_snapshot_error = "Snapshot money entry is invalid."
+            return false
+    return true
+
+
+func _validate_effects(value: Variant, snapshot_frame: int) -> bool:
+    if not (value is Array) or value.size() > MAX_SNAPSHOT_EFFECTS:
+        last_snapshot_error = "Snapshot effects are invalid."
+        return false
+    for effect: Variant in value:
+        if not (effect is Dictionary) or not effect.has("kind") or not effect.has("from") or not effect.has("to") or not effect.has("life") or not effect.has("owner") or not effect.has("frame"):
+            last_snapshot_error = "Snapshot effect entry is invalid."
+            return false
+        if typeof(effect.kind) != TYPE_STRING or effect.kind not in ["shot", "death"] or not _validate_vector2(effect.from, WORLD * 2.0, "effect origin") or not _validate_vector2(effect.to, WORLD * 2.0, "effect target"):
+            return false
+        if typeof(effect.life) != TYPE_INT or int(effect.life) < 0 or int(effect.life) > 60 or typeof(effect.owner) != TYPE_INT or int(effect.owner) not in [1, 2] or typeof(effect.frame) != TYPE_INT or int(effect.frame) < 0 or int(effect.frame) > snapshot_frame:
+            last_snapshot_error = "Snapshot effect metadata is invalid."
+            return false
+    return true
+
+
+func _validate_visibility(value: Variant, label: String) -> bool:
+    if not (value is Dictionary) or value.size() != 2 or not value.has(1) or not value.has(2):
+        last_snapshot_error = "Snapshot %s table is invalid." % label
+        return false
+    for owner: Variant in value.keys():
+        if typeof(owner) != TYPE_INT or int(owner) not in [1, 2] or not (value[owner] is PackedByteArray) or value[owner].size() != GRID_CELLS:
+            last_snapshot_error = "Snapshot %s buffer is invalid." % label
+            return false
+    return true
+
+
+func _validate_vector2(value: Variant, bounds: Vector2, label: String) -> bool:
+    if not (value is Vector2):
+        last_snapshot_error = "Snapshot %s is not a Vector2." % label
+        return false
+    var point: Vector2 = value
+    if not is_finite(point.x) or not is_finite(point.y) or absf(point.x) > bounds.x or absf(point.y) > bounds.y:
+        last_snapshot_error = "Snapshot %s is out of bounds." % label
+        return false
+    return true
+
+
+func apply_snapshot(state: Dictionary) -> bool:
+    if not validate_snapshot(state):
+        return false
+    var changed_map: bool = state.map_id != map_id
+    if changed_map:
+        var next_terrain := MapTerrain.new()
+        if not next_terrain.load_map(state.map_id):
+            return false
+        terrain = next_terrain
+        map_id = state.map_id
+        obstacles.assign(terrain.definition.get("obstacles", []))
     match_id  = state.match
     frame     = state.frame
-    units     = state.units
-    buildings = state.buildings
-    ores      = state.ores
-    money     = state.money
+    units     = state.units.duplicate(true)
+    buildings = state.buildings.duplicate(true)
+    ores      = state.ores.duplicate(true)
+    money     = state.money.duplicate(true)
     winner    = state.winner
-    effects   = state.effects
-    visible   = state.visible
-    explored  = state.explored
+    effects   = state.effects.duplicate(true)
+    visible   = state.visible.duplicate(true)
+    explored  = state.explored.duplicate(true)
+    if changed_map:
+        rebuild_navigation()
+    return true

@@ -1,0 +1,36 @@
+[gd_resource type="Resource" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/maps/map_definition.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+data = {
+"id": "desert_sample", "version": 2, "seed": 29531,
+"title": "荒漠样板区（临时测试）",
+"description": "单机地形试验场 · 全图可见 · 无敌方 AI\n高台、岩壁、矿坑、道路与四种地表材质",
+"size": Vector2(4800, 3200), "test_only": true,
+"preview": "res://assets/maps/sample/preview.png",
+"sample_bounds": Rect2(1376, 832, 2048, 1536),
+"camera_focus": Vector2(2356, 1552), "camera_zoom": 0.64,
+"spawns": [Vector2(1584, 1152), Vector2(2276, 1252)],
+"modules": [], "obstacles": [],
+"plateau": {"center": Vector2(1876, 1882), "radius": Vector2(310, 310), "height": 96.0, "edge_width": 36.0},
+"quarry": {"center": Vector2(2876, 1732), "radius": Vector2(382, 330), "inner_radius": Vector2(262, 210), "height": -96.0, "edge_width": 30.0},
+"ramps": [
+{"start": Vector2(1876, 1112), "end": Vector2(1876, 1772), "height": 96.0, "width": 208.0},
+{"start": Vector2(2876, 1112), "end": Vector2(2876, 1752), "height": -96.0, "width": 208.0}
+],
+"ramp_style": {"end_blend": 48.0, "side_blend": 24.0, "boundary_band": 48.0, "rubble_spacing": 32.0},
+"roads": [
+{"points": [Vector2(1516, 1072), Vector2(1926, 1072), Vector2(2346, 1212), Vector2(2676, 1082), Vector2(3266, 1072)], "width": 152.0},
+{"points": [Vector2(1876, 1072), Vector2(1876, 1402), Vector2(1876, 1882)], "width": 144.0},
+{"points": [Vector2(2876, 1072), Vector2(2876, 1392), Vector2(2876, 1782)], "width": 144.0}
+],
+"materials": {"tile_scale": 96.0, "macro_scale": 460.0, "detail_fade": 2200.0, "ramp_material_strength": 0.78, "ramp_boundary_strength": 0.30},
+"decoration_density": 1.0,
+"ores": [
+{"pos": Vector2(1666, 1542), "amount": 12000},
+{"pos": Vector2(1766, 1922), "amount": 12000},
+{"pos": Vector2(3016, 1782), "amount": 12000}
+]
+}
