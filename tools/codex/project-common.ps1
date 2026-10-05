@@ -1,7 +1,13 @@
 Set-StrictMode -Version Latest
 
 $script:ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path.TrimEnd('\')
-$script:RuntimeDirectory = Join-Path $env:TEMP 'codex-project-rts-host-p2p'
+$projectHasher = [Security.Cryptography.SHA256]::Create()
+try {
+    $projectKey = [BitConverter]::ToString($projectHasher.ComputeHash([Text.Encoding]::UTF8.GetBytes($script:ProjectRoot.ToLowerInvariant()))).Replace('-', '').Substring(0, 16)
+} finally {
+    $projectHasher.Dispose()
+}
+$script:RuntimeDirectory = Join-Path $env:TEMP ('codex-project-rts-' + $projectKey)
 $script:TrackedProcessFile = Join-Path $script:RuntimeDirectory 'processes.json'
 
 function Get-ProcessPathState {
@@ -114,46 +120,16 @@ function Resolve-ProjectScript {
     return $fullPath
 }
 
+. (Join-Path $PSScriptRoot 'toolchain.ps1')
+
 function Get-TrustedGodotPath {
     param([string]$RequestedPath)
-
-    $allowedRoots = @(
-        'D:\mysoftware\godot',
-        'D:\application\Godot_v4.7.2'
-    )
-    $candidates = if ($RequestedPath) {
-        @($RequestedPath)
-    } else {
-        @(
-            'D:\mysoftware\godot\Godot_v4.7.2-stable_win64_console.exe',
-            'D:\mysoftware\godot\Godot_v4.7.2-stable_win64.exe',
-            'D:\application\Godot_v4.7.2\Godot_v4.7.2-stable_win64_console.exe'
-        )
-    }
-
-    foreach ($candidate in $candidates) {
-        $fullPath = [IO.Path]::GetFullPath($candidate)
-        $allowed = $allowedRoots | Where-Object { Test-PathWithin -Candidate $fullPath -Root $_ }
-        if ($allowed -and (Test-Path -LiteralPath $fullPath -PathType Leaf) -and
-            [IO.Path]::GetFileName($fullPath) -match '^Godot.*\.exe$') {
-            return $fullPath
-        }
-    }
-    throw 'No trusted Godot executable was found in the configured installation roots.'
+    Get-RegisteredToolPath -Tool Godot -RequestedPath $RequestedPath
 }
 
 function Get-TrustedBlenderPath {
-    $candidates = @(
-        'D:\mysoftware\blender-5.2.2\blender.exe',
-        'D:\mysoftware\blender-5.2.2\blender-launcher.exe'
-    )
-    foreach ($candidate in $candidates) {
-        if ((Test-Path -LiteralPath $candidate -PathType Leaf) -and
-            [IO.Path]::GetFileName($candidate) -eq 'blender.exe') {
-            return $candidate
-        }
-    }
-    throw 'No trusted Blender executable was found in the configured installation roots.'
+    param([string]$RequestedPath)
+    Get-RegisteredToolPath -Tool Blender -RequestedPath $RequestedPath
 }
 
 function Ensure-RuntimeDirectory {

@@ -1,10 +1,12 @@
 param(
-    [string]$GodotPath = 'D:\application\Godot_v4.7.2\Godot_v4.7.2-stable_win64_console.exe',
+    [string]$GodotPath,
     [string]$ResultDirectory,
     [ValidateSet("prototype", "desert_quarry")]
     [string]$MapId = "prototype"
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '..\tools\codex\project-common.ps1')
+$GodotPath = Get-TrustedGodotPath -RequestedPath $GodotPath
 $projectDir = Split-Path -Parent $PSScriptRoot
 $validationRoot = [IO.Path]::GetFullPath((Join-Path $projectDir '.godot\validation')).TrimEnd('\')
 $resultDir = if ($ResultDirectory) {

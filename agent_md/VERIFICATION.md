@@ -1,5 +1,25 @@
 # 验证索引
 
+## 2026-10-05：工具路径可移植性
+
+- 问题：换机后工具找不到、旧仓库路径无法匹配授权规则。原因：工具入口和九条规则固定了开发机安装目录/仓库位置。修复：新增 `tools/codex/setup-local.ps1` 和公共解析器；自动发现后固定到本机 JSON，规则按当前仓库路径生成；移除跟踪文件里的真实机器路径。配置和生成规则均被 Git 忽略，用户全局配置不变。
+- 初始化提供只读预览、显式工具路径和补充搜索目录。Godot 必需，Blender/MCP 可选；多候选要求显式选择，日常执行拒绝未登记或失效路径。迁移后必须重新初始化；规则文件有自定义修改时拒绝覆盖。进程台账按项目路径哈希隔离，共享 MCP 进程仅识别/报告。
+- `Light -Area Tooling` 最终 PASS，11.281 秒：PowerShell 语法、PATH 环境回归、真实 Godot 启动、工具发现/注册/中文空格目录/迁移/失效路径/可选缺失/幂等性/规则保护/台账隔离。授权检查 27 个正例、7 个反例通过。其他盘符测试仅验证规则生成，没有在另一台实体电脑上运行。
+- `Light -Area Network` PASS，258.743 秒；gameplay 71 项、terrain_maps、两张地图完整 ENet 与清理通过。网络日志目录 `.godot/validation/20261005-124044-25800/network`，覆盖版本拒绝、观战权限、生产战斗、兵营迁移、重连/重开、主机退出及两轮完整快照一致。
+- 实际 Blender 启动通过，版本 5.2.2 LTS，日志 `.godot/toolchain-blender-version.log`。MCP 本轮验证路径注册和共享进程识别，没有额外启动 MCP 服务或执行 Blender 场景操作。
+- Windows 导出退出 0，`.godot/toolchain-portable-export.log.err` 为空；`build/IronFront.exe` 为 131,750,416 字节，PCK 内嵌。导出启动验证返回 `EXPORTED_GAME_SMOKE_PASS`（存活 10 秒），该检查不代替导出包完整玩法测试。
+- 最终 cleanup 确认项目进程和 24560/8766 端口无残留，共享 MCP 未停止。执行配置/脚本残留扫描仅有刻意构造的测试路径；已有文档历史路径保留。没有游戏逻辑/资产改动，未重复 Full/Visual/Performance；未提交或推送。
+- 独立限制仍未修复：Windows 沙箱因本仓库根目录和 `.git` 的 ACL 更新失败而无法初始化，本轮经平台批准在沙箱外验证。此改造不修改 Windows 所有者/ACL、不关闭沙箱，不保证消除该故障产生的审批；项目本机规则需重启 Codex 后加载。
+
+## 2026-10-04：3D 分支 Windows 导出
+
+- `feature/3d-models` 通过固定 `run-godot.ps1 -Action export` 导出 `build/IronFront.exe`，退出 0，131,752,160 字节，PCK 内嵌；仅需分发 EXE。导出日志为 `agent_md/export_3d_20261004.log`，对应 `.err` 为 0 字节。
+- SHA256：`5875A5D0AECD347069268CE4BD6B8705F793DB6D469A4AD334E92E501C8883C6`。
+- `run-exported.ps1 -DurationSeconds 10` 返回 `EXPORTED_GAME_SMOKE_PASS`；仅验证导出程序启动并存活十秒，运行日志为空，不宣称完整玩法或联机回归通过。
+- 导出入口最初无法找到 Godot，原因是安装根目录仍为旧路径；已在 `tools/codex/project-common.ps1` 加入当前 `D:\mysoftware\Godot_v4.7.2` 根目录及 console 候选路径，实际导出和原生 Godot 启动验证通过。
+- 选择 `Light -Area Tooling`：脚本语法、Path 环境变量检查和原生 Godot 启动通过；整体结果失败，原因是 `.codex/rules/default.rules` 仍指向旧仓库 `D:\project\godot_project\rts_host_p2p_prototype`，无法匹配本仓库入口。此权限配置问题未修复；没有修改权限规则。无游戏源码/资源行为变更，跳过 Simulation、Visual、Full/ENet。
+- 冒烟后固定 cleanup 停止测试游戏并确认项目进程和 24560/8766 端口无残留；交付前另执行 ReportOnly 复查。工具修改 diff 检查通过。未提交或推送。
+
 ## 2026-09-30：v4 兵营版本 Windows 导出
 
 - 固定 run-godot.ps1 -Action export 成功，.godot/barracks-v4-export.log 显示 savepack DONE，stderr 空；build/IronFront.exe 为 131,752,000 字节，binary_format/embed_pck=true，无需配套 PCK。

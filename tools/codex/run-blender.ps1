@@ -11,17 +11,7 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'project-common.ps1')
 
-$blender = if ($BlenderPath) {
-    $candidate = [IO.Path]::GetFullPath($BlenderPath)
-    if ([IO.Path]::GetFileName($candidate) -ne 'blender.exe' -or
-        -not (Test-Path -LiteralPath $candidate -PathType Leaf) -or
-        -not (Test-PathWithin -Candidate $candidate -Root 'D:\mysoftware\blender-5.2.2')) {
-        throw 'BlenderPath must point to the trusted Blender installation.'
-    }
-    $candidate
-} else {
-    Get-TrustedBlenderPath
-}
+$blender = Get-TrustedBlenderPath -RequestedPath $BlenderPath
 
 switch ($Action) {
     'version' {

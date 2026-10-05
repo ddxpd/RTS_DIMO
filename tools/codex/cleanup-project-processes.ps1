@@ -21,10 +21,18 @@ if ($StopTracked) {
 }
 
 $projectMarker = $script:ProjectRoot.TrimEnd('\')
-$trustedServiceMarkers = @(
-    'D:\mysoftware\blender_mcp\mcp\.venv\Scripts\blender-mcp.exe',
-    'D:\mysoftware\blender_mcp\mcp\.venv\Scripts\python.exe'
-)
+$trustedServiceMarkers = @()
+try {
+    $serviceConfig = Read-ToolchainConfig
+    if ($serviceConfig.BlenderMcpPath) {
+        $trustedServiceMarkers = @(
+            $serviceConfig.BlenderMcpPath,
+            (Join-Path (Split-Path -Parent $serviceConfig.BlenderMcpPath) 'python.exe')
+        )
+    }
+} catch {
+    Write-Warning ('Shared MCP identification unavailable: ' + $_.Exception.Message)
+}
 $processNames = @('Godot*.exe', 'blender.exe', 'blender-launcher.exe', 'blender-mcp.exe', 'python.exe', 'pythonw.exe')
 
 function Get-RelevantProcessState {

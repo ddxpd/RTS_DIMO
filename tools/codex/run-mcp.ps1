@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'project-common.ps1')
 
-$blenderMcp = 'D:\mysoftware\blender_mcp\mcp\.venv\Scripts\blender-mcp.exe'
+$blenderMcp = Get-RegisteredToolPath -Tool BlenderMcp
 
 switch ($Action) {
     'blender-http' {

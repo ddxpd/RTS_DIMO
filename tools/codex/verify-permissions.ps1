@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 
 $requiredFiles = @(
     (Join-Path $script:ProjectRoot '.codex\config.toml'),
-    (Join-Path $script:ProjectRoot '.codex\rules\default.rules'),
+    $script:LocalRulesPath,
     (Join-Path $PSScriptRoot 'run-godot.ps1'),
     (Join-Path $PSScriptRoot 'run-blender.ps1'),
     (Join-Path $PSScriptRoot 'run-network.ps1'),
@@ -35,6 +35,8 @@ if ($parseErrors.Count -gt 0) {
 }
 
 Write-Output 'WRAPPER_SYNTAX PASS'
+Assert-LocalRulesCurrent
+& (Join-Path $script:ProjectRoot 'tests\toolchain_paths.ps1')
 
 $pathFixture = [Collections.Hashtable]::new([StringComparer]::Ordinal)
 $pathFixture.Add('Path', 'C:\sandbox-tools;C:\Windows;C:\tools with spaces')
@@ -77,18 +79,8 @@ if (-not $codexPath -and $env:LOCALAPPDATA) {
 if (-not $codexPath) {
     throw 'Codex CLI was not found on PATH or in the desktop installation. Execpolicy is NOT verified; install/configure the CLI before retrying Tooling validation.'
 } else {
-    $rulesPath = Join-Path $script:ProjectRoot '.codex\rules\default.rules'
-    $wrapperNames = @(
-        'run-godot.ps1',
-        'run-network.ps1',
-        'run-exported.ps1',
-        'run-blender.ps1',
-        'run-mcp.ps1',
-        'run-validation.ps1',
-        'inspect-cursor.ps1',
-        'cleanup-project-processes.ps1',
-        'verify-permissions.ps1'
-    )
+    $rulesPath = $script:LocalRulesPath
+    $wrapperNames = @(Get-ToolWrapperNames)
     function Get-CommandPolicy {
         param([string[]]$CommandArguments)
         $policyText = & $codexPath execpolicy check --rules $rulesPath -- @CommandArguments 2>&1
@@ -98,7 +90,7 @@ if (-not $codexPath) {
         return (($policyText -join [Environment]::NewLine) | ConvertFrom-Json)
     }
 
-    $shellNames = @('powershell.exe', 'powershell', 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe')
+    $shellNames = @(Get-RuleShellNames)
     foreach ($shellName in $shellNames) {
         foreach ($wrapperName in $wrapperNames) {
             $wrapperPath = Join-Path $PSScriptRoot $wrapperName
@@ -123,8 +115,10 @@ if (-not $codexPath) {
     $controlCases = @(
         @{ Name = 'raw PowerShell'; Command = @('powershell.exe', '-NoProfile', '-Command', 'Get-Process') },
         @{ Name = 'raw cmd'; Command = @('cmd.exe', '/c', 'echo control') },
+        @{ Name = 'initialization'; Command = @('powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'setup-local.ps1')) },
+        @{ Name = 'old checkout'; Command = @('powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $env:TEMP 'old-checkout\tools\codex\run-godot.ps1')) },
         @{ Name = 'unlisted script'; Command = @('powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'not-authorized.ps1')) },
-        @{ Name = 'external script'; Command = @('powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'D:\unrelated-project\inspect-cursor.ps1') },
+        @{ Name = 'external script'; Command = @('powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $env:TEMP 'unrelated-project\inspect-cursor.ps1')) },
         @{ Name = 'lookalike path'; Command = @('powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'inspect-cursor.ps1.extra')) }
     )
     foreach ($controlCase in $controlCases) {
@@ -138,7 +132,12 @@ if (-not $codexPath) {
 
 if ($ToolchainSmoke) {
     & (Join-Path $PSScriptRoot 'run-godot.ps1') -Action version
-    & (Join-Path $PSScriptRoot 'run-blender.ps1') -Action version
+    $smokeConfig = Read-ToolchainConfig
+    if ($smokeConfig.BlenderPath) {
+        & (Join-Path $PSScriptRoot 'run-blender.ps1') -Action version
+    } else {
+        Write-Output 'BLENDER_SMOKE SKIP (optional tool not configured)'
+    }
     & (Join-Path $PSScriptRoot 'cleanup-project-processes.ps1') -ReportOnly
     Write-Output 'TOOLCHAIN_SMOKE PASS'
 } else {
