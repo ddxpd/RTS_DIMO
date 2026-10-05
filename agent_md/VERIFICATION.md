@@ -1,5 +1,14 @@
 # 验证索引
 
+## 2026-10-05：3D Releases 分发
+
+- 用户选择 Releases 分发并要求实施：移除 `build/IronFront.exe` 的 Git 跟踪，保留忽略规则、旧 Git 历史和本机文件。README 改为 Releases 下载入口；原工作区的未提交 EXE 保持不变。
+- 在隔离整合工作目录从当前 3D 源码重新导出：退出 0，`agent_md/release_3d_export.log.err` 为 0 字节；EXE 为 131,747,840 字节，PCK 内嵌。
+- SHA256：`3cd05b170850ce27ef1f6f4c3dfbfc5c192fb1e1a2b85633966d0fefe37c7418`。发布附件包含 EXE 和对应 `.sha256` 文件，不将二者加入 Git。
+- `run-exported.ps1 -DurationSeconds 10` 返回 `EXPORTED_GAME_SMOKE_PASS`，固定 cleanup 确认项目进程和端口无残留；启动检查不等同于导出包完整玩法回归。
+- 源码验证沿用下方 3D 整合记录；本次仅改分发与文档，不重复 Full。用户已要求在已告知性能限制后继续发布；性能问题仍未修复，Full 不宣称通过，发布说明列明限制并标记预发布。
+- 计划版本 `3D-v0.1`，附件上传后再将 main 与标签指向最终源码提交，公开 Release 并回下载校验大小与 SHA256。发布结果在交付时以远端状态为准。
+
 ## 2026-10-05：3D 主分支整合
 
 - 整合基线：`origin/main` 的 `91c41c3` 与 3D 分支 `36418b2`，在独立 worktree 中正常合并，保留两条历史；README 冲突保留 3D 说明。原工作区未提交的 EXE 不参与整合。
