@@ -165,19 +165,22 @@ func run() -> void:
     check(Presentation.choose_lod(70, 1, false) == 2, "Far threshold")
     check(Presentation.choose_lod(85, 2, false) == 2, "Far hysteresis holds")
     check(Presentation.choose_lod(20, 2, true) == 1, "Transitions retain mechanics")
-    check(visual._materials.size() <= 6, "Shared per-building material budget")
+    check(visual._materials.size() <= 7, "Shared per-building material budget")
     check(presentation.materials.RTS_Body.albedo_texture != null and presentation.materials.RTS_Body.normal_texture != null, "Imported body preserves PBR textures")
     check_weather_texture(presentation.materials.RTS_Body.albedo_texture, "basecolor")
     check_weather_texture(presentation.materials.RTS_Body.roughness_texture, "orm")
     check(presentation.materials.RTS_Body.roughness_texture_channel == BaseMaterial3D.TEXTURE_CHANNEL_GREEN, "Roughness reads ORM green")
     check(presentation.materials.RTS_Body.metallic_texture_channel == BaseMaterial3D.TEXTURE_CHANNEL_BLUE, "Metallic reads ORM blue")
-    var limits := [[6000, 8000], [3000, 4000], [800, 1500]]
+    var limits := [[6000, 8400], [3000, 4250], [800, 1650]]
     for level in range(3):
         presentation.set_lod(level)
         var measured := counts(visual.model, true)
         print("LOD_BUDGET ", level, " ", measured)
         check(measured.triangles >= limits[level][0] and measured.triangles <= limits[level][1], "LOD %d triangle budget" % level)
-        check(measured.surfaces <= 40, "LOD surface budget")
+        check(measured.surfaces <= 44, "LOD surface budget")
+        for part in ["RearEngineLMesh", "RearEngineRMesh"]:
+            var nozzle: MeshInstance3D = visual.model.find_child(part, true, false)
+            check(nozzle != null and nozzle.visible, "Rear propulsion retained in LOD %d: %s" % [level, part])
         check_chassis(visual.model, level)
         if level == 2:
             var hull: MeshInstance3D = visual.model.find_child("HullMesh", true, false)
@@ -229,6 +232,45 @@ func run() -> void:
     presentation.update(fixture, 0.1, camera)
     check(presentation.engine.emission_energy_multiplier > 1, "Airborne engines lit")
     await capture("airborne-blue")
+    fixture.pos = Vector2.ZERO
+    fixture.flight = {"state": "airborne", "ticks": 0, "moving": true, "target": Vector2(0, -120), "heading": 0.0}
+    camera.size = 260
+    for direction: Vector2 in [Vector2.UP, Vector2.RIGHT, Vector2.DOWN, Vector2.LEFT]:
+        var heading := atan2(-direction.x, -direction.y)
+        fixture.flight.heading = heading
+        fixture.flight.target = direction * 120
+        visual.rotation.y = heading
+        var rear := Vector3(-direction.x, 0, -direction.y)
+        camera.position = visual.position + rear * 220 + Vector3(95, 140, 0)
+        camera.look_at(visual.position + Vector3(0, 35, 0))
+        presentation.update(fixture, .1, camera)
+        check(presentation.rear_jets.all(func(jet: MeshInstance3D) -> bool: return jet.is_visible_in_tree()), "Moving rear jets enabled")
+        check(visual.get_visual_forward().dot(Vector3(direction.x, 0, direction.y)) > .999, "Front door follows travel direction")
+        for jet: MeshInstance3D in presentation.rear_jets:
+            check(jet.global_basis.y.normalized().dot(rear) > .999, "Exhaust points opposite travel")
+        await capture("direction-%d" % roundi(rad_to_deg(heading)))
+    for level in range(3):
+        presentation.set_lod(level)
+        await capture("rear-engines-lod%d" % level)
+    fixture.flight.heading += .4
+    presentation.update(fixture, .1, camera)
+    check(presentation.rear_jets.all(func(jet: MeshInstance3D) -> bool: return not jet.visible), "Turning disables rear exhaust")
+    fixture.flight.heading -= .4
+    fixture.flight.moving = false
+    presentation.update(fixture, .1, camera)
+    check(presentation.rear_jets.all(func(jet: MeshInstance3D) -> bool: return not jet.visible), "Hover disables rear exhaust")
+    await capture("rear-engines-hover")
+    fixture.flight.moving = true
+    visual.visible = false
+    presentation.update(fixture, .1, camera)
+    check(presentation.rear_jets.all(func(jet: MeshInstance3D) -> bool: return not jet.visible), "Hidden propulsion stops")
+    visual.visible = true
+    fixture.flight = {"state": "airborne", "ticks": 0}
+    visual.rotation.y = 0
+    camera.position = Vector3(170, 230, -270)
+    camera.size = 500
+    camera.look_at(Vector3(0, 90, 0))
+    presentation.update(fixture, .1, camera)
     visual.set_faction(2)
     await capture("airborne-red")
     # Look up at each underside: engine/gear openings and retained deck must be

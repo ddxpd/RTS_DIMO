@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 sys.dont_write_bytecode = True
 from barracks_underbody import validate_motion
 import barracks_weathering
+from barracks_rear_engines import add_rear_engines
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 SOURCE = os.path.join(ROOT, 'assets/models/source/barracks_rts_baseline.glb')
@@ -336,6 +337,7 @@ def main():
             bake_far_colors([o for o in root.children_recursive if o.type == 'MESH'])
         else:
             bake_normals(sources, level)
+        add_rear_engines(root, level)
         destination = os.path.join(OUT, 'barracks' + (f'_lod{level}' if level else '') + '.glb')
         bpy.ops.export_scene.gltf(filepath=destination, export_format='GLB',
             export_animations=(level == 0), export_morph=True,
@@ -355,9 +357,9 @@ def main():
         print('RTS_COUNTS', level, json.dumps(result), flush=True)
         if level == 0:
             assert {'Takeoff', 'Landing', 'Flag_Wind_Loop'} <= set(result['clips']), result
-        low, high = [(6000, 8000), (3000, 4000), (800, 1500)][level]
+        low, high = [(6000, 8400), (3000, 4250), (800, 1650)][level]
         assert low <= result['triangles'] <= high, result
-        assert result['materials'] <= 6 and result['surfaces'] <= 40, result
+        assert result['materials'] <= 7 and result['surfaces'] <= 44, result
         # Validate the exported/reimported topology, not just Blender's working mesh.
         bpy.ops.object.select_all(action='SELECT')
         bpy.ops.object.delete(use_global=False)

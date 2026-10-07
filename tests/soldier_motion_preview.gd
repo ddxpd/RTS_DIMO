@@ -6,6 +6,12 @@ func _initialize() -> void:
 
 
 func run() -> void:
+    var output := "res://assets/concept_art/"
+    if "--vertical-carry" in OS.get_cmdline_args():
+        output = "res://assets/concept_art/soldier_vertical_carry/game/"
+    if "--clear-run" in OS.get_cmdline_args():
+        output = "res://assets/concept_art/soldier_clear_run/game/"
+    DirAccess.make_dir_recursive_absolute(output)
     root.size = Vector2i(1280, 900)
     var game = preload("res://scenes/main.tscn").instantiate()
     game.selected_map_id = "desert_sample"
@@ -27,7 +33,7 @@ func run() -> void:
         await process_frame
         if frame in [12, 20, 28, 36, 44, 90]:
             await RenderingServer.frame_post_draw
-            var path := "res://assets/concept_art/heavy-soldier-%s-%03d.png" % [version, frame]
+            var path := output + "heavy-soldier-%s-%03d.png" % [version, frame]
             assert(root.get_texture().get_image().save_png(path) == OK)
     if version == "after":
         for route: String in ["front", "highland", "quarry", "return", "turn-stop", "curve"]:
@@ -76,7 +82,7 @@ func run() -> void:
                 await process_frame
                 if frame in [40, 70, 95, 119, 128, 145]:
                     await RenderingServer.frame_post_draw
-                    assert(root.get_texture().get_image().save_png("res://assets/concept_art/heavy-soldier-%s-%03d.png" % [route, frame]) == OK)
+                    assert(root.get_texture().get_image().save_png(output + "heavy-soldier-%s-%03d.png" % [route, frame]) == OK)
             if route == "curve":
                 print("GAME_CURVED_GAIT min_pelvis=", min_pelvis, " max_drop=", max_pelvis_drop)
                 if min_pelvis < .95 or max_pelvis_drop > .08:

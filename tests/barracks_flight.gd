@@ -70,6 +70,8 @@ func run() -> void:
     sim.units.erase(blocker)
     var credits: int = sim.money[1]
     check(sim.command(1, {"action": "barracks_move", "building": id, "pos": destination}).is_empty(), "Air move accepted")
+    advance(sim, 20)
+    check(b.pos == origin, "Quarter turn holds position for one second")
     advance(sim, 10)
     check(is_equal_approx((b.pos as Vector2).distance_to(origin), 30), "Flight speed 60 per second")
     sim.command(1, {"action": "barracks_stop", "building": id})
@@ -78,7 +80,10 @@ func run() -> void:
     check(b.pos == stopped and not b.flight.deploy, "Stop hovers and cancels deployment intent")
     sim.visible[1].fill(1)
     check(sim.command(1, {"action": "barracks_deploy", "building": id, "pos": destination}).is_empty(), "Relocation accepted without friendly radius")
-    advance(sim, 110)
+    for tick in range(250):
+        if b.flight.state == "landing":
+            break
+        sim.step()
     check(b.flight.state == "landing", "Arrives then starts landing")
     check(not sim.position_free(destination, 11), "Landing reserves footprint")
     advance(sim, 80)
@@ -96,7 +101,7 @@ func run() -> void:
     sim.visible[1].fill(1)
     sim.command(1, {"action": "barracks_deploy", "building": id, "pos": origin})
     var late_blocker := sim.add_unit(1, "soldier", origin)
-    advance(sim, 120)
+    advance(sim, 200)
     check(b.flight.state == "airborne" and not b.flight.error.is_empty(), "Occupied-on-arrival site cancels descent and hovers")
     sim.units.erase(late_blocker)
     sim.visible[1].fill(1)

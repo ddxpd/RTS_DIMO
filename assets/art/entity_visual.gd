@@ -93,6 +93,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+    if kind == "barracks":
+        return
     if absf(angle_difference(rotation.y, _target_heading)) >= 0.001:
         rotation.y = lerp_angle(rotation.y, _target_heading, minf(delta * 10.0, 1.0))
 

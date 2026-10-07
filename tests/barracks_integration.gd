@@ -76,7 +76,8 @@ func run() -> void:
         game._update_camera_transform()
         game._sync_visuals()
         game._refresh_ui()
-        check(not game.action_buttons[2].disabled and game.action_buttons[2].text == "LIFT OFF (L)", "Lift button")
+        check(not game.action_buttons[2].disabled and game.action_buttons[2].action_id == "takeoff"
+            and game.action_buttons[2].hotkey.text == "L", "Lift button")
         var visual: EntityVisual = game.building_visuals[id].visual
         var ring_offset := visual.selection_ring.global_position - visual.global_position
         check_ring(visual, ring_offset, map_id + " grounded")
@@ -144,20 +145,31 @@ func run() -> void:
         check(game.deploy_building < 0 and not game.menu_visible, "Escape cancels selection without opening menu")
         game._right_click(anchor + Vector2(80, 0))
         check(game.sim.buildings[id].flight.moving, "RMB moves airborne building")
+        for tick in range(20):
+            game.sim.step()
+            for frame in range(3):
+                game.visual_sync._sync_buildings(1.0 / 60.0)
+        check(game.sim.buildings[id].pos == anchor, "Turn before translation")
         game.sim.step()
         game.visual_sync._sync_buildings(1.0 / 60.0)
         check(visual.position.x > anchor.x, "Moving fixture advances rendered building")
+        check(visual.get_visual_forward().dot(Vector3.RIGHT) > .99, "Moving front faces travel direction")
+        check(visual.barracks_presentation.rear_jets.all(func(jet: MeshInstance3D) -> bool: return jet.visible), "Actual move enables rear exhaust")
         check_ring(visual, ring_offset, map_id + " moving")
         key(KEY_S)
         check(not game.sim.buildings[id].flight.moving, "S stops flight")
+        game.visual_sync._sync_buildings(1.0 / 60.0)
+        check(visual.barracks_presentation.rear_jets.all(func(jet: MeshInstance3D) -> bool: return not jet.visible), "Actual stop disables rear exhaust")
         key(KEY_D)
         game.sim.visible[1].fill(1)
         game._deploy_click(anchor)
-        for tick in range(82):
+        for tick in range(180):
             game.sim.step()
             if tick in [20, 40, 60, 81]:
                 game.visual_sync._sync_buildings(1.0 / 60.0)
                 check_ring(visual, ring_offset, map_id + " landing %d" % tick)
+            if game.sim.buildings[id].flight.state == "grounded":
+                break
         game._sync_visuals()
         check(game.sim.buildings[id].flight.state == "grounded", "Deploy click completes landing")
         check_ring(visual, ring_offset, map_id + " landed again")

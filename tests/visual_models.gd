@@ -168,10 +168,12 @@ func _check_visual_forward(visual: EntityVisual, heading: Vector2, message: Stri
 func _check_attack_recoil(visual: EntityVisual, node_name: String, message: String) -> void:
     var motion = visual.soldier_motion
     motion.attack_blend = 1.0
-    motion.clock = 0.0
+    motion.shot_age = 1.0
     motion._pose(Vector2.ZERO)
     var first: Vector3 = motion.muzzle.position
-    motion.clock = 0.06
+    motion.observe_combat(motion.combat_frame + 1, 0)
+    motion.observe_combat(motion.combat_frame + 1, 12)
+    motion.shot_age = 0.06
     motion._pose(Vector2.ZERO)
     check(motion.muzzle.position.z < first.z, message + " follows weapon bone: " + node_name)
     motion.attack_blend = 0.0

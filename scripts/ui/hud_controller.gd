@@ -2,6 +2,7 @@ class_name HudController
 extends Node
 
 const Simulation = preload("res://scripts/simulation.gd")
+const CommandCard = preload("res://scripts/ui/command_card.gd")
 
 var host
 
@@ -36,17 +37,51 @@ func _make_unit_thumbnail(kind: String, caption: String, size: int) -> VBoxConta
     return tile
 
 
+func _refresh_command_cards() -> void:
+    var commands := {}
+    var unavailable: Array[int] = []
+    if not host.selected_units.is_empty():
+        commands = {0: "stop", 1: "move"}
+        for id: int in host.selected_units:
+            if host.sim.units[id].type == "soldier":
+                commands[2] = "attack"
+            elif host.sim.units[id].type == "harvester":
+                commands[3] = "gather"
+    elif host.sim.buildings.has(host.selected_building):
+        var building: Dictionary = host.sim.buildings[host.active_building_id()]
+        match str(building.type):
+            "base":
+                commands = {2: "barracks", 3: "refinery", 5: "bunker", 6: "base"}
+            "refinery":
+                commands = {1: "harvester", 4: "cancel"}
+            "barracks":
+                match Simulation.BarracksFlight.state(building):
+                    "grounded":
+                        commands = {1: "soldier", 2: "takeoff", 4: "cancel"}
+                        if building.remaining > 0:
+                            unavailable.append(1)
+                        if building.remaining > 0 or not building.queue.is_empty():
+                            unavailable.append(2)
+                    "airborne":
+                        commands = {0: "stop", 3: "deploy"}
+    var keys := {
+        "stop": "S", "move": "RMB", "attack": OS.get_keycode_string(host.attack_keycode),
+        "gather": "RMB", "barracks": "B", "takeoff": "L", "deploy": "D"
+    }
+    for i in range(host.action_buttons.size()):
+        var command: String = commands.get(i, "")
+        var selected: bool = command == "attack" and host.attack_mode
+        host.action_buttons[i].present(command, commands.has(i) and i not in unavailable,
+            str(keys.get(command, "")), selected)
+
+
 func refresh() -> void:
     var role := "BLUE" if host.local_slot == 1 else ("RED" if host.local_slot == 2 else "SPECTATOR")
     host.top_label.text = "IRON FRONT   /   %s     CREDITS: %d     %02d:%02d" % [role, int(host.sim.money.get(host.local_slot, 0)), host.sim.frame / 1200, (host.sim.frame / 20) % 60]
     host.resource_label.text = "MINERALS  %d" % int(host.sim.money.get(host.local_slot, 0))
-    # Reset only the unused action slots: toggling an enabled Button every frame
-    # would clear its internal press state and swallow the clicked signal.
-    var active_actions := 0
     host.production_bar.visible = false
     host.production_queue_label.text = ""
     if not host.selected_units.is_empty():
-        active_actions = 4
         var selected: Dictionary = host.sim.units[host.selected_units[0]]
         # Roster: one thumbnail tile per unit kind with its count.
         _clear_container(host.roster_row)
@@ -61,23 +96,6 @@ func refresh() -> void:
             host.selection_label.text = "UNIT STATUS   |   HP %d / %d   |   ORDER: %s" % [selected.hp, stats.hp, str(selected.order).to_upper()]
         else:
             host.selection_label.text = "GROUP"
-        # SC2-style command card: universal commands stay in fixed slots and
-        # type-specific commands each get their own slot, all visible at once.
-        var has_soldier := false
-        var has_harvester := false
-        for id: int in host.selected_units:
-            if host.sim.units[id].type == "soldier":
-                has_soldier = true
-            elif host.sim.units[id].type == "harvester":
-                has_harvester = true
-        host.action_buttons[0].text     = "STOP (S)"
-        host.action_buttons[0].disabled = false
-        host.action_buttons[1].text     = "MOVE (RMB)"
-        host.action_buttons[1].disabled = false
-        host.action_buttons[2].text     = ("ATTACK (A) ON" if host.attack_mode else "ATTACK (A)") if has_soldier else "-"
-        host.action_buttons[2].disabled = not has_soldier
-        host.action_buttons[3].text     = "GATHER (RMB)" if has_harvester else "-"
-        host.action_buttons[3].disabled = not has_harvester
     elif host.sim.buildings.has(host.selected_building):
         var b: Dictionary = host.sim.buildings[host.selected_building]
         var tab_prefix := ""
@@ -89,38 +107,10 @@ func refresh() -> void:
         if Simulation.BarracksFlight.state(b) == "airborne":
             rally_hint = "   |   RMB: fly / D: deploy"
         host.selection_label.text = "BUILDING   %s%s   |   HP %d / %d%s" % [tab_prefix, str(b.type).to_upper(), b.hp, Simulation.BUILD_TYPES[b.type].hp, rally_hint]
-        # Only the building's own actions: production on its producer,
-        # construction orders on the base; nothing unrelated leaks in.
-        var labels: Dictionary = {}
         if b.type == "barracks":
-            active_actions = 5
-            labels = {1: "SOLDIER ($100)", 4: "CANCEL (Refund)"}
-            var flight_state: String = Simulation.BarracksFlight.state(b)
-            if flight_state == "grounded":
-                labels[2] = "LIFT OFF (L)"
-            elif flight_state == "airborne":
-                labels = {0: "STOP (S)", 3: "DEPLOY (D)"}
-            else:
-                labels = {}
-            host.selection_label.text += "   |   " + flight_state.to_upper()
+            host.selection_label.text += "   |   " + Simulation.BarracksFlight.state(b).to_upper()
             if not b.flight.error.is_empty():
                 host.selection_label.text += "   |   " + b.flight.error
-        elif b.type == "refinery":
-            active_actions = 5
-            labels = {1: "MINER ($200)", 4: "CANCEL (Refund)"}
-        elif b.type == "base":
-            active_actions = 7
-            labels = {2: "BARRACKS (B)", 3: "REFINERY ($400)", 5: "BUNKER ($300)", 6: "BASE ($500)"}
-        for i in range(host.action_buttons.size()):
-            if labels.has(i):
-                host.action_buttons[i].text     = str(labels[i])
-                host.action_buttons[i].disabled = false
-            else:
-                host.action_buttons[i].text = "-"
-                host.action_buttons[i].disabled = true
-        if b.type == "barracks":
-            host.action_buttons[2].disabled = b.remaining > 0 or not b.queue.is_empty() or Simulation.BarracksFlight.state(b) != "grounded"
-            host.action_buttons[1].disabled = b.remaining > 0 or Simulation.BarracksFlight.state(b) != "grounded"
             if host.deploy_building >= 0:
                 var reason: String = host.visual_sync.deployment_preview_error
                 host.selection_label.text = "DEPLOY 4 x 3: " + ("All cells clear - click to deploy" if reason.is_empty() else reason)
@@ -143,10 +133,7 @@ func refresh() -> void:
             host.production_queue_label.text = "QUEUE EMPTY"
     else:
         host.selection_label.text = "UNIT STATUS\\nNo unit selected - left-click a unit on the battlefield."
-    for i in range(host.action_buttons.size()):
-        if i >= active_actions:
-            host.action_buttons[i].text = "-"
-            host.action_buttons[i].disabled = true
+    _refresh_command_cards()
     host.resume_button.disabled = not host.active
     host.message_label.text = host.feedback if host.feedback_time > 0 else "Left: select / dbl-click: same type    Right: order / rally    A: attack    B: barracks    S: stop    Ctrl/Shift+N: groups    Esc: menu"
     host.result_label.text = ""
@@ -349,10 +336,7 @@ func build() -> void:
     host.action_grid.custom_minimum_size = Vector2(420, 96)
     command_zone.add_child(host.action_grid)
     for i in range(8):
-        var action_button := Button.new()
-        action_button.custom_minimum_size = Vector2(100, 42)
-        action_button.text = "-"
-        action_button.disabled = true
+        var action_button := CommandCard.new()
         action_button.pressed.connect(host._action_clicked.bind(i))
         host.action_grid.add_child(action_button)
         host.action_buttons.append(action_button)

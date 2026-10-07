@@ -39,8 +39,7 @@ static func basic(game, check: Callable) -> void:
     u.attack_kind = "unit"
     u.attack_id = enemy
     game._sync_units()
-    game.unit_visuals[id].visual._process(1.0)
-    faces(game, id, Vector2.UP, check, "Engaged soldier retains enemy aim")
+    faces(game, id, Vector2.UP, check, "Engaged soldier faces enemy immediately without turn delay")
     game.sim.units.erase(enemy)
     u.pos += Vector2(6, 0)
     game._sync_units()

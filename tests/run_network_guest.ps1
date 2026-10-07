@@ -41,7 +41,9 @@ try {
             if ($spectatorLog -match 'SCRIPT ERROR|ERROR:' -or $spectatorLog -notmatch 'NETWORK_TEST PASS') { throw $spectatorLog }
             Write-Output $spectatorLog
         }
-        if (-not $guestProcess.WaitForExit(110000)) { throw "Guest $roundIndex timed out" }
+        # Match network_probe.gd's 180-second watchdog. Directional relocation
+        # now includes stationary turns before travel and before landing.
+        if (-not $guestProcess.WaitForExit(185000)) { throw "Guest $roundIndex timed out" }
         $text = Get-Content -Raw -LiteralPath $log
         $text = $text -replace 'ERROR: Failed to read the root certificate store\.', ''
         if ($text -match 'SCRIPT ERROR|NETWORK_TEST.*Timeout|ERROR:' -or $text -notmatch 'NETWORK_TEST PASS') { throw "Guest $roundIndex failed: $text" }

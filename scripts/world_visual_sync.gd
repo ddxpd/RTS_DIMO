@@ -170,6 +170,8 @@ func _sync_buildings(delta: float = 0.0) -> void:
             var visual := EntityVisual.new(b.type, b.owner)
             visual.name = "Building%d" % id
             visual.set_position_2d(b.pos, host.sim.terrain.height_at(b.pos))
+            if b.has("flight"):
+                visual.rotation.y = float(b.flight.heading)
             add_child(visual)
             building_visuals[id] = {"visual": visual}
         var vis: Dictionary = building_visuals[id]
@@ -182,8 +184,11 @@ func _sync_buildings(delta: float = 0.0) -> void:
         var target := Vector3(b.pos.x, height, b.pos.y)
         if b.has("flight") and delta > 0 and visual.position.distance_to(target) < 300:
             visual.position = visual.position.lerp(target, 1.0 - exp(-18.0 * delta))
+            visual.rotation.y = lerp_angle(visual.rotation.y, float(b.flight.heading), 1.0 - exp(-18.0 * delta))
         else:
             visual.position = target
+            if b.has("flight"):
+                visual.rotation.y = float(b.flight.heading)
         visual.set_flash(b.flash > 0)
         visual.set_construction_tint(b.remaining > 0)
         if b.remaining > 0:
@@ -262,8 +267,11 @@ func _sync_units(delta: float = 0.0) -> void:
         if u.type != "soldier":
             visual.set_position_2d(u.pos, host.sim.terrain.height_at(u.pos))
         visual.set_flash(u.flash > 0)
-        visual.set_heading(_unit_heading(u, id), u.type == "soldier" and not _has_combat_target(u))
+        visual.set_heading(_unit_heading(u, id), u.type == "soldier")
         visual.set_animation(_unit_animation_state(u))
+        if u.type == "soldier":
+            visual.soldier_motion.configure_view(host.camera, delta)
+            visual.soldier_motion.observe_combat(host.sim.frame, int(u.cooldown))
         if u.type == "soldier" and (delta > 0.0 or not visual.soldier_motion.initialized
                 or u.pos != visual.soldier_motion.current):
             var guest: bool = host.connected and not host.is_host

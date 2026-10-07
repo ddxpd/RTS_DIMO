@@ -24,6 +24,7 @@ var smoke: CPUParticles3D
 var sparks: CPUParticles3D
 var soot: MeshInstance3D
 var effect_root: Node3D
+var rear_jets: Array[MeshInstance3D] = []
 
 
 func _init(owner_visual: Node3D) -> void:
@@ -143,6 +144,11 @@ func update(building: Dictionary, delta: float, camera: Camera3D) -> void:
         set_lod(1)
     var shown: bool = on_screen and visual.is_visible_in_tree()
     effect_root.visible = shown and not visual.construction_tint
+    var thrusting: bool = Simulation.BarracksFlight.is_thrusting(building)
+    for jet: MeshInstance3D in rear_jets:
+        jet.visible = shown and not visual.construction_tint and thrusting
+        if jet.visible:
+            jet.scale.y = 1.0 + 0.06 * sin(phase * 35.0)
     var wind: AnimationPlayer = visual.barracks_motion.wind
     wind.active = shown and lod < 2
     # Medium distance flags update at 10 Hz; near flags use normal interpolation.
@@ -191,6 +197,7 @@ func _create_effects() -> void:
     effect_root = Node3D.new()
     effect_root.name = "BarracksStatus"
     visual.add_child(effect_root)
+    _create_rear_jets()
     if lamp == null:
         lamp = StandardMaterial3D.new()
     lamp.emission_enabled = true
@@ -216,6 +223,35 @@ func _create_effects() -> void:
     soot.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     soot.visible = false
     effect_root.add_child(soot)
+
+
+func _create_rear_jets() -> void:
+    var flame := StandardMaterial3D.new()
+    flame.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    flame.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+    flame.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+    flame.albedo_color = Color(0.15, 0.55, 1.0, 0.7)
+    flame.emission_enabled = true
+    flame.emission = Color(0.1, 0.5, 1.0)
+    flame.emission_energy_multiplier = 1.5
+    var mesh := CylinderMesh.new()
+    mesh.top_radius = 0.15
+    mesh.bottom_radius = 4.8
+    mesh.height = 18.0
+    mesh.radial_segments = 10
+    mesh.rings = 1
+    mesh.material = flame
+    for side: float in [-1.0, 1.0]:
+        var jet := MeshInstance3D.new()
+        jet.name = "RearJetLeft" if side < 0 else "RearJetRight"
+        jet.mesh = mesh
+        # Nozzle exit at Blender (side * 2.7, -3.93, 2.65), scale 12.
+        jet.position = Vector3(side * 32.4, 31.8, 47.16 + 9.0)
+        jet.rotation.x = PI / 2.0
+        jet.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+        jet.visible = false
+        effect_root.add_child(jet)
+        rear_jets.append(jet)
 
 
 func _particles(count: int, spark: bool) -> CPUParticles3D:

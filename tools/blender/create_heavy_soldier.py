@@ -1,4 +1,4 @@
-"""Rebuild only the soldier in the shared source; all coordinates below are Y-up."""
+"""Build the isolated soldier source; all authored coordinates below are Y-up."""
 import os
 import sys
 import math
@@ -7,6 +7,7 @@ from mathutils import Vector
 
 sys.path.insert(0, os.path.dirname(__file__))
 import create_soldier_and_bullet as base
+from soldier_assets import finish_assets
 
 parts = []
 
@@ -47,14 +48,21 @@ def plate(name, pos, rings, mat, bone):
     for height, width, depth in rings:
         for x, z in [(-.7,-1),(.7,-1),(1,-.65),(1,.65),(.7,1),(-.7,1),(-1,.65),(-1,-.65)]:
             vertices.append(xyz((pos[0]+x*width/2, pos[1]+height, pos[2]+z*depth/2)))
-    faces = [tuple(reversed(range(8)))]
+    # The X/Z ring winds clockwise when viewed from +Y. Faces must point
+    # outward: the PBR materials cull backfaces, including the shoulder shell.
+    faces = [tuple(range(8))]
     for i in range(len(rings)-1):
         for j in range(8):
-            faces.append((i*8+j,i*8+(j+1)%8,(i+1)*8+(j+1)%8,(i+1)*8+j))
-    faces.append(tuple(range((len(rings)-1)*8,len(rings)*8)))
+            faces.append((i*8+j,(i+1)*8+j,(i+1)*8+(j+1)%8,i*8+(j+1)%8))
+    faces.append(tuple(reversed(range((len(rings)-1)*8,len(rings)*8))))
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(vertices, [], faces)
     mesh.update()
+    mesh.calc_loop_triangles()
+    volume = sum(mesh.vertices[t.vertices[0]].co.dot(
+        mesh.vertices[t.vertices[1]].co.cross(mesh.vertices[t.vertices[2]].co))
+        for t in mesh.loop_triangles) / 6
+    assert volume > 0, (name, 'Armor normals face inward', volume)
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.collection.objects.link(obj)
     base.assign(obj, mat)
@@ -67,11 +75,11 @@ def plate(name, pos, rings, mat, bone):
 
 
 def build():
-    base.ensure_source_blend()
-    base.remove_hierarchy('soldier')
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    parts.clear()
     root = base.empty('soldier')
     root['reference'] = '士兵重设计-03-重装步兵-v1.png'
-    root['rig_version'] = 2
+    root['rig_version'] = 4
     root['stride_world_units'] = 56.0
     armor = base.material('Heavy_Ceramic', (.58,.61,.62), .28, .56)
     trim = base.material('Heavy_Edge', (.30,.34,.37), .55, .42)
@@ -85,10 +93,13 @@ def build():
     for suffix, sign in [('L',-1),('R',1)]:
         points.update({f'Thigh_{suffix}':(.22*sign,1.27,0), f'Shin_{suffix}':(.22*sign,.70,.04),
                        f'Foot_{suffix}':(.22*sign,.16,0), f'UpperArm_{suffix}':(.47*sign,2.12,0),
-                       f'Forearm_{suffix}':(.56*sign,1.74,.23),
-                       f'Hand_{suffix}': ((-.04,1.79,.90) if sign<0 else (.20,1.73,.57))})
+                       f'Forearm_{suffix}': ((-.20,1.78,.40) if sign<0 else (.56,1.74,.23)),
+                       f'Hand_{suffix}': ((.17,1.74,.90) if sign<0 else (.17,1.73,.52)),
+                       f'Clavicle_{suffix}':(.18*sign,2.10,0),
+                       f'Toe_{suffix}':(.22*sign,.09,.22)})
         parents.update({f'Thigh_{suffix}':'Pelvis',f'Shin_{suffix}':f'Thigh_{suffix}',
-                        f'Foot_{suffix}':f'Shin_{suffix}',f'UpperArm_{suffix}':'Spine',
+                        f'Foot_{suffix}':f'Shin_{suffix}',f'UpperArm_{suffix}':f'Clavicle_{suffix}',
+                        f'Clavicle_{suffix}':'Spine',f'Toe_{suffix}':f'Foot_{suffix}',
                         f'Forearm_{suffix}':f'UpperArm_{suffix}',f'Hand_{suffix}':f'Forearm_{suffix}'})
     arm_data = bpy.data.armatures.new('HeavySkeleton')
     rig = bpy.data.objects.new('HeavyRig', arm_data)
@@ -101,8 +112,9 @@ def build():
         bone = arm_data.edit_bones.new(name)
         bone.head = xyz(p)
         bone.tail = xyz((p[0],p[1]+.16,p[2]))
+    for name in points:
         if parents[name]:
-            bone.parent = arm_data.edit_bones[parents[name]]
+            arm_data.edit_bones[name].parent = arm_data.edit_bones[parents[name]]
     bpy.ops.object.mode_set(mode='OBJECT')
 
     oval('Torso suit',(0,1.91,0),(.80,.77,.43),cloth,'Spine')
@@ -132,15 +144,26 @@ def build():
         plate('Shin armor',(.22*sign,.23,.045),[(0,.26,.29),(.23,.32,.36),(.35,.30,.32)],armor,f'Shin_{suffix}')
         block('Boot sole',(.22*sign,.045,.11),(.31,.09,.48),rubber,f'Foot_{suffix}',.022)
         block('Boot upper',(.22*sign,.16,.09),(.28,.18,.43),trim,f'Foot_{suffix}',.06)
-        plate('Boot toe',(.22*sign,.10,.25),[(0,.28,.21),(.12,.25,.18)],armor,f'Foot_{suffix}')
+        plate('Boot toe',(.22*sign,.10,.25),[(0,.28,.21),(.12,.25,.18)],armor,f'Toe_{suffix}')
         segment('Upper sleeve',upper,elbow,.13,.14,cloth,f'UpperArm_{suffix}')
-        plate('Shoulder shell',(.49*sign,1.99,-.015),[(0,.30,.40),(.15,.40,.44),(.28,.27,.33)],armor,f'UpperArm_{suffix}')
-        block('Team shoulder',(.49*sign,2.14,.221),(.22,.072,.025),faction,f'UpperArm_{suffix}',.009)
+        # A closed shoulder socket overlaps the chest and sleeve. The rigid
+        # pauldron follows the clavicle, never the forearm IK's upper-arm twist.
+        oval('Shoulder socket',(.45*sign,2.10,0),(.38,.36,.38),cloth,f'Clavicle_{suffix}')
+        segment('Shoulder seal',(.28*sign,2.10,0),(.48*sign,2.10,0),.17,.19,rubber,f'Clavicle_{suffix}')
+        plate('Shoulder shell',(.49*sign,1.97,-.015),[(0,.32,.42),(.17,.42,.46),(.31,.29,.35)],armor,f'Clavicle_{suffix}')
+        block('Team shoulder',(.49*sign,2.14,.230),(.22,.072,.025),faction,f'Clavicle_{suffix}',.009)
         oval('Elbow',elbow,(.23,.23,.23),rubber,f'Forearm_{suffix}')
         segment('Forearm',elbow,hand,.135,.13,armor,f'Forearm_{suffix}')
         oval('Glove',hand,(.19,.18,.22),rubber,f'Hand_{suffix}')
         for finger in range(4):
-            block('Finger',(hand[0]-.045+finger*.03,hand[1]-.055,hand[2]+.08),(.025,.055,.08),trim,f'Hand_{suffix}',.009)
+            if suffix == 'R':
+                finger_pos = (hand[0]-.045, hand[1]-.065+finger*.034, hand[2]+.055)
+                size = (.12,.025,.055)
+            else:
+                finger_pos = (hand[0]-.055, hand[1]+.015, hand[2]-.07+finger*.043)
+                size = (.05,.115,.026)
+            block('Finger',finger_pos,size,rubber,f'Hand_{suffix}',.006)
+        block('Thumb',(hand[0]+.075,hand[1]+.045,hand[2]-.025),(.05,.07,.11),rubber,f'Hand_{suffix}',.012)
     block('Rifle receiver',(.17,1.85,.70),(.15,.17,.58),trim,'Weapon',.025)
     block('Rifle stock',(.17,1.86,.30),(.13,.16,.26),rubber,'Weapon',.025)
     block('Rifle handguard',(.17,1.83,1.0),(.16,.15,.28),armor,'Weapon',.02)
@@ -158,15 +181,7 @@ def build():
     modifier.object = rig
     base.empty('Muzzle', xyz((.17,1.84,1.36)), root)
     bpy.context.view_layer.update()
-    bpy.context.preferences.filepaths.save_version = 0
-    bpy.ops.wm.save_as_mainfile(filepath=base.SOURCE_BLEND)
-    bpy.ops.object.select_all(action='DESELECT')
-    root.select_set(True)
-    for obj in root.children_recursive:
-        obj.select_set(True)
-    bpy.context.view_layer.objects.active = root
-    bpy.ops.export_scene.gltf(filepath=base.SOLDIER_GLB, export_format='GLB', use_selection=True,
-                              export_animations=False, export_skins=True, export_yup=True)
+    finish_assets(root, mesh, rig, points, base.PROJECT_ROOT)
     print('HEAVY_SOLDIER_BUILD PASS', len(mesh.data.polygons), 'polygons', len(arm_data.bones), 'bones')
 
 

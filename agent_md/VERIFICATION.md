@@ -1,5 +1,62 @@
 # 验证索引
 
+## 2026-10-07：加强跑步辨识度
+
+- 最终 Light Visual/Performance：.godot/validation/20261007-232546-23700/，全部通过，20.503 秒。覆盖动作、模型、180 人双地图性能、地形与握枪；部分既有测试的单个 ObjectDB 退出警告仍在。
+- 稳定跑步：腾空采样 127 / 420，单脚支撑 155；骨盆起伏 .12997，实际抬脚最高 14.80995，膝角最小 66.77°。枪/护甲包络最小间距 .01361，握点/骨长/立即开火与启停均通过。
+- 连续性：30/60/144FPS、主客端曲线、不同速度、坡道、急转/短停均通过。接地误差 .05018、单帧最大滑移 .000244 世界单位；设计回弹与 IK 修正分开断言，保留原额外修正限值。
+- 渲染：.godot/soldier-clear-run-preview.log，无 stderr；保存 32 帧近景与 32 帧远景（15Hz 骨骼）循环。180 人三轮平均 6.028ms，365 绘制调用、611642 图元。[同步动态对比](../assets/concept_art/soldier_clear_run/index.html)保留上一版朝下持枪作为对照。
+- 实机地图：.godot/soldier-clear-run-game.log，SOLDIER_PREVIEW PASS after，stderr 空；曲线最低骨盆 1.14125、最大单帧下降 .04094；上下坡、转弯/停止及正常镜头截图独立保存至 soldier_clear_run/game。完整地图 180 人平均 24.871ms、P95 54.754ms，包含地图与模拟开销。
+- 本轮无模型资源变化，不需要重新导入；未改网络/模拟协议，不运行 ENet，不导出 EXE。
+
+## 2026-10-07：跑步纵向朝下携枪
+
+- 最终 Light Visual/Performance：.godot/validation/20261007-231321-26364/，全部通过，20.615 秒。包括 visual_models、soldier_locomotion、soldier_rig、两地图 visual_performance、terrain_presentation、terrain_sample_view。部分原有测试仍有单个 ObjectDB 退出警告。
+- 新增几何检查：完整平地跑步周期最小枪/护甲包络间距 .03114；加入转弯、上下坡和启停后最小 .01735。逐帧握点、手臂骨长和真实射击响应通过；原腾空 63、单脚支撑 186 采样保持，原步态接地和滑移上限保持。
+- 实机地图：.godot/soldier-vertical-game-preview.log，SOLDIER_PREVIEW PASS after，stderr 空；覆盖正面、上坡、下坑、返回、转向停步、曲线，42 张截图独立保存。180 人完整地图平均 24.442ms、P95 56.1ms（含地图及模拟，非纯动画基准）。
+- 独立预览与渲染：.godot/soldier-vertical-preview.log，stderr 空；32 帧跑步循环及近景截图已检查。180 人独立场景三轮平均 6.262ms，365 绘制调用、611642 图元，供记录，不与完整地图数据混比。
+- 本轮没有模型资源变化，不需要重新导入；没有模拟/网络或打包变化，未运行 ENet 或导出 EXE。[动态前后对比](../assets/concept_art/soldier_vertical_carry/index.html)存于 Git 忽略的用户预览目录。
+
+## 2026-10-07：右下角战术命令图标
+
+- SVG 独立导入通过：.godot/command-icons-import.log，无 SCRIPT ERROR/ERROR。
+- 最终 Light ActionBar/Presentation：.godot/validation/20261007-225115-26300/，全部通过，3.511 秒；覆盖图标/提示/费用、攻击改键/高亮、矿车混选、生产取消、起降状态、取消选择清理、刷新夹在鼠标按下/释放之间仍能点击，以及两种窗口尺寸的布局。presentation 仍有既有单个 ObjectDB 退出警告。
+- 兵营三地图集成：.godot/command-icons-barracks.log，BARRACKS_INTEGRATION PASS failures=[]。
+- 实机渲染：.godot/command-icons-preview.log，ACTION_BAR_TEST failures=[]，stderr 空；1920×1080 与 1280×720 各保存单位、兵营、基地悬停提示三张截图，位于 assets/concept_art/command_icons/。已目视检查图标及提示，无命令区溢出。
+- 未运行模型/性能/ENet 全量或导出：本轮只改八个命令按钮的界面表现，无模拟、模型或网络接口变化。
+
+## 2026-10-07：肩甲覆盖与双手低位携枪跑步
+
+- 构建：`.godot/soldier-run-build.log` PASS，20 骨、9,800 / 3,398 / 875 三角面、每档两个材质分面；源保持独立 soldier.blend。肩甲原绑定上臂且甲片绕序朝内，已改为锁骨绑定、增加封闭内衬并修正绕序；每块甲片导出前有向体积 >0。`.godot/soldier-run-import.log` 导入通过、stderr 空。
+- 专项：最终 Light 内 soldier_rig PASS，覆盖每档肩标锁骨权重、共享蒙皮/材质/贴图、双手接触和手臂长度、低位枪口俯角/枪托胸前净空、50ms 抬枪/放枪完成、射击即时抵肩、击杀当帧清除命令后仍保持后坐，以及原始即时移动/停止/掉头/伤害/12tick 射击间隔。420 个稳定跑步采样含 63 个双脚实际离地、186 个左脚支撑采样，并检测到摆腿膝关节折叠 <95°。
+- 步态：soldier_locomotion PASS，30/60/144FPS、主客端位移、50/100/150 速度、坡面/曲线/急转/短停通过；最大接地误差 0.05019 世界单位，站立脚滑移 0.000245，紧弯骨盆最大下降 0.033001（原阈值 <0.04）。携枪转换幅度增加，转换帧阈值按混合增量增加，稳定步态仍保留 <0.15；观测转换枪口最大帧移 0.40948 模型单位，没有放宽四肢长度或地面接触限制。
+- 实机：`.godot/soldier-run-game-preview.log` PASS，样板地图前向、转弯、上坡、下坑、返回和停步；骨盆最低 1.10462，最大下降 0.02020。完整游戏 180 人场景平均 23.020ms、P95 52.913ms。已检查近景跑步侧面/斜前、攻击背面和远景红方截图，甲片外壳正常显示。
+- 性能对照：`.godot/soldier-run-before.log` / `soldier-run-after.log`，同镜头 180 名士兵独立场景、相同速度与采样数、关闭 VSync，前后各三轮。之前 5.621 / 5.549 / 5.612ms；之后 5.690 / 5.579 / 5.610ms；平均 5.594 → 5.626ms（+0.58%），满足不超过 5% 的回退预算。绘制调用均为 365，图元 612,002 → 611,642。数据与[前后对比/32帧跑步循环](../assets/concept_art/soldier_run_carry/index.html)保存在用户管理的 concept_art，不加入 Git。
+- 最终分区：`Light -Area Visual,Performance` PASS，15.388 秒，`.godot/validation/20261007-222820-10636/`；visual_models、soldier_locomotion、soldier_rig、双地图 visual_performance、terrain_presentation、terrain_sample_view 和 cleanup 全通过。保留既有 ObjectDB 退出警告。未改模拟/网络合同/打包，未重跑完整 gameplay、ENet 或 EXE；实际即时玩法由专项验证。
+- 开发问题与修复：首次混合读取与 wrapper 调用触发继承 Path/PATH 冲突，改用独立固定 wrapper 调用后生成通过，未更改环境安全设置；补充击杀当帧姿态时出现 should_aim 类型推断失败，改为显式 bool 后完整重跑通过。失败套件被中止时曾与后续测试启动发生清理竞态，等待该套件结束后再重跑；最终固定 cleanup 确认无项目进程及 24560/8766 端口，另做 ReportOnly 复核。
+
+## 2026-10-07：士兵动作与 RTS 渲染优化
+
+- 构建/导入：`.godot/soldier-build-v3b.log` 与 `.godot/soldier-import-v3b.log` 通过，stderr 空。独立源 soldier.blend，不覆盖其他单位源；20 骨、三档 9,800 / 3,400 / 880 三角面、两个材质分面。GLB 导出和运行时实际资源预算分别检查。
+- 专项：`tests/soldier_rig.gd` PASS，最终 `.godot/soldier-rig-final.log`。验证全部 LOD 的骨序、逆绑定、权重、共享材质纹理、1024 图集、双手接触与手臂长度、枪口随枪、首快照不补射、同帧不重射、真实 cooldown 后坐、滞回、60/30/15 次每秒求解、离屏相位累计和回屏重建。直接 Simulation 检查移动首帧满速、掉头无等待、停止无惯性、攻击首 tick 扣血且 12 tick 间隔不变。
+- 原步态回归：30/60/144FPS、50/100/150 速度、主客端位移输入、急转/曲线/坡道/短停全部通过。脚底最大高度误差 0.05019 世界单位、站立脚滑移 0.000245、过渡枪口单帧位移 0.13844 模型单位。即时瞄准方向切换由 soldier_heading_checks 检查，不再要求该指令帧满足旧的延迟转向平滑限制。
+- 分区验证：`Light -Area Visual,Performance` PASS，16.267 秒，`.godot/validation/20261007-215135-25120/`；运行 visual_models、soldier_locomotion、新增 soldier_rig、双地图 visual_performance、terrain_presentation、terrain_sample_view，全部零失败。既有单个 ObjectDB 退出警告保留。未改模拟和网络合同，未重跑完整 gameplay/ENet；即时玩法行为由上述专项验证。打包未变，不导出 EXE。
+- 渲染预览：`.godot/soldier-game-preview-v3.log` PASS，真实样板地图转向、停步、曲线、上坡、下坑及返回；曲线骨盆最低 1.05091、最大下降 0.04314，符合实机原阈值。完整游戏 180 人移动平均 23.979ms、P95 52.867ms、游戏 CPU 18.829ms，仅作为当前整场景观测。
+- 公平对照：`tests/soldier_quality.gd` 在同机器、同镜头、同 180 人/速度/帧数、禁用 VSync 条件前后各三轮。旧帧耗时 19.486 / 19.586 / 19.440ms；末轮新耗时 5.563 / 5.555 / 5.584ms，均明显优于 +5% 回退上限。平均动画 CPU 4.220 → 3.284ms，GPU 15.513 → 2.767ms，可见绘制调用 1,085 → 365，可见三角图元 1,736,282 → 612,002。仅代表该独立渲染场景，不等于整场游戏帧率提升 71%。JSON、同镜头姿势样本、三档蓝红截图和[对比页面](../assets/concept_art/soldier_upgrade/index.html)在 assets/concept_art/soldier_upgrade/，不加入 Git。
+- 开发问题及修复：旧导入配置丢弃图集导致发黑，改为内嵌 Basis Universal 后重导入，实际纹理与渲染通过；首版抬枪幅度过大导致枪口跳动，缩小准备姿势与瞄准姿势差值后保留原 <0.15 阈值通过；曲线骨盆落差过大，降低关键姿势垂向幅度并恢复行进蹲伏后通过。未用增加操作延迟解决表现问题。
+- PowerShell 语法解析通过，最终源码空白/UTF-8/预览路径检查及固定 cleanup；保留现有工作树改动，不上传。
+
+## 2026-10-07：兵营定向飞行与背部双推进器
+
+- 原问题与修复：兵营移动只同步位置，导致任意方向均为横移；新增主机 heading，以 90°/秒原地转向后前进，到部署点先恢复默认朝向，再复查落点及降落。更新快照类型/范围校验与协议版本，世界表现插值朝向，排除通用单位回正对兵营的覆盖。
+- 构建：固定 run-blender 生成三档生产 GLB，日志 `.godot/rear-engines-build.log`；新增背部双喷口，原基线未修改。97 帧机械净空与底盘保留检查通过，已有贴图/动画嵌入校验通过。首次生成的本地化节点名问题已改为按节点类型查找并重跑成功。固定 import 成功，日志 `.godot/rear-engines-import.log`，stderr 空。
+- 专项：`barracks_heading.gd` 558 项检查通过，日志 `.godot/barracks-heading.log`，包括四向、两秒掉头、转向暂停平移、停止、部署转正、落点晚到阻塞、阶段快照恢复、非法朝向与角度边界。远端地图完整斜线逐帧检查曾发现临近目标重新转向停顿；修复为 0.001 弧度浮点容差后全部通过。原飞行规则 46 项通过，日志 `.godot/barracks-flight-direction.log`。
+- 实机：`barracks_rts.gd -Rendered --skip-benchmark` PASS，日志 `.godot/barracks-rear-render.log`；可见三角面近/中/远为 8333/4163/1487，surface 为 41/41/27，PBR 贴图及远景颜色回归通过。四向尾焰反向、转向/悬停/隐藏关闭和三档喷口保持通过。已查看[背部推进](../assets/concept_art/barracks_rts/direction-0.png)、[另一方向](../assets/concept_art/barracks_rts/direction-90.png)和[悬停](../assets/concept_art/barracks_rts/rear-engines-hover.png)。
+- 三地图 `barracks_integration.gd -Rendered` PASS，日志 `.godot/barracks-direction-integration.log`，实际 UI 的右键转向/推进、S 停止尾焰、部署及跟随光圈回归通过。
+- 分区验证：`Light -Area Simulation,Visual,Network,Performance` PASS，256.538 秒，日志 `.godot/validation/20261007-185234-20048/`。运行 gameplay、arrival_formation、visual_models、soldier_locomotion、双地图 visual_performance、terrain_maps、terrain_presentation、terrain_sample、terrain_sample_view，以及 prototype/desert_quarry 完整 ENet。网络加入实际转向后移动、停止角度保持和降落恢复默认朝向的断言；原有版本拒绝、观战权限、采矿、生产、战斗、完整快照一致、重连/重开/主机断线全部通过。
+- 首轮网络在荒漠战斗阶段被外层 110 秒上限中断，日志 `.godot/validation/20261007-184648-27172/`；兵营迁移阶段已成功。外层时限改为 185 秒，与测试内部既有 180 秒超时检测配套；增加攻击阶段日志，最终完整通过。PowerShell 语法解析及 `git diff --check` 通过。
+- 限制：既有单个 ObjectDB 退出泄漏警告仍存在，本轮未处理。使用定向 Light 覆盖实际影响，不运行无关 Camera/ActionBar 等完整套件；未运行单独 1/16/64 建筑绘制基准，已有模型预算检查及通用 Performance 通过。未改打包，未导出 EXE。最终固定 cleanup 返回 PROJECT_PROCESSES none，24560/8766 端口无残留；未新增长期服务。
+
 ## 2026-10-07：兵营选中光圈随本体升降
 
 - 问题与修复：`world_visual_sync.gd` 原先用 `ground - visual.position.y + 0.6` 抵消建筑升空高度，导致光圈始终停在地面。兵营存在 flight 状态时改用固定局部高度 0.6，由父节点带动光圈跟随插值后的建筑位置，覆盖起飞、悬停、移动与降落；其他建筑保持原逻辑，光圈半径、材质与水平朝向不变。地面阴影和降落格保持原行为。

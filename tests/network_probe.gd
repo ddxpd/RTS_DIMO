@@ -145,6 +145,24 @@ func guest() -> void:
         await get_tree().process_frame
     if not check(game.sim.buildings[barracks].flight.height > 100, "Airborne height replicated"):
         return
+    var turn_origin: Vector2 = game.sim.buildings[barracks].pos
+    game.issue({"action": "barracks_move", "building": barracks, "pos": turn_origin + Vector2(96, 0)})
+    var saw_turn := false
+    while (game.sim.buildings[barracks].pos as Vector2).is_equal_approx(turn_origin):
+        var heading: float = game.sim.buildings[barracks].flight.heading
+        if absf(heading) > 0.01 and absf(heading) < PI / 2.0 - 0.01:
+            saw_turn = true
+        await get_tree().process_frame
+    if not check(saw_turn and absf(angle_difference(game.sim.buildings[barracks].flight.heading, -PI / 2.0)) < .001,
+            "Stationary turn then aligned translation replicated"):
+        return
+    game.issue({"action": "barracks_stop", "building": barracks})
+    while game.sim.buildings[barracks].flight.moving:
+        await get_tree().process_frame
+    var stopped_heading: float = game.sim.buildings[barracks].flight.heading
+    await get_tree().create_timer(.2).timeout
+    if not check(is_equal_approx(game.sim.buildings[barracks].flight.heading, stopped_heading), "Stopped heading persists on guest"):
+        return
     var landing_site := Vector2(4224, 2272)
     if not check(game.sim.deployment_site(2, barracks, landing_site).error.is_empty(), "Network landing site valid"):
         return
@@ -152,6 +170,8 @@ func guest() -> void:
     while game.sim.buildings[barracks].flight.state != "landing":
         await get_tree().process_frame
     if not check(game.sim.buildings[barracks].pos == landing_site, "Deployment reservation position replicated"):
+        return
+    if not check(is_zero_approx(game.sim.buildings[barracks].flight.heading), "Landing restores default heading on guest"):
         return
     while game.sim.buildings[barracks].flight.state != "grounded":
         await get_tree().process_frame
@@ -163,6 +183,7 @@ func guest() -> void:
         await get_tree().process_frame
     game._left_click(game.sim.units[9].pos)
     game._right_click(Vector2(1050, 768))
+    print("NETWORK_STAGE attack ordered frame=", game.sim.frame, " selected=", game.selected_units, " from=", game.sim.units[9].pos)
     while game.sim.units.has(5):
         await get_tree().process_frame
     print("NETWORK_STAGE killed unit")

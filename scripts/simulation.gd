@@ -1,6 +1,6 @@
 extends RefCounted
 # The host is the only writer. Clients display snapshots; they never simulate damage.
-const VERSION := "rts-barracks-flight-5"
+const VERSION := "rts-barracks-heading-6"
 const BarracksFlight = preload("res://scripts/barracks_flight.gd")
 const WEAPON_TARGETS := {"soldier": ["ground"], "bunker": ["ground"]}
 const ArrivalPlanner = preload("res://scripts/arrival_planner.gd")
