@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://b4a0fjukpyymh"
-path="res://.godot/imported/barracks.glb-c0a81d0068af1d65f45834fc49b762b0.scn"
+uid="uid://bdxios2jaaejq"
+path="res://.godot/imported/barracks_lod1.glb-f89b2acfced78f799b81c3b34aa5d94f.scn"
 
 [deps]
 
-source_file="res://assets/models/barracks.glb"
-dest_files=["res://.godot/imported/barracks.glb-c0a81d0068af1d65f45834fc49b762b0.scn"]
+source_file="res://assets/models/barracks_lod1.glb"
+dest_files=["res://.godot/imported/barracks_lod1.glb-f89b2acfced78f799b81c3b34aa5d94f.scn"]
 
 [params]
 

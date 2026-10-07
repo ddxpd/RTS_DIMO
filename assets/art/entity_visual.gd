@@ -42,6 +42,7 @@ var _materials: Array[Dictionary] = []
 var _faction_applied := false
 var soldier_motion: RefCounted
 var barracks_motion: RefCounted
+var barracks_presentation: RefCounted
 var _soldier_shadow_meshes: Array[MeshInstance3D] = []
 var _soldier_shadows := false
 var _bunker_construction_defaults: Dictionary = {}
@@ -83,6 +84,7 @@ func _ready() -> void:
     _create_animation_player()
     if kind == "barracks":
         barracks_motion = preload("res://assets/art/barracks_motion.gd").new(self)
+        barracks_presentation = preload("res://assets/art/barracks_presentation.gd").new(self)
     if kind == "soldier":
         soldier_motion = preload("res://assets/art/soldier_motion.gd").new(self)
     set_faction(owner_id)
@@ -256,6 +258,7 @@ func get_animation_names() -> Array[StringName]:
 
 func _instance_materials() -> void:
     var meshes := model.find_children("*", "MeshInstance3D", true, false)
+    var barracks_materials: Dictionary = {}
     for mesh_instance: MeshInstance3D in meshes:
         if mesh_instance.mesh == null:
             continue
@@ -263,11 +266,18 @@ func _instance_materials() -> void:
             var source: Material = mesh_instance.mesh.surface_get_material(surface_index)
             if source == null or not source is StandardMaterial3D:
                 continue
+            if kind == "barracks" and barracks_materials.has(source):
+                mesh_instance.set_surface_override_material(surface_index, barracks_materials[source])
+                continue
             var material := (source as StandardMaterial3D).duplicate()
+            if kind == "barracks":
+                barracks_materials[source] = material
             if kind == "barracks" and ("Faction" in material.resource_name or material.resource_name == "FlagBlueFabric") and material.albedo_texture != null:
                 var key: int = material.albedo_texture.get_instance_id()
                 if not _neutral_faction_textures.has(key):
-                    var pixels: Image = material.albedo_texture.get_image()
+                    # The body and faction paint share an atlas. Headless image
+                    # textures can return the backing Image, so never desaturate it.
+                    var pixels: Image = material.albedo_texture.get_image().duplicate()
                     if pixels.is_compressed():
                         pixels.decompress()
                     pixels.adjust_bcs(1.5, 1.0, 0.0)

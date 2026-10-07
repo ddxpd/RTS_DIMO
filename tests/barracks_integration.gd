@@ -21,6 +21,17 @@ func key(code: Key) -> void:
     game.input_controller._unhandled_input(event)
 
 
+func check_ring(visual: EntityVisual, offset: Vector3, label: String) -> void:
+    check(visual.selection_ring != null, label + ": selection ring exists")
+    if visual.selection_ring == null:
+        return
+    check(visual.selection_ring.is_visible_in_tree(), label + ": selected ring visible")
+    check(visual.selection_ring.global_position.distance_to(visual.global_position + offset) < 0.001,
+        label + ": ring follows rendered building with its grounded offset")
+    check(visual.selection_ring.global_basis.y.normalized().is_equal_approx(Vector3.UP),
+        label + ": ring stays horizontal")
+
+
 func capture(label: String) -> void:
     if DisplayServer.get_name() == "headless":
         return
@@ -67,6 +78,8 @@ func run() -> void:
         game._refresh_ui()
         check(not game.action_buttons[2].disabled and game.action_buttons[2].text == "LIFT OFF (L)", "Lift button")
         var visual: EntityVisual = game.building_visuals[id].visual
+        var ring_offset := visual.selection_ring.global_position - visual.global_position
+        check_ring(visual, ring_offset, map_id + " grounded")
         check(visual.barracks_motion.wind != null and visual.barracks_motion.wind.is_playing(), "Flag loop active")
         var flag := visual.model.find_child("BarracksFlag", true, false) as MeshInstance3D
         visual.barracks_motion.wind.seek(0, true)
@@ -74,18 +87,41 @@ func run() -> void:
         visual.barracks_motion.wind.seek(0.5, true)
         check(absf(initial_flag - flag.get_blend_shape_value(0)) > 0.1, "Flag animates in imported runtime model")
         await capture(map_id + "-landed")
+        visual.set_faction(2)
+        await capture(map_id + "-landed-red")
+        visual.set_faction(1)
         key(KEY_L)
         check(game.sim.buildings[id].flight.state == "taking_off", "L issues takeoff")
         for tick in range(80):
             game.sim.step()
+            if tick in [20, 40, 60, 79]:
+                game.visual_sync._sync_buildings(1.0 / 60.0)
+                check_ring(visual, ring_offset, map_id + " takeoff %d" % tick)
+                if tick == 40:
+                    check(absf(visual.position.y - game.sim.buildings[id].flight.height) > 1.0,
+                        "Takeoff fixture exercises interpolated height")
         game._sync_visuals()
         game._refresh_ui()
         check(not game.action_buttons[3].disabled and game.action_buttons[1].disabled, "Airborne actions disable production")
         check(is_equal_approx(visual.position.y, game.sim.buildings[id].flight.height), "Render height matches simulation")
         check(game.airborne_building_at(game.building_screen_position(id), true) == id, "Airborne screen picking")
+        check_ring(visual, ring_offset, map_id + " airborne")
+        check(visual.selection_ring.global_position.y > game.sim.terrain.height_at(anchor) + 100.0,
+            "Airborne ring leaves the terrain")
+        game.selected_building = -1
+        game.selected_buildings.clear()
+        game.visual_sync._sync_buildings()
+        check(not visual.selection_ring.visible, "Deselection hides airborne ring")
+        game.selected_building = id
+        game.selected_buildings.assign([id])
+        game.visual_sync._sync_buildings()
+        check_ring(visual, ring_offset, map_id + " reselected airborne")
         game.camera_zoom_level = 1.0
         game._update_camera_transform()
         await capture(map_id + "-airborne")
+        visual.set_faction(2)
+        await capture(map_id + "-airborne-red")
+        visual.set_faction(1)
         key(KEY_D)
         check(game.deploy_building == id, "D enters deploy preview")
         game._sync_build_preview()
@@ -108,15 +144,23 @@ func run() -> void:
         check(game.deploy_building < 0 and not game.menu_visible, "Escape cancels selection without opening menu")
         game._right_click(anchor + Vector2(80, 0))
         check(game.sim.buildings[id].flight.moving, "RMB moves airborne building")
+        game.sim.step()
+        game.visual_sync._sync_buildings(1.0 / 60.0)
+        check(visual.position.x > anchor.x, "Moving fixture advances rendered building")
+        check_ring(visual, ring_offset, map_id + " moving")
         key(KEY_S)
         check(not game.sim.buildings[id].flight.moving, "S stops flight")
         key(KEY_D)
         game.sim.visible[1].fill(1)
         game._deploy_click(anchor)
-        for tick in range(81):
+        for tick in range(82):
             game.sim.step()
+            if tick in [20, 40, 60, 81]:
+                game.visual_sync._sync_buildings(1.0 / 60.0)
+                check_ring(visual, ring_offset, map_id + " landing %d" % tick)
         game._sync_visuals()
         check(game.sim.buildings[id].flight.state == "grounded", "Deploy click completes landing")
+        check_ring(visual, ring_offset, map_id + " landed again")
         game.rebinding_attack = true
         key(KEY_D)
         check(game.rebinding_attack and game.attack_keycode != KEY_D, "Reserved shortcut cannot be rebound")

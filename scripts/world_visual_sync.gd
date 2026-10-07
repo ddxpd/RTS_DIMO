@@ -206,13 +206,19 @@ func _sync_buildings(delta: float = 0.0) -> void:
             else:
                 vis.flight_elapsed = minf(float(vis.get("flight_elapsed", 0.0)) + delta, 0.2)
             visual.barracks_motion.apply(b.flight, float(vis.get("flight_elapsed", 0.0)) * Simulation.TICK)
+        if visual.barracks_presentation != null:
+            visual.barracks_presentation.update(b, delta, visual.get_viewport().get_camera_3d())
 
         var building_selected: bool = host.selected_buildings.has(id) or host.selected_building == id
         var building_size: Vector2 = Simulation.BUILD_TYPES[b.type].size
         var building_radius := _selection_ring_radius(b.type, maxf(building_size.x, building_size.y) * 0.5, building_size)
         visual.set_selected(building_selected and visual.visible, building_radius)
         if visual.selection_ring != null:
-            visual.selection_ring.position.y = ground - visual.position.y + 0.6
+            if b.type == "barracks" and b.has("flight"):
+                # Follow the interpolated building, including takeoff and landing.
+                visual.selection_ring.position.y = 0.6
+            else:
+                visual.selection_ring.position.y = ground - visual.position.y + 0.6
 
         health_grid_overlay.upsert_entity(
             "building_%d" % id,

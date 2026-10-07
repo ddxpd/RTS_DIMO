@@ -1,5 +1,64 @@
 # 验证索引
 
+## 2026-10-07：兵营选中光圈随本体升降
+
+- 问题与修复：`world_visual_sync.gd` 原先用 `ground - visual.position.y + 0.6` 抵消建筑升空高度，导致光圈始终停在地面。兵营存在 flight 状态时改用固定局部高度 0.6，由父节点带动光圈跟随插值后的建筑位置，覆盖起飞、悬停、移动与降落；其他建筑保持原逻辑，光圈半径、材质与水平朝向不变。地面阴影和降落格保持原行为。
+- 回归：扩展 `tests/barracks_integration.gd`，在 prototype、desert_quarry、desert_sample 上验证地面偏移、起飞及降落中间帧、实际插值高度、悬停、横向移动、取消选中与空中重新选中。渲染运行 `BARRACKS_INTEGRATION PASS failures=[]`，日志 `agent_md/barracks_selection_ring.log`，stderr 为空；原有部署阻塞、快捷键与落地检查也通过。
+- 实机截图：[样板地图升空](../assets/concept_art/barracks-v4-game-desert_sample-airborne.png)，已检查光圈位于建筑底部、投影仍在地面；同轮生成三地图蓝红地面/升空及部署提示截图。
+- 通用验证：`Light -Area Visual` PASS，25.413 秒，visual_models、soldier_locomotion、terrain_presentation、terrain_sample_view 全部通过。已有单个 ObjectDB 退出泄漏警告仍存在；固定 cleanup 确认项目进程及端口无残留，保留共享 Blender MCP。
+- 本次仅调整选中表现，未改模型资产、模拟、网络或打包，因此未重新导入资产、运行 Full/ENet/性能基准或导出 EXE。修改仍在 `.godot/barracks-rts-optimization`，未合并、提交或推送。
+
+## 2026-10-07：兵营表面材质做旧
+
+- 原因与修复：此前基色变化约 1.5%、粗糙度扰动最多 0.035，积灰主要在底部；最近减面只重烘焙法线，基础色及 ORM 与原版 SHA256 完全相同。按用户选择的“明显使用过、维护良好”，新增 `tools/blender/barracks_weathering.py`，在原 UV 上重新烘焙 2K 基础色和 ORM：装甲明暗分区、屋顶与接缝积灰、设备周围局部熏黑、墙面纵向雨痕、边缘擦损、坡道通行磨损，以及涂装/金属/橡胶的粗糙度与金属度区别。灯、旗帜、阵营色及满血/损伤状态仍独立。
+- 边缘定位：烘焙时按原网格连通部件计算包围盒属性，定位每块装甲的边缘，避免 Pointiness 在导入的分裂法线上把整个平面变成均匀斑点。首版喷点效果已替换，不作为交付图。
+- 当前生产模型只替换 GLB 内两张图片及 LOD2 顶点颜色；逐项校验顶点、索引、法线、UV、形态键、节点及动画数据摘要，与保留的修改前模型一致。三个 LOD 仍为 7,981 / 3,943 / 1,483 三角面、37 / 37 / 35 材质分段，远景可见 1,387 三角面；没有添加运行时污渍贴片、着色器或贴图采样槽。
+- 构建路径：`optimize_barracks_rts.py` 已接入新材质生成，防止下次重建恢复旧贴图。在独立预览输出目录从原始模型完整重建，`WEATHERING_REBUILD_CHECK PASS`，原有每档 97 姿态检查、底盘覆盖、面数及材质预算通过；最终远景颜色转换另执行 `WEATHERING_FINAL_FAR_BUILD PASS`。生产模型仍采用保留几何数据的材质替换结果。
+- 本轮修复的关联问题：glTF UV 的 V 方向与 Blender 像素数组相反，初版直接取样导致远景过黑；已翻转 V 并将基色 sRGB 转为线性顶点色。新增运行时采样回归，最终平均颜色误差 0.00223（含 Godot 顶点颜色量化）。同时在阵营色中性化前复制 Image，避免无界面资源返回共享图像时把主体贴图一同去色；渲染与无界面检查都验证主体贴图没有被修改。
+- 同镜头、灯光与曝光的对照：[近景蓝方](../assets/concept_art/barracks_weathering/compare-close-blue.png)、[正常距离蓝方](../assets/concept_art/barracks_weathering/compare-normal-blue.png)、[正常距离红方](../assets/concept_art/barracks_weathering/compare-normal-red.png)。同目录另含中景、远景、蓝红升空对照；左 BEFORE、右 AFTER。修改前是已修复底盘的版本，非缺底盘版本。远距离只保留大色块，不承诺能看到细小擦痕。
+- 导入及验证：`barracks_weathering_import.log.err` 为空；兵营渲染专项、无界面专项和 14 张前后截图全部通过。专项从生产 GLB 解码新图片，与 Godot 实际材质逐点比较，并检查粗糙度 G / 金属度 B 通道，排除旧内嵌纹理或导入缓存。原有底盘、LOD、灯光、烟火恢复检查仍通过。日志前缀为 `agent_md/barracks_weathering_*`。
+- `Light -Area Visual` 最终 PASS，20.843 秒，日志 `.godot/validation/20261007-104220-14972/`：visual_models、soldier_locomotion、terrain_presentation、terrain_sample_view 和 cleanup 全部通过。已有单个 ObjectDB 退出泄漏警告仍存在。无界面检查最初受沙箱日志/证书权限限制，已通过平台批准的固定入口重跑。
+- 未增加几何、材质分段、运行时纹理数量或逐帧计算，未重复性能基准；未改模拟、网络或打包，未运行 Full/ENet、未导出 EXE。工作目录仍为 `.godot/barracks-rts-optimization`，尚未合并、提交或推送。预览、修改前副本和原始日志留在本地，不纳入提交。
+
+## 2026-10-07：修复兵营底盘误删
+
+- 问题与根因：优化后底盘外沿和底部承重结构消失，支腿看似与主体脱离。此前将 HullMesh 中 Z < 1.10 的面整体当作隐藏结构删除，并将低处顶点抬至该高度，误伤了可见底盘。下方 10 月 6 日的资产数字与几何处理说明属于修复前记录，以本节为准。
+- 修复：从保留的原始 GLB 重建；按完整连通部件分离底盘、孔位顶板、支腿轴承与上部壳体，分别减面后合回原 HullMesh。取消按高度删面和抬高顶点。底盘近/中/远预算为 550/550/480 三角面；远景去掉少量细小锁扣，将预算留给底盘和起落架收纳槽。保持原有层级、枢轴、动画和贴图 UV，重新烘焙两张法线贴图。
+- 最终完整 GLB 为 LOD0 7,981、LOD1 3,943、LOD2 1,483 三角面，均在既定预算内；远景隐藏旗帜和细杆后可见 1,387 三角面。材质分段仍为 37/37/35，材质数 6/6/4。
+- 构建验证：每档导出后回导，检查底盘中央与两侧承重区域的 9 个向上射线，以及 97 个起落姿态。三个档位底盘采样面相对原版最大高度误差均为 0.00847 模型单位；脚掌、喷口、液压机构的规定穿插检查通过。构建日志 `chassis_repair_build.log` 显示 `BARRACKS_RTS_BUILD PASS`，stderr 为空。
+- 回归测试：新增 Godot 底盘覆盖检查，旧资产三个 LOD 共 27 个检测点全部失败（`chassis_regression_before.log`）；最终资产全部通过（`chassis_repair_runtime_final.log`）。同时验证面数、LOD 滞回、材质、状态灯、损伤效果，输出三个档位的仰视截图及正常 RTS 视角截图。原版、近景、中景、远景的 1/16/64 栋渲染对照完整运行；64 栋近景为 4,818 绘制调用，CPU/GPU 12.399/12.925 ms，仅作本机采样。
+- 原生渲染检查：底盘外沿、加强梁、四个喷口及支腿收纳空间重新可见。截图在 [落地近景](../assets/concept_art/barracks_rts/comparison-near.png) 与 [升空底部](../assets/concept_art/barracks_rts/chassis-underside-lod0.png)。远景模型只用于战略缩放；强制放大时仍有明显简化和上部表面瑕疵，未将其视为近景品质。
+- 起落专项 45 项通过（`chassis_repair_flight.log`）。三地图渲染交互专项复查通过（`chassis_repair_integration_recheck.log`，stderr 为空）；第一次运行有 5 项部署/快捷键相关失败，未改游戏逻辑的复查未复现，原因尚未确认，不宣称解决了该偶发问题。
+- Godot 最终导入成功，`chassis_repair_import_final.log.err` 为空。最初沙箱内导入/通用验证出现证书和用户日志/编辑器设置权限错误，通过平台批准的固定入口重跑后排除了这些环境错误。
+- `Light -Area Visual,Performance`：视觉模型、士兵动画、地形表现及样板地图视图通过；性能失败，日志 `.godot/validation/20261007-101152-29200/`。180 单位 animated sync 16.065 ms（阈值 8）、unit sync 4.230 ms（阈值 2）、simulation 34.178 ms（阈值 25）；这些项目在此前未修改主分支对照中也失败，本次未放宽阈值或修复整场游戏性能。地形套件仍有既有单个 ObjectDB 退出泄漏警告。
+- 未改模拟规则、网络协议或打包，因此未重复 Full/ENet，未导出 EXE。改动位于 `.godot/barracks-rts-optimization`，未合并到根项目、未提交、未推送。预览和原始日志不纳入提交。
+- 收尾：固定 cleanup 确认项目进程与端口无残留；`git diff --check` 和本次文本的严格 UTF-8/NUL/尾空白检查通过。保存的原始 GLB 与根项目原模型 SHA256 仍一致，未改动原工作区的模型或 EXE。
+
+## 2026-10-06：兵营 RTS 模型与状态表现
+
+- 工作目录：`.godot/barracks-rts-optimization`，分支 `feature/barracks-rts-optimization`，基于主分支 `c6f86ce`。原工作区、用户 EXE 和原始概念资产保持不变；本轮没有推送或发布。
+- 资产预算（完整 GLB）：原版 32,900 三角面 / 66 材质分段 / 14 材质；LOD0 为 7,432 / 37 / 6，LOD1 为 3,751 / 37 / 6，LOD2 为 1,199 / 35 / 4。主体由 20,212 降到 3,600；四个喷口近景合计 1,440。远景隐藏旗面和细液压杆后，实际可见 1,103 三角面、23 分段。
+- `tools/blender/optimize_barracks_rts.py` 从 `assets/models/source/barracks_rts_baseline.glb` 重建三个档位。保留外部壳体、动画节点、枢轴、旗帜形态键，去掉隐蔽设备底板与小倒角几何。近、中景由原始高模向低模投射 2K 切线法线，沿用原有基础色/ORM 和旗帜 512 贴图；远景烘焙顶点色。构建先输出到预览目录，预算、动画与回导检查通过后才复制到运行时资产。
+- 三档共用一套运动层级，通过网格替换切换；以 1080p 归一化投影尺寸 160/80 像素为界，使用 10% 滞回。升降中最低使用中景，近景旗帜正常更新、中景 10 Hz、远景隐藏旗面。静止机械姿态不再反复 seek；同一建筑的重复材质实例复用。
+- 状态灯读取现有队列：就绪常亮、训练慢脉冲、队首 remaining=0 且仍未出队时橙色快闪；升空时开启推进器自发光。HP 低于 50% 出烟、低于 25% 增加间歇火花和屋顶焦痕，最多 8 个烟粒子和 4 个火花粒子；隐藏/离屏停止发射，恢复血量清除表现。保留血条、四秒起降、128×96 占地、当前飞行高度和全部游戏规则；未增加升级、占领或禁用机制。
+- 修复：原模型导入配置 `gltf/embedded_image_handling=0` 丢弃 PBR 贴图，导致运行时侧面发黑；三档配置统一保留内嵌贴图，并增加基础色/法线实际导入断言。远景的材质覆盖需显式启用顶点色，否则退化为白模；已修复并增加网格颜色数组及材质开关断言。
+- 修复：Blender 的 Image.copy 同时复制旧 packed PNG，普通 pack 会令导出器沿用旧法线；改成读取新烘焙 PNG 后显式 pack 字节，并断言 GLB 内纹理 SHA256 与新 PNG 一致、与原法线不同。两个近景档位均通过该校验。
+- Blender 验证：每档导出并重新导入后，运行原有 97 姿态起降间隙、占地、支脚收纳与喷口离地检查，全部通过。近景保留 Takeoff / Landing / Flag_Wind_Loop。原始报告在 `assets/concept_art/barracks_rts/asset_report.json`。
+- Godot 验证：先独立 import；`Light -Area Visual,Performance,Features` 中 features、visual_models、soldier_locomotion、terrain_presentation、terrain_sample_view 通过。兵营专项 `barracks_flight.gd` 45 项通过，`barracks_integration.gd -Rendered` 在 prototype、desert_quarry、desert_sample 上通过，包含红蓝、地面/升空、旗帜、部署阻塞和快捷键；`barracks_rts.gd -Rendered` 覆盖预算、LOD 滞回、贴图、灯光、损伤恢复、隐藏/离屏停发与 64/128/256 像素截图。
+- 通用性能仍未通过，未放宽阈值：本分支 180 单位 animated sync / visual sync / unit sync / simulation 为 21.392 / 9.710 / 5.695 / 43.714 ms；同机未修改主分支对应 22.624 / 8.431 / 7.957 / 52.495 ms，也在相同四项失败。主分支日志在 `.godot/main3d-integration/.godot/validation/20261006-011324-2040/`；本分支日志在 `.godot/validation/20261006-010951-29524/`。该对照确认原有瓶颈仍存在，不据此声称整场游戏达到帧率目标。Features/地形套件退出时仍有既有单个 ObjectDB 泄漏警告。
+- 未改模拟规则、RPC 或快照边界，未重复 Network/ENet；未改打包或要求交付 EXE，因此未导出。性能套件的原型地图先失败，runner 的后续沙漠性能子项没有运行；地图功能和兵营实机测试另行通过。
+- 最终内嵌纹理修正后重新 import、运行渲染专项及 `Light -Area Visual`，全部通过；最后一次 Light 为 20.385 秒，日志 `.godot/validation/20261006-023136-25824/`。固定 cleanup 确认项目进程和端口无残留，保留共享 Blender MCP。原始模型与保存的基线 SHA256 一致。改动仍保留为独立工作区中的未提交修改。
+
+同机兵营专项对照：相同着地姿态、镜头、阴影、分辨率和机械控制器；每组预热 20 帧后采样 60 帧，显式网格 LOD，包含阴影绘制。CPU/GPU 是渲染计时，排除玩法与完整同步耗时；结果受电源状态及其他应用影响，不作为 FPS 承诺。1/16/64 个兵营的四档完整数据在 `assets/concept_art/barracks_rts/runtime_report.json`。
+
+| 数量 | 原版绘制调用 | 近景绘制调用 | 远景绘制调用 | 原版 CPU/GPU ms | 近景 CPU/GPU ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | 137 | 79 | 51 | 0.523 / 0.890 | 0.447 / 0.712 |
+| 16 | 2,117 | 1,189 | 741 | 4.735 / 5.119 | 4.140 / 4.499 |
+| 64 | 8,607 | 4,818 | 3,003 | 18.424 / 18.998 | 12.308 / 12.841 |
+
+- 绘制调用和几何负担稳定减少；重复采样中也曾出现 16 个兵营的近景 GPU 读数高于原版，故不将一次计时推广为所有环境下的改善。表格为最终烘焙资产的完整采样结果。预览及前后对照保存在 `assets/concept_art/barracks_rts/`，实机地图截图在 `assets/concept_art/barracks-v4-game-*.png`；概念目录与临时日志不纳入提交。
+
 ## 2026-10-05：3D Releases 分发
 
 - 用户选择 Releases 分发并要求实施：移除 `build/IronFront.exe` 的 Git 跟踪，保留忽略规则、旧 Git 历史和本机文件。README 改为 Releases 下载入口；原工作区的未提交 EXE 保持不变。

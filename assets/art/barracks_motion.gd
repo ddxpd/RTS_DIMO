@@ -5,6 +5,7 @@ var wind: AnimationPlayer
 var body: Node3D
 var visual: Node3D
 var last_clip := ""
+var last_time := -1.0
 
 
 func _init(owner_visual: Node3D) -> void:
@@ -55,8 +56,11 @@ func apply(flight: Dictionary, fractional_ticks: float = 0.0) -> void:
         time = 0
     elif state == "airborne":
         time = 4
+    if clip == last_clip and is_equal_approx(time, last_time):
+        return
     player.play(clip)
     player.seek(time, true)
     player.pause()
     body.position = Vector3.ZERO
     last_clip = clip
+    last_time = time
