@@ -1,0 +1,8 @@
+[gd_scene format=3]
+
+[ext_resource type="ArrayMesh" path="res://assets/maps/components/plateau_top.res" id="1_mm3v1"]
+
+[node name="plateau_top" type="MeshInstance3D" unique_id=1210015726]
+mesh = ExtResource("1_mm3v1")
+metadata/component_id = "plateau_top"
+metadata/catalog_revision = 1

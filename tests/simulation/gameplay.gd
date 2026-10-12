@@ -1,0 +1,294 @@
+extends SceneTree
+const Sim = preload("res://scripts/simulation.gd")
+var failures: Array[String] = []
+var checks := 0
+
+func check(value: bool, message: String) -> void:
+    checks += 1
+    if not value:
+        failures.append(message)
+        push_error(message)
+
+func advance(s: RefCounted, ticks: int) -> void:
+    for i in range(ticks):
+        s.step()
+
+func _initialize() -> void:
+    run.call_deferred()
+
+func run() -> void:
+    var s := Sim.new()
+    s.reset()
+    check(s.units.is_empty() and s.buildings.size() == 2, "Both players start with bases only")
+    preload("res://tests/fixtures/army_setup.gd").seed(s)
+    check(s.footprint(s.buildings[1]).size == Vector2(320, 192), "Command base occupies 10x6 cells")
+    check(not s.position_free(Vector2(454, 384), 0), "New outer base area blocks movement")
+    check(s.position_free(Vector2(576, 384), 0), "Ground beyond the enlarged base stays passable")
+    check(s.build_error(1, "base", Vector2(544, 384)) == "Building footprint occupied", "Enlarged base rejects overlapping placement")
+    check(s.build_error(1, "base", Vector2(384, 128)).is_empty(), "Enlarged base accepts separated placement")
+    check(s.command(0, {"action": "move", "units": [3], "pos": Vector2(400, 300)}) != "", "Spectator rejected")
+    check(s.command(2, {"action": "move", "units": [3], "pos": Vector2(400, 300)}) != "", "Enemy control rejected")
+    check(s.command(1, {"action": "move", "units": [3], "pos": Vector2(NAN, 1)}) != "", "Non-finite position rejected")
+    var blue_miner: int = s.add_unit(1, "harvester", Vector2(600, 800))
+    check(s.command(1, {"action": "gather", "units": [blue_miner], "target": 1}) == "", "Harvester accepts ore order")
+    # Leave a full-radius approach in front of the compact station, below the base.
+    var blue_refinery: int = s._add_building(1, "refinery", Vector2(384, 736), true)
+    for slot in range(2):
+        check(s.position_free(Sim.DepotDocking.entrance(s.buildings[blue_refinery], slot), 48), "Blue depot fixture leaves full-radius entrance clearance")
+    var red := Sim.new()
+    red.reset()
+    var red_refinery: int = red._add_building(2, "refinery", Vector2(4416, 2496), true)
+    advance(s, 900)
+    if s.money[1] <= 6000:
+        print("BLUE_DEPOT_DEBUG ", s.units[blue_miner], " reachable=", Sim.DepotDocking.choose_station(s, s.units[blue_miner]))
+    check(s.money[1] > 6000, "Harvester delivers cargo for spendable credits")
+    check(s.ores[1].amount < 4000, "Ore is depleted by harvesting")
+    check(s.units[blue_miner].cargo <= 60, "Cargo capacity respected")
+    var red_miner: int = red.add_unit(2, "harvester", Vector2(4128, 2600))
+    red.command(2, {"action": "gather", "units": [red_miner], "target": 2})
+    advance(red, 900)
+    if red.money[2] <= 6000:
+        print("RED_DEPOT_DEBUG ", red.units[red_miner], " reachable=", Sim.DepotDocking.choose_station(red, red.units[red_miner]))
+    check(red.money[2] > 6000, "Red harvester delivers credits")
+    var before: int = s.money[1]
+    check(s.command(1, {"action": "build", "type": "barracks", "pos": Vector2(480, 160)}) == "", "Barracks placement succeeds")
+    var barracks: int = s.next_id - 1
+    check(s.money[1] == before - 250, "Construction costs deducted")
+    check(s.buildings[barracks].remaining > 0, "Construction is timed")
+    check(s.command(1, {"action": "produce", "building": barracks, "type": "mobile_infantry"}) != "", "Incomplete building cannot produce")
+    check(s.command(1, {"action": "build", "type": "barracks", "pos": Vector2(480, 160)}) != "", "Overlapping building rejected")
+    check(s.command(1, {"action": "build", "type": "barracks", "pos": Vector2(2400, 400)}) != "", "Terrain or remote construction rejected")
+    s.command(1, {"action": "stop", "units": [5]})
+    advance(s, 80)
+    check(s.buildings[barracks].remaining == 0, "Construction completes")
+    var count: int = s.units.size()
+    var credits: int = s.money[1]
+    check(s.command(1, {"action": "produce", "building": barracks, "type": "mobile_infantry"}) == "", "Soldier production accepted")
+    check(s.money[1] == credits - 100, "Production charged once")
+    advance(s, 49)
+    check(s.units.size() == count, "Production waits for timer")
+    advance(s, 1)
+    check(s.units.size() == count + 1 and s.buildings[barracks].queue.is_empty(), "Production actually spawns soldier")
+    check(s.command(1, {"action": "produce", "building": 1, "type": "harvester"}) != "", "Base no longer produces miners")
+    check(s.command(1, {"action": "produce", "building": barracks, "type": "harvester"}) != "", "Barracks only produces soldiers")
+    check(s.command(1, {"action": "produce", "building": blue_refinery, "type": "mobile_infantry"}) != "", "Refinery only produces miners")
+    var before_cancel: int = s.money[1]
+    s.command(1, {"action": "produce", "building": blue_refinery, "type": "harvester"})
+    s.command(1, {"action": "cancel_production", "building": blue_refinery})
+    check(s.money[1] == before_cancel, "Cancellation refunds full price")
+    s.money[1] = 0
+    check(s.command(1, {"action": "produce", "building": barracks, "type": "mobile_infantry"}) != "", "Insufficient credits rejected")
+    s.money[1] = 1000
+    for i in range(5):
+        s.command(1, {"action": "produce", "building": barracks, "type": "mobile_infantry"})
+    check(s.command(1, {"action": "produce", "building": barracks, "type": "mobile_infantry"}) != "", "Queue limit enforced")
+    check(not s.position_free(Vector2(480, 160), 11), "Building footprint blocks movement")
+    # Destruction refunds queued jobs and frees its navigation footprint.
+    s.buildings[barracks].hp = 0
+    var refund_start: int = s.money[1]
+    s.step()
+    check(not s.buildings.has(barracks) and s.money[1] == refund_start + 500, "Destroyed factory clears and refunds production queue")
+    check(s.position_free(Vector2(480, 160), 11), "Destroyed building releases footprint")
+    # Navigation must route around the middle terrain obstacle.
+    s.reset()
+    preload("res://tests/fixtures/army_setup.gd").seed(s)
+    s.units[3].pos = Vector2(1900, 400)
+    s.command(1, {"action": "move", "units": [3], "pos": Vector2(2700, 400)})
+    var valid := true
+    for i in range(700):
+        s.step()
+        if not s.position_free(s.units[3].pos, 11):
+            valid = false
+    check(valid, "Unit never enters terrain / building volume")
+    check((s.units[3].pos as Vector2).distance_to(Vector2(2700, 400)) < 8, "Path reaches destination beyond obstacle")
+    # Repeated movement to a shared destination keeps circle bodies separate.
+    s.reset()
+    preload("res://tests/fixtures/army_setup.gd").seed(s)
+    s.units[3].pos = Vector2(580, 560)
+    s.units[4].pos = Vector2(580, 560)
+    advance(s, 2)
+    check((s.units[3].pos as Vector2).distance_to(s.units[4].pos) >= 22.9, "Overlapping units separate")
+    s.command(1, {"action": "move", "units": [3, 4], "pos": Vector2(600, 600)})
+    advance(s, 200)
+    check((s.units[3].pos as Vector2).distance_to(s.units[4].pos) >= 22.9, "Moving group keeps collision spacing")
+    # Head-on miners must sidestep past each other instead of deadlocking.
+    var west := s.add_unit(1, "harvester", Vector2(1000, 1900))
+    var east := s.add_unit(1, "harvester", Vector2(1400, 1900))
+    s.command(1, {"action": "move", "units": [west], "pos": Vector2(1400, 1900)})
+    s.command(1, {"action": "move", "units": [east], "pos": Vector2(1000, 1900)})
+    var west_arrived := false
+    var east_arrived := false
+    # Compact assignment avoids the other miner's occupied destination.
+    var west_destination: Vector2 = s.units[west].target
+    var east_destination: Vector2 = s.units[east].target
+    for i in range(400):
+        s.step()
+        if (s.units[west].pos as Vector2).distance_to(west_destination) < 5 and s.units[west].pos.x > 1300:
+            west_arrived = true
+        if (s.units[east].pos as Vector2).distance_to(east_destination) < 5 and s.units[east].pos.x < 1100:
+            east_arrived = true
+        if west_arrived and east_arrived:
+            break
+    if not west_arrived or not east_arrived:
+        print("MINER_TRAFFIC ", s.units[west], " / ", s.units[east])
+    check(west_arrived, "West miner crosses after head-on meeting")
+    check(east_arrived, "East miner crosses after head-on meeting")
+    # A squad squeezed around a terrain corner must fully arrive (no stragglers).
+    s.reset()
+    preload("res://tests/fixtures/army_setup.gd").seed(s)
+    s.units.clear()
+    var squad: Array = []
+    for i in range(6):
+        squad.append(s.add_unit(1, "soldier", Vector2(2080, 120 + i * 40)))
+    s.command(1, {"action": "move", "units": squad, "pos": Vector2(2400, 100)})
+    var squad_arrived := false
+    for i in range(900):
+        s.step()
+        var pending := squad.size()
+        for uid: int in squad:
+            if s.units[uid].order == "idle":
+                pending -= 1
+        if pending == 0:
+            squad_arrived = true
+            break
+    check(squad_arrived, "Corner squad fully arrives instead of stalling")
+    # Formation targets landing on terrain slide to a reachable spot.
+    s.reset()
+    preload("res://tests/fixtures/army_setup.gd").seed(s)
+    s.units.clear()
+    var wedge := s.add_unit(1, "soldier", Vector2(2080, 400))
+    s.command(1, {"action": "move", "units": [wedge], "pos": Vector2(2160, 400)})
+    var wedge_done := false
+    for i in range(500):
+        s.step()
+        if s.units[wedge].order == "idle":
+            wedge_done = true
+            break
+    check(wedge_done and (s.units[wedge].pos as Vector2).distance_to(Vector2(2160, 400)) < 120, "Terrain-clipped destination still completes")
+    # Chase, cooldown, damage, effects, safe removal and stale target reset.
+    s.reset()
+    preload("res://tests/fixtures/army_setup.gd").seed(s)
+    s.units[3].pos = Vector2(300, 400)
+    s.units[9].pos = Vector2(600, 400)
+    s.units[9].hp  = 32
+    check(s.command(1, {"action": "attack", "units": [3], "kind": "unit", "target": 9}) == "", "Enemy attack order accepted")
+    var shots := false
+    for i in range(300):
+        s.step()
+        if not s.effects.is_empty():
+            shots = true
+    check(shots and not s.units.has(9), "Chasing attack fires, damages and removes enemy")
+    check(s.units[3].attack_id == -1, "Dead target released")
+    s.reset()
+    preload("res://tests/fixtures/army_setup.gd").seed(s)
+    s.units[3].pos = Vector2(900, 400)
+    s.units[9].pos = Vector2(950, 400)
+    advance(s, 2)
+    check(s.units[9].hp == 84, "Idle soldier automatically acquires enemy")
+    advance(s, 5)
+    check(s.units[9].hp == 84, "Cooldown prevents damage every frame")
+    s.reset()
+    preload("res://tests/fixtures/army_setup.gd").seed(s)
+    var auto_miner: int = s.add_unit(1, "harvester", Vector2(800, 900))
+    advance(s, 10)
+    check(s.units[auto_miner].order == "gather", "Idle miner auto-seeks nearest visible ore")
+    s.command(1, {"action": "stop", "units": [auto_miner]})
+    advance(s, 20)
+    check(s.units[auto_miner].order == "idle", "Stopped miner stays idle")
+    s.reset()
+    preload("res://tests/fixtures/army_setup.gd").seed(s)
+    s.units.clear()
+    var attacker := s.add_unit(1, "soldier", Vector2(4320, 2880))
+    s.buildings[2].hp = 16
+    var red_outpost := s._add_building(2, "barracks", Vector2(4416, 2432), true)
+    s.buildings[red_outpost].hp = 16
+    s.update_visibility()
+    s.command(1, {"action": "attack", "units": [attacker], "kind": "building", "target": 2})
+    advance(s, 3)
+    check(not s.buildings.has(2) and s.winner == 0, "Losing the base alone no longer ends the match")
+    s.units[attacker].pos = Vector2(4352, 2368)
+    s.update_visibility()
+    s.command(1, {"action": "attack", "units": [attacker], "kind": "building", "target": red_outpost})
+    advance(s, 12)
+    check(not s.buildings.has(red_outpost) and s.winner == 1, "Destroy last enemy building to win")
+    var frozen := s.frame
+    s.step()
+    check(s.frame == frozen, "Match freezes after victory")
+    check(s.command(1, {"action": "build", "type": "barracks", "pos": Vector2(400, 160)}) != "", "Orders rejected after match")
+    s.reset()
+    preload("res://tests/fixtures/army_setup.gd").seed(s)
+    s.units[4].hp = 100
+    check(s.command(1, {"action": "attack", "units": [3], "kind": "unit", "target": 4, "force": true}) == "", "Force attack accepts friendly unit")
+    advance(s, 2)
+    check(s.units[4].hp < 100, "Force attack damages selected friendly target")
+    s.reset()
+    preload("res://tests/fixtures/army_setup.gd").seed(s)
+    s.units.clear()
+    var attack_move_destination := Vector2(576, 400)
+    var attack_mover: int = s.add_unit(1, "soldier", Vector2(1000, 400))
+    var first_enemy: int  = s.add_unit(2, "soldier", Vector2(850, 400))
+    var second_enemy: int = s.add_unit(2, "soldier", Vector2(650, 400))
+    s.units[first_enemy].hp  = 16
+    s.units[second_enemy].hp = 16
+    check(s.command(1, {"action": "attack_move", "units": [attack_mover], "pos": attack_move_destination}) == "", "Attack-move order accepted")
+    var attack_move_targets: Dictionary = {}
+    for i in range(200):
+        s.step()
+        if s.units.has(attack_mover) and int(s.units[attack_mover].attack_id) in [first_enemy, second_enemy]:
+            attack_move_targets[int(s.units[attack_mover].attack_id)] = true
+        if not s.units.has(first_enemy) and not s.units.has(second_enemy) and s.units[attack_mover].order == "idle":
+            break
+    check(attack_move_targets.has(first_enemy) and attack_move_targets.has(second_enemy), "Attack-move engages consecutive encountered enemies")
+    check(not s.units.has(first_enemy) and not s.units.has(second_enemy), "Attack-move destroys encountered enemies")
+    check(s.units[attack_mover].order == "idle" and (s.units[attack_mover].pos as Vector2).distance_to(attack_move_destination) < 5, "Attack-move resumes and reaches its original destination")
+    var mirror := Sim.new()
+    mirror.reset()
+    mirror.apply_snapshot(s.snapshot())
+    check(mirror.snapshot() == s.snapshot(), "Snapshot carries combat, economy, buildings, effects, result")
+    var snapshot_source := Sim.new()
+    snapshot_source.reset()
+    preload("res://tests/fixtures/army_setup.gd").seed(snapshot_source)
+    var valid_snapshot: Dictionary = snapshot_source.snapshot()
+    check(snapshot_source.validate_snapshot(valid_snapshot), "Authoritative snapshot passes schema validation")
+    var snapshot_target := Sim.new()
+    snapshot_target.reset()
+    var target_before: Dictionary = snapshot_target.snapshot()
+    var missing_units: Dictionary = valid_snapshot.duplicate(true)
+    missing_units.erase("units")
+    check(not snapshot_target.apply_snapshot(missing_units) and snapshot_target.snapshot() == target_before, "Missing snapshot tables are rejected without mutation")
+    var wrong_unit_type: Dictionary = valid_snapshot.duplicate(true)
+    wrong_unit_type.units[3].owner = "1"
+    check(not snapshot_target.apply_snapshot(wrong_unit_type) and snapshot_target.last_snapshot_error != "", "Snapshot numeric coercion is rejected")
+    var out_of_bounds: Dictionary = valid_snapshot.duplicate(true)
+    out_of_bounds.units[3].pos = Vector2(99999, 10)
+    check(not snapshot_target.apply_snapshot(out_of_bounds), "Out-of-bounds entity positions are rejected")
+    var malformed_effect: Dictionary = valid_snapshot.duplicate(true)
+    malformed_effect.effects = [{"kind": "shot", "from": Vector2.ZERO, "to": Vector2.ONE}]
+    check(not snapshot_target.apply_snapshot(malformed_effect), "Incomplete effect records are rejected")
+    var missing_visibility_owner: Dictionary = valid_snapshot.duplicate(true)
+    missing_visibility_owner.visible.erase(2)
+    check(not snapshot_target.apply_snapshot(missing_visibility_owner), "Incomplete visibility buffers are rejected")
+    var oversized_units: Dictionary = valid_snapshot.duplicate(true)
+    for id in range(10000, 14097):
+        oversized_units.units[id] = valid_snapshot.units[3].duplicate(true)
+    check(not snapshot_target.apply_snapshot(oversized_units), "Oversized snapshot tables are rejected")
+    s.reset(true)
+    preload("res://tests/fixtures/army_setup.gd").seed(s)
+    check(s.can_see(1, Vector2(384, 384)) and not s.can_see(1, Vector2(4416, 2816)), "Fog starts around own army only")
+    s.units[3].pos = Vector2(1000, 700)
+    s.update_visibility()
+    check(s.can_see(1, Vector2(1000, 700)), "Scout reveals new terrain")
+    s.units[3].pos = Vector2(640, 320)
+    s.update_visibility()
+    var cell := Vector2i(31, 21)
+    check(not s.can_see(1, Vector2(1000, 700)) and s.explored[1][cell.y * Sim.GRID.x + cell.x] == 1, "Explored terrain stays remembered when vision leaves")
+    advance(s, 1400)
+    var ai_building := false
+    for b: Dictionary in s.buildings.values():
+        if b.owner == 2 and b.type == "barracks" and b.remaining == 0:
+            ai_building = true
+    if not ai_building or s.units.size() <= 12 or s.ores[2].amount >= 4000:
+        print("AI_MOVEMENT ", s.buildings, " UNITS ", s.units)
+    check(ai_building and s.units.size() > 12 and s.ores[2].amount < 4000, "AI mines, constructs and produces")
+    print("GAMEPLAY_TEST ", checks, " checks; failures=", failures)
+    quit(0 if failures.is_empty() else 1)

@@ -1,0 +1,13 @@
+{
+  "name": "iron-front-art-library",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-only art catalogue for Iron Front",
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@google/model-viewer": "4.3.1",
+    "sharp": "0.34.5"
+  },
+  "devDependencies": { "playwright": "1.56.1" }
+}

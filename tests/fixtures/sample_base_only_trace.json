@@ -1,0 +1,156 @@
+{
+  "protocol": "rts-desert-only-12",
+  "reason": "User requested base-only sample v4: no initial units, production buildings or ore. Only reset ticks 30-59 change; all other frozen v11 entries still compared.",
+  "trace": [
+    {
+      "scenario": "reset",
+      "sha256": "277a053436a1394048c0df0777185ce671486cea61b87333292e15fcc3922e9b",
+      "tick": 30
+    },
+    {
+      "scenario": "reset",
+      "sha256": "d9dd586d4dfee26acbd05d458b14e9dea45e54e632c5221fea8e0fc65c654f22",
+      "tick": 31
+    },
+    {
+      "scenario": "reset",
+      "sha256": "0bbc5be7569992969e6f155d484ae3ca8a1fce4115d69f10e42efc5cac8427ef",
+      "tick": 32
+    },
+    {
+      "scenario": "reset",
+      "sha256": "17c034eb813ba7dbd04c45b89953d47e605f6c3a008f3e255d8178f0083aa0e7",
+      "tick": 33
+    },
+    {
+      "scenario": "reset",
+      "sha256": "67fd5475c9f053dcb1bae0bdf22bb9e30613abdd6c39d4036c1ede48e17dd4e7",
+      "tick": 34
+    },
+    {
+      "scenario": "reset",
+      "sha256": "924a0845c51b44ff9058b93bdcf993162089295c36c6f38e5633d0875f466e83",
+      "tick": 35
+    },
+    {
+      "scenario": "reset",
+      "sha256": "a62507efe57099952d34a114628c0dd55d441d1ca430773c5fb43859e57bd029",
+      "tick": 36
+    },
+    {
+      "scenario": "reset",
+      "sha256": "3f03210e6dea2e99fd5b6e790e43a073c43561ef529479546cb09744b9ffae6f",
+      "tick": 37
+    },
+    {
+      "scenario": "reset",
+      "sha256": "4b239a030fcd5a8ec7fa068777f34232952b8d8594463a6d8c5724894fb5fa62",
+      "tick": 38
+    },
+    {
+      "scenario": "reset",
+      "sha256": "f67a1275185ce20d346c6d28c5b4b75f02d0b81df70252beb1d503751159a47a",
+      "tick": 39
+    },
+    {
+      "scenario": "reset",
+      "sha256": "f004a70ed091ef3cd81f6e27240a1ea85220e58394a36b72281b253edfd16ee6",
+      "tick": 40
+    },
+    {
+      "scenario": "reset",
+      "sha256": "ad1980eb625199ba4fada3c9c0f3f59331cc385c3784ebe35096f9d1edfb7479",
+      "tick": 41
+    },
+    {
+      "scenario": "reset",
+      "sha256": "5934569fed45aa8de658c0df7aafe685542336fc868ca50f00eb48472bd1b70d",
+      "tick": 42
+    },
+    {
+      "scenario": "reset",
+      "sha256": "f66f6b60dd40b4238183d82086c21b744aa62fb5e1b69be27cc878a859e1c033",
+      "tick": 43
+    },
+    {
+      "scenario": "reset",
+      "sha256": "3005989738bb740dce9e16a4e87755dae1fe67e030ad75c831c2e99a6398301a",
+      "tick": 44
+    },
+    {
+      "scenario": "reset",
+      "sha256": "0596f2a2192d934ea5a6c3294c8da68f318e5e6d03fcb23ccb4482110a0eeec3",
+      "tick": 45
+    },
+    {
+      "scenario": "reset",
+      "sha256": "777855d2c63f7ba9a4bd1f1fdebf76386bf4f9616cb0cebb41b6d0f8fdfd266c",
+      "tick": 46
+    },
+    {
+      "scenario": "reset",
+      "sha256": "f6a93b40f2aeae103529f0e608bfec404050552af61ce5da9120faea5ae7633b",
+      "tick": 47
+    },
+    {
+      "scenario": "reset",
+      "sha256": "75310cea049c5925b86c66b58a294319f92cce6cdfa30ffe7471a663035fbe7f",
+      "tick": 48
+    },
+    {
+      "scenario": "reset",
+      "sha256": "e6a355a4f329962f0009b9c5d2a5abf1705996824887f8add6f4e9e259a11006",
+      "tick": 49
+    },
+    {
+      "scenario": "reset",
+      "sha256": "f59d48abcbf12bad2b8798e3eed53429b806a05728548159a5df99a8cb44cf6c",
+      "tick": 50
+    },
+    {
+      "scenario": "reset",
+      "sha256": "79a00a966abf3b9ab1dba5c0ea0f9068d6bdb788049b3e4f57823cac50e270e7",
+      "tick": 51
+    },
+    {
+      "scenario": "reset",
+      "sha256": "020dda745105f82cf2d9d77fdd05bae48788ad10f7f2408790a3a4243342da10",
+      "tick": 52
+    },
+    {
+      "scenario": "reset",
+      "sha256": "fce23536f518a79ec0a67c193d5942efc352fce44381d2791b261b0be6caa3d4",
+      "tick": 53
+    },
+    {
+      "scenario": "reset",
+      "sha256": "1d7c83a1e25e9d24c6092ab388759b991268b87e8b94d304f2e95e8dabcb71d4",
+      "tick": 54
+    },
+    {
+      "scenario": "reset",
+      "sha256": "9e31c30a93a770d6fcc7b4ce0768572ae05b3f946b04c64a37c019ef8417d4bb",
+      "tick": 55
+    },
+    {
+      "scenario": "reset",
+      "sha256": "253d913fbb2cf6a59b640e3185af76457c016c23245cf2de9bcf128ab0bbd8cf",
+      "tick": 56
+    },
+    {
+      "scenario": "reset",
+      "sha256": "53f2fe709f4d3fee59023be1afc033f9c88d6f368350cb466805bb3dd1d4d8d2",
+      "tick": 57
+    },
+    {
+      "scenario": "reset",
+      "sha256": "5a8c38ef9568ba2dc636a7c91f49e8ec7cb5571c9051cfb4025ada583a5076e5",
+      "tick": 58
+    },
+    {
+      "scenario": "reset",
+      "sha256": "1b9e7f75bbe04888d7bafb7b81b790e10507ea1157ec071146de5887fb704e95",
+      "tick": 59
+    }
+  ]
+}

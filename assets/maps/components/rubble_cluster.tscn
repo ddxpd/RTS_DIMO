@@ -1,0 +1,8 @@
+[gd_scene format=3]
+
+[ext_resource type="ArrayMesh" path="res://assets/maps/components/rubble_cluster.res" id="1_6ioak"]
+
+[node name="rubble_cluster" type="MeshInstance3D" unique_id=445032488]
+mesh = ExtResource("1_6ioak")
+metadata/component_id = "rubble_cluster"
+metadata/catalog_revision = 1

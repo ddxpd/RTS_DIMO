@@ -1,0 +1,8 @@
+[gd_scene format=3]
+
+[ext_resource type="ArrayMesh" path="res://assets/maps/components/cliff_inner.res" id="1_udt6a"]
+
+[node name="cliff_inner" type="MeshInstance3D" unique_id=1905463661]
+mesh = ExtResource("1_udt6a")
+metadata/component_id = "cliff_inner"
+metadata/catalog_revision = 1

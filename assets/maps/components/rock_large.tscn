@@ -1,0 +1,8 @@
+[gd_scene format=3]
+
+[ext_resource type="ArrayMesh" path="res://assets/maps/components/rock_large.res" id="1_1d7q5"]
+
+[node name="rock_large" type="MeshInstance3D" unique_id=947469356]
+mesh = ExtResource("1_1d7q5")
+metadata/component_id = "rock_large"
+metadata/catalog_revision = 1

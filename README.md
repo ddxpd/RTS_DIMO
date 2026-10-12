@@ -4,13 +4,18 @@ Iron Front 是一个 Godot 4 RTS 主机对等联机原型，主分支 `main` 使
 
 ## 运行
 
-- 开局菜单可选择“荒漠矿区”或“原型地图”；单机与 LAN 主机使用所选地图，加入者跟随主机。荒漠地图含可进入矿坑、高台、坡道及地形视线遮挡。
+- 开局菜单提供“荒漠矿区”和单机地形样板区；默认使用荒漠矿区，LAN 加入者跟随主机。荒漠地图含可进入矿坑、高台、坡道及地形视线遮挡。旧原型地图已移除。
 - Windows 下载：前往 [GitHub Releases](https://github.com/ddxpd/RTS_DIMO/releases)，下载发布附件 `IronFront.exe`；资源已内嵌，无需另配 PCK。预发布版本的已知限制见对应发布说明。
 - EXE 不再随 Git 跟踪；开发者仍可导出到本地 `build/IronFront.exe`。发布附件提供 SHA256 校验文件。
 - 源码验证：普通改动使用 `tools/codex/run-validation.ps1 -Level Light -Area <影响面>`，跨系统改动使用 `-Level Full`；不要直接调用未固定路径的 Godot/Python。
 - 局域网：主机使用 `Create LAN Host`，客户端输入主机 IP 后选择 `Join Host`；默认 UDP 端口为 `24560`。
 
 ## 基本操作
+
+- 地形组件验收：选择“荒漠样板区（临时测试）”进入单机；当前样板为 +128 高台、-128 矿坑、宽/长均 256 的短坡。单位应从坡道上下；3×4 兵营可在整块平地部署，跨坡或跨崖占地会被拒绝。
+- 编辑器准备：12 类运行组件在 `assets/maps/components/`，可编辑布局为 `assets/maps/desert_sample_layout.json`。布局实例使用稳定组件 ID，不依赖素材库文件名。地图编辑器界面仍是后续任务。
+- 制作预览保存在 `assets/concept_art/desert_terrain_kit/editor_ready/` 和 `assets/concept_art/sample-*-components-v1.png`，这些文件仍由个人素材库管理、不提交 Git。运行时使用独立组件资源与缩略图。
+
 
 - 左键选择、拖框选择、选择己方建筑；右键移动、采集或攻击可见敌人。
 - `A` 进入攻击模式，`S` 停止，`R` 设置集结点，鼠标滚轮缩放，中键/方向键移动镜头。
@@ -27,6 +32,17 @@ Iron Front 是一个 Godot 4 RTS 主机对等联机原型，主分支 `main` 使
 4. [游戏规则](agent_md/game_rules_zh.md)
 
 第三方插件说明位于 `addons/godot_ai/README.md`，不属于项目文档维护范围。
+
+## 目录与代码入口
+
+- `scripts/definitions/`：单位、建筑、名称、生产关系和公共规则的统一定义；`simulation.gd` 保留兼容常量和权威状态。
+- `scripts/simulation_systems/`：同步模拟系统；`snapshot_validator.gd`：快照合法性；`runtime/network_session.gd`：共享 RPC 处理。
+- `scripts/presentation/`：单位、建筑、特效和覆盖层显示；`world_visual_sync.gd` 管理节点生命周期，`ui/` 管理 HUD。
+- `assets/models/` 与 `assets/art/`：按 `units/`、`buildings/`、`effects/`、`environment/` 分类。制作源文件仍在 `assets/models/source/`，概念图由用户单独管理。
+- `tests/`：按 `simulation/`、`ui/`、`network/`、`visual/`、`performance/`、`previews/`、`helpers/`、`tooling/` 分组；`fixtures/` 保存冻结轨迹。执行范围集中登记在 `tools/codex/validation-suites.json`。
+- `tools/blender/`：按资产分组，制作依赖见 `pipelines.json`，输出路径共用 `project_paths.py`。机动兵 v5 仍依赖 v3、v2 基础模块，不能当作废弃版本删除。
+- `archive/entity_prototypes/` 保存未使用的旧实体原型，`archive/verification/` 保存历史验证证据，均通过 `.gdignore` 隔离。新增自动检查日志和可再生输出放在 `.godot/`。
+- 旧路径映射见 `tools/codex/structure-migration.json`；目录审计使用 `tools/codex/run-structure.ps1`。美术库应用该映射时保留原资源 ID 和用户元数据。
 
 ## 项目边界
 

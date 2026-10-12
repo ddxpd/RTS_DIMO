@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IRON FRONT · 美术资源库</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/management.css">
+  <script type="module" src="/model-viewer.js"></script>
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/"><span class="brand-mark">IF</span><span>IRON FRONT<small>ART LIBRARY / 资源工作台</small></span></a>
+    <div class="workspace-label">个人工作空间 <span class="online-dot"></span></div>
+    <nav aria-label="资源范围" id="scope-nav">
+      <button class="nav-item active" data-scope="all"><span>◈　全部资源</span><b id="count-all">0</b></button>
+      <button class="nav-item access-heading" data-scope="readonly"><span>▣　原文件仅查看</span><b id="count-readonly">0</b></button>
+      <button class="nav-item" data-scope="runtime"><span>⬡　正式游戏资源</span><b id="count-runtime">0</b></button>
+      <button class="nav-item" data-scope="source"><span>◇　制作源文件</span><b id="count-source">0</b></button>
+      <button class="nav-item access-heading" data-scope="editable"><span>✎　文件可改动</span><b id="count-editable">0</b></button>
+      <button class="nav-item" data-scope="concept"><span>▧　概念与效果图</span><b id="count-concept">0</b></button>
+      <button class="nav-item" data-scope="imported"><span>↓　个人导入</span><b id="count-imported">0</b></button>
+    </nav>
+    <section class="category-section"><div class="category-heading"><strong>资源分类</strong><button id="add-category" class="text-button">＋ 新增分类</button></div><p class="muted">最近一天新增按首次入库后 24 小时自动归类；手动加入的图片刷新后重新判断。</p><div id="categories" role="group" aria-label="资源分类"></div><p class="muted">分类只整理资源库，不移动原文件。</p></section>
+    <div class="sidebar-note"><strong>让每一次设计都有迹可循</strong><p>概念、模型、贴图与实机画面，在同一个地方找到。</p></div>
+    <div class="local-status"><span class="online-dot"></span>仅本机访问<small>原资源就地索引 · 导入独立保存</small></div>
+  </aside>
+  <main>
+    <header class="topbar"><div class="breadcrumb">工作空间 <span>/</span> 美术资源库</div><div class="header-actions"><button id="rescan" class="button quiet">↻ 刷新索引</button><button id="import" class="button primary">＋ 导入资源</button></div></header>
+    <section class="page-heading"><div><div class="eyebrow">YOUR CREATIVE ARCHIVE</div><h1 id="page-title">全部资源<span class="title-dot">.</span></h1><p>从最初的灵感，到游戏中的每一个细节。</p></div><div class="overview"><strong id="total-size">—</strong><span id="total-count">正在建立索引</span></div></section>
+    <section class="toolbar"><label class="searchbox"><span>⌕</span><input id="search" type="search" placeholder="搜索名称、路径或标签…" aria-label="搜索资源"><kbd>/</kbd></label><select id="format" aria-label="资源格式"><option value="all">所有格式</option><option value="image">图片 / 贴图</option><option value="glb">3D 模型 · GLB</option><option value="blend">Blender 源文件</option><option value="document">说明 / 其他</option></select><select id="sort" aria-label="排序"><option value="curated">模型与效果图优先</option><option value="updated">最近更新</option><option value="name">名称 A–Z</option><option value="size">文件大小</option></select></section>
+    <section class="category-bar"><span id="active-category">全部分类</span><button id="generate-posters" class="text-button">生成模型封面</button><span id="result-count">—</span></section>
+    <div id="batch-bar" class="batch-bar"><span id="batch-count">已选 0 个</span><button id="batch-all" class="button quiet">全选已加载结果</button><button id="batch-clear" class="button quiet">取消选择</button><button id="batch-category" class="button primary" disabled>设置图片分类</button><button id="batch-recent" class="button quiet" disabled>临时加入最近新增</button><button id="batch-delete" class="button danger" disabled>移入回收站</button><button id="compare-open" class="button quiet" disabled>并排比较</button><small class="muted">勾选资源进行操作；比较需恰好选择 2 项。</small></div>
+    <div id="load-error" class="error-panel" hidden></div>
+    <section id="gallery" class="gallery" aria-label="资源列表"></section>
+    <div id="empty" class="empty" hidden><span>◇</span><h2>这里还没有资源</h2><p>试试调整筛选条件，或导入你的第一个文件。</p></div>
+    <button id="more" class="button load-more" hidden>加载更多</button>
+    <footer>IRON FRONT / LOCAL ASSET LIBRARY <span>预览不改变游戏资源</span></footer>
+  </main>
+  <dialog id="detail-dialog" class="detail-dialog">
+    <header class="dialog-head"><div><span class="eyebrow" id="detail-type">RESOURCE</span><h2 id="detail-title"></h2></div><button class="close" data-close="detail-dialog" aria-label="关闭详情">×</button></header>
+    <div class="detail-layout"><section class="viewer-panel">
+      <div id="image-organizer" class="image-organizer" hidden><div class="field category-field"><span>图片分类 </span><fieldset id="quick-category" class="category-options" aria-label="图片分类"></fieldset></div><button id="detail-recent" class="button quiet" disabled>临时加入最近一天新增</button><span id="category-status" role="status">选择后自动保存</span></div>
+      <div id="viewer-tools" class="viewer-tools"><div class="segmented" id="backgrounds"><button data-bg="checker" class="active">透明格</button><button data-bg="dark">深色</button><button data-bg="light">浅色</button></div><button id="reset-view" class="button quiet">重置视图</button></div>
+      <div class="viewer-stage"><div id="viewer" class="viewer checker"></div><button id="image-prev" class="image-arrow previous" aria-label="上一张图片" title="上一张（←）" hidden>‹</button><button id="image-next" class="image-arrow next" aria-label="下一张图片" title="下一张（→）" hidden>›</button></div>
+      <div id="image-position" class="image-position" role="status" hidden></div>
+      <div id="animation-bar" class="animation-bar" hidden><button id="play-animation" class="button quiet">暂停</button><select id="animation-select" aria-label="选择模型动画"></select><label>速度 <select id="animation-speed" aria-label="动画速度"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option></select></label></div><div id="viewer-hint" class="viewer-hint"></div></section>
+    <aside class="inspector"><div class="asset-badges" id="detail-badges"></div><dl id="metadata"></dl><label class="field">文件位置<textarea id="detail-path" readonly rows="2"></textarea></label><div class="row"><button id="copy-path" class="button quiet">复制路径</button><a id="download" class="button quiet">下载原文件 ↗</a></div><details class="hash-block"><summary>SHA-256 校验值</summary><code id="checksum"></code></details>
+    <section class="inspector-section"><h3 id="file-access"></h3><label class="field">实际文件名<input id="actual-name" readonly></label><p id="rename-reason" class="muted"></p><p id="delete-reason" class="muted"></p><div class="row"><button id="rename-file" class="button quiet" disabled>重命名文件</button><button id="delete-file" class="button danger" disabled>移入回收站</button></div></section>
+    <section class="inspector-section"><h3>整理资源 <span>仅修改资源库记录</span></h3><label class="field">显示名称<input id="edit-title" maxlength="120"><small>仅改变页面名称，不影响文件路径或游戏。留空使用文件名。</small></label><div class="row"><div class="field category-field"><span>分类</span><fieldset id="edit-category" class="category-options" aria-label="分类"></fieldset></div><label class="field grow">标签<input id="edit-tags" placeholder="用逗号分隔"></label></div><label class="field">备注<textarea id="edit-notes" rows="2" maxlength="4000" placeholder="设计要点、待修改内容…"></textarea></label><label class="field">关联资源<select id="related-select" multiple size="4" aria-label="关联资源"></select><small>按住 Ctrl 多选，可关联概念图、源文件和实机截图。</small></label><button id="save-meta" class="button primary">保存信息</button></section>
+    <section class="inspector-section"><h3>资源版本 <button id="new-version" class="text-button">＋ 导入新版本</button></h3><div id="versions"></div><p class="muted">导入新版本独立保存，不替换游戏里的原文件。</p></section><section class="inspector-section"><h3>关联文件</h3><div id="related-list"></div></section></aside></div>
+  </dialog>
+  <dialog id="compare-dialog" class="compare-dialog"><header class="dialog-head"><div><span class="eyebrow">SIDE BY SIDE</span><h2>资源对比</h2></div><button class="close" data-close="compare-dialog" aria-label="关闭对比">×</button></header><div id="compare-content" class="compare-content"></div><p class="compare-note">模型可分别旋转与缩放。网页光照及模型内动画与 Godot 实机表现可能不同。</p></dialog>
+  <dialog id="import-dialog" class="import-dialog"><header class="dialog-head"><div><span class="eyebrow">ADD TO YOUR LIBRARY</span><h2 id="import-title">导入资源</h2></div><button class="close" data-close="import-dialog" aria-label="关闭导入">×</button></header><div class="import-body"><div class="field category-field"><span>导入分类</span><fieldset id="import-category" class="category-options" aria-label="导入分类"></fieldset></div><div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="选择或拖入资源文件"><span>↓</span><h3>将文件拖到这里</h3><p>或者点击选择文件</p><small>图片、GLB、未压缩 BLEND、TXT、JSON、HTML、TRES、GDSHADER<br>单文件最大 512 MB；HTML 和源文件仅保存与下载。</small></div><input id="file-input" type="file" multiple hidden accept=".png,.jpg,.jpeg,.webp,.gif,.svg,.glb,.blend,.txt,.json,.html,.tres,.gdshader"><p class="import-explanation">文件保存在个人资源库中，不会覆盖正式资源或加入 Git。</p><div id="upload-list" aria-live="polite"></div><button id="cancel-upload" class="button quiet" hidden>取消当前上传</button></div></dialog>
+  <dialog id="name-dialog" class="import-dialog"><form id="name-form"><header class="dialog-head"><h2 id="name-title"></h2><button type="button" class="close" data-close="name-dialog" aria-label="关闭名称编辑">×</button></header><div class="import-body"><label class="field"><span id="name-label">名称</span><div class="name-input-row"><input id="name-input" required autocomplete="off"><span id="name-extension"></span></div></label><p id="name-help" class="muted"></p><p id="name-error" class="form-error" role="alert" hidden></p><button type="submit" id="name-save" class="button primary">保存</button></div></form></dialog>
+  <dialog id="delete-dialog" class="import-dialog"><header class="dialog-head"><h2>移入 Windows 回收站</h2><button class="close" id="delete-close" aria-label="关闭删除确认">×</button></header><div class="import-body"><p id="delete-summary"></p><p class="muted">只处理列出的当前文件或版本，以及列出的同名导入伴随文件。恢复时请将整组文件从系统回收站还原到原位置，再刷新索引。</p><div id="delete-list"></div><p id="delete-error" class="form-error" role="alert" hidden></p><button id="delete-confirm" class="button danger">确认移入回收站</button></div></dialog>
+  <dialog id="category-dialog" class="import-dialog"><header class="dialog-head"><h2>设置图片分类</h2><button id="category-close" class="close" aria-label="关闭批量归类">×</button></header><div class="import-body"><p id="category-summary"></p><label class="field">操作<select id="batch-category-mode"><option value="add">追加分类</option><option value="remove">移除分类</option><option value="replace">替换全部分类</option></select></label><div class="field category-field"><span>目标分类</span><fieldset id="batch-category-select" class="category-options" aria-label="目标分类"></fieldset></div><p class="muted">只修改图库分类，不移动原文件。</p><p id="category-error" class="form-error" role="alert" hidden></p><button id="category-confirm" class="button primary">确认归类</button></div></dialog>
+  <dialog id="unsaved-dialog" class="import-dialog"><header class="dialog-head"><h2>信息尚未保存</h2></header><div class="import-body"><p>保存当前资源的修改后再继续？</p><p id="unsaved-error" class="form-error" role="alert" hidden></p><div class="row"><button id="unsaved-save" class="button primary">保存并继续</button><button id="unsaved-discard" class="button quiet">放弃修改</button><button id="unsaved-cancel" class="button quiet">取消</button></div></div></dialog>
+  <div id="toast" role="status" class="toast" hidden></div>
+</body>
+</html>

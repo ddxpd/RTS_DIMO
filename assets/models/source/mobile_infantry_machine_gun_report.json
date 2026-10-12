@@ -1,0 +1,43 @@
+{
+  "name": "机动兵机枪",
+  "stage": "independent_weapon",
+  "source_quads": 528,
+  "source_triangles": 0,
+  "source_ngons": 0,
+  "export_triangle_budget": 2000,
+  "expected_export_triangles": 1056,
+  "material_count": 1,
+  "uv_islands": 119,
+  "uv_min_gutter_pixels": 10,
+  "uv_overlap_pairs": 0,
+  "texture_size": [
+    1024,
+    1024
+  ],
+  "parts": 14,
+  "godot_display_height": 68,
+  "production_integrated": false,
+  "animation_included": false,
+  "uv_method": "unique rectangular allocation; contiguous side strip and planar quad caps; symmetric parts unique",
+  "uv_triangle_intersection_pairs": 0,
+  "uv_triangles_checked": 1056,
+  "uv_candidate_pairs_checked": 5808,
+  "normal_baked": true,
+  "ao_baked": true,
+  "normal_bake_exclusions": [],
+  "ao_method": "high-to-low local per-part occlusion; no pose shadows baked",
+  "high_detail_faces": 6406,
+  "surface_detail_method": "Editable high-source height shader baked with geometry normals into tangent-space normal atlas",
+  "export_triangles": 1056,
+  "external_dependencies": 0,
+  "reference_images": [
+    "机枪1.jpg",
+    "机枪2.jpg",
+    "机枪3.jpg"
+  ],
+  "anchors": [
+    "GripRight",
+    "GripLeft",
+    "MuzzleSocket"
+  ]
+}

@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param([ValidateRange(1, 60)][int]$DurationSeconds = 40)
 
-# Read-only Win32 cursor inspection for tests/cursor_preview.gd. Does not send input.
+# Read-only Win32 cursor inspection for tests/previews/cursor_preview.gd. Does not send input.
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'project-common.ps1')
 Add-Type -AssemblyName System.Drawing

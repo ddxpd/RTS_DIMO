@@ -1,0 +1,14 @@
+[
+  "scripts/simulation.gd",
+  "scripts/barracks_flight.gd",
+  "scripts/simulation_systems/economy_system.gd",
+  "scripts/simulation_systems/depot_docking.gd",
+  "scripts/simulation_systems/combat_system.gd",
+  "scripts/simulation_systems/visibility_system.gd",
+  "scripts/simulation_systems/mining_system.gd",
+  "scripts/maps/map_terrain.gd",
+  "scripts/definitions/entity_catalog.gd",
+  "scripts/definitions/gameplay_rules.gd",
+  "scripts/world_grid.gd",
+  "tools/balance_designer/sources.json"
+]

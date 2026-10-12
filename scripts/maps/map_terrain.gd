@@ -1,9 +1,11 @@
 extends RefCounted
+const Rules = preload("res://scripts/definitions/gameplay_rules.gd")
 
 const Catalog = preload("res://scripts/maps/map_catalog.gd")
 const Modules = preload("res://scripts/maps/terrain_modules.gd")
 const SampleSurface = preload("res://scripts/maps/sample_surface.gd")
-const CELL := 32.0
+const WorldGrid = preload("res://scripts/world_grid.gd")
+const CELL := float(WorldGrid.CELL)
 const WIDTH := 150
 const DEPTH := 100
 const WORLD := Vector2(4800, 3200)
@@ -46,6 +48,14 @@ func assemble(data: Dictionary) -> bool:
         error = "Unknown map or unsupported dimensions."
         return false
     definition = data.duplicate(true)
+    for obstacle: Rect2 in definition.get("obstacles", []):
+        if not WorldGrid.rect_aligned(obstacle):
+            error = "Obstacle footprint must align to the shared grid."
+            return false
+    for ore: Dictionary in definition.get("ores", []):
+        if ore.pos != WorldGrid.cell_center(ore.pos):
+            error = "Ore anchor must be at a grid cell center."
+            return false
     id = str(data.id)
     var digest := HashingContext.new()
     digest.start(HashingContext.HASH_SHA256)
@@ -66,10 +76,6 @@ func assemble(data: Dictionary) -> bool:
     materials.fill(0)
     visibility_cache.clear()
     flat_clear.clear()
-    if id == "prototype":
-        navigation_clear.resize(COUNT)
-        navigation_clear.fill(1)
-        return true
     if id == "desert_sample":
         return _assemble_sample()
     var occupied: Array[Rect2] = []
@@ -168,8 +174,6 @@ func position_clear(point: Vector2, radius: float) -> bool:
     return true
 
 func segment_clear(from: Vector2, to: Vector2, radius: float) -> bool:
-    if id == "prototype":
-        return true
     var steps := maxi(1, ceili(from.distance_to(to) / 8.0))
     for step in range(1, steps + 1):
         if not position_clear(from.lerp(to, float(step) / steps), radius):
@@ -189,8 +193,6 @@ func build_error(rect: Rect2) -> String:
     return ""
 
 func line_of_sight(from: Vector2, to: Vector2, from_offset: float = 40.0, to_offset: float = 24.0) -> bool:
-    if id == "prototype":
-        return true
     var start := height_at(from) + from_offset
     var finish := height_at(to) + to_offset
     var steps := maxi(1, ceili(from.distance_to(to) / 12.0))
@@ -241,7 +243,7 @@ func visible_cells(origin: Vector2, eye_height: float) -> PackedInt32Array:
                 if cx + x < 0 or cx + x >= WIDTH or cz + z < 0 or cz + z >= DEPTH:
                     break
                 var distance := sqrt(float(x * x + z * z)) * CELL
-                if distance > 340.0:
+                if distance > Rules.VISION:
                     break
                 var index := (cz + z) * WIDTH + cx + x
                 var rise := heights[index] - eye
@@ -271,7 +273,7 @@ func ray_hit(origin: Vector3, direction: Vector3) -> Vector3:
         return Vector3(INF, INF, INF)
     if direction.y < -0.001:
         first = maxf(first, (origin.y - 256.0) / -direction.y)
-        last = minf(last, (origin.y + 128.0) / -direction.y)
+        last = minf(last, (origin.y + 256.0) / -direction.y)
     var distance := maxf(first, 0.0)
     while distance <= last:
         var p := origin + direction * distance
@@ -337,6 +339,11 @@ func _validate_connectivity() -> bool:
 func _assemble_sample() -> bool:
     sample_surface = SampleSurface.new()
     sample_surface.configure(definition)
+    if not sample_surface.error.is_empty():
+        error = sample_surface.error
+        return false
+    if sample_surface.layout != null:
+        checksum = (checksum + sample_surface.layout.checksum()).sha256_text()
     navigation_clear.resize(COUNT)
     # Sample-only arrays support the existing coarse AStar grid. Fine queries
     # always use the shared triangle cache and never take the flat-cell shortcut.
@@ -345,7 +352,7 @@ func _assemble_sample() -> bool:
         heights[index] = sample_surface.height_at(point)
         gradients[index] = sample_surface.gradient_at(point)
         passable[index] = int(sample_surface.bounds.has_point(point))
-        buildable[index] = int(passable[index] != 0 and gradients[index].length() < 0.005)
+        buildable[index] = int(passable[index] != 0 and sample_surface.build_error(Rect2(point, Vector2.ZERO)).is_empty())
         navigation_clear[index] = int(sample_surface.position_clear(point, 24.0))
     return _validate_connectivity()
 

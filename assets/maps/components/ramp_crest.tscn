@@ -1,0 +1,8 @@
+[gd_scene format=3]
+
+[ext_resource type="ArrayMesh" path="res://assets/maps/components/ramp_crest.res" id="1_nlbn6"]
+
+[node name="ramp_crest" type="MeshInstance3D" unique_id=1573323436]
+mesh = ExtResource("1_nlbn6")
+metadata/component_id = "ramp_crest"
+metadata/catalog_revision = 1

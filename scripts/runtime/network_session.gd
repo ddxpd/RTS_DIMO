@@ -114,26 +114,58 @@ func server_left() -> void:
 
 @rpc("any_peer", "reliable")
 func _hello(version: String) -> void:
+    receive_hello(version, multiplayer.get_remote_sender_id(), self)
+
+@rpc("authority", "reliable")
+func _accepted(version: String, slot: int, state: Dictionary) -> void:
+    receive_accepted(version, slot, state)
+
+@rpc("authority", "reliable")
+func _rejected(reason: String) -> void:
+    receive_rejected(reason)
+
+@rpc("authority", "call_remote", "reliable", 1)
+func _world(state: Dictionary) -> void:
+    receive_world(state)
+
+@rpc("authority", "reliable")
+func _final_state(state: Dictionary) -> void:
+    receive_final_state(state)
+
+@rpc("authority", "reliable")
+func _new_match(state: Dictionary) -> void:
+    receive_new_match(state)
+
+@rpc("any_peer", "reliable")
+func _order(order: Dictionary) -> void:
+    receive_order(order, multiplayer.get_remote_sender_id(), self)
+
+@rpc("authority", "reliable")
+func _order_error(message: String) -> void:
+    receive_order_error(message)
+
+
+# Shared handlers used by the current transport and legacy main-node endpoints.
+
+func receive_hello(version: String, sender: int, reply: Node) -> void:
     if host == null or not host.is_host:
         return
-    var sender := multiplayer.get_remote_sender_id()
     if host.slots.has(sender):
         return
     if version != Simulation.VERSION:
-        _rejected.rpc_id(sender, "Different game version. Both players need this release.")
+        reply.rpc_id(sender, "_rejected", "Different game version. Both players need this release.")
         return
     host.handshakes.erase(sender)
     var slot := 2 if not host.slots.values().has(2) else 0
     host.slots[sender] = slot
-    _accepted.rpc_id(sender, Simulation.VERSION, slot, host.sim.snapshot())
+    reply.rpc_id(sender, "_accepted", Simulation.VERSION, slot, host.sim.snapshot())
 
 
-@rpc("authority", "reliable")
-func _accepted(version: String, slot: int, state: Dictionary) -> void:
+func receive_accepted(version: String, slot: int, state: Dictionary) -> void:
     if host == null:
         return
     if version != Simulation.VERSION:
-        _rejected("Different game version")
+        receive_rejected("Different game version")
         return
     host.connected  = true
     host.active     = true
@@ -145,8 +177,7 @@ func _accepted(version: String, slot: int, state: Dictionary) -> void:
     host._notify("Red army assigned." if slot == 2 else "Spectator mode: no orders allowed.")
 
 
-@rpc("authority", "reliable")
-func _rejected(reason: String) -> void:
+func receive_rejected(reason: String) -> void:
     if host == null:
         return
     disconnect_session.call_deferred()
@@ -154,8 +185,7 @@ func _rejected(reason: String) -> void:
     host._notify(reason)
 
 
-@rpc("authority", "call_remote", "reliable", 1)
-func _world(state: Dictionary) -> void:
+func receive_world(state: Dictionary) -> void:
     if host == null:
         return
     if state.get("version") != Simulation.VERSION or state.get("match") != host.sim.match_id:
@@ -176,14 +206,12 @@ func _world(state: Dictionary) -> void:
     snapshot_applied.emit(int(state.frame))
 
 
-@rpc("authority", "reliable")
-func _final_state(state: Dictionary) -> void:
+func receive_final_state(state: Dictionary) -> void:
     if host != null and state.get("match") == host.sim.match_id:
         _apply_snapshot_checked(state, "final")
 
 
-@rpc("authority", "reliable")
-func _new_match(state: Dictionary) -> void:
+func receive_new_match(state: Dictionary) -> void:
     if host == null:
         return
     if not _apply_snapshot_checked(state, "new match"):
@@ -192,11 +220,9 @@ func _new_match(state: Dictionary) -> void:
     host._reset_view()
 
 
-@rpc("any_peer", "reliable")
-func _order(order: Dictionary) -> void:
+func receive_order(order: Dictionary, sender: int, reply: Node) -> void:
     if host == null or not host.is_host:
         return
-    var sender := multiplayer.get_remote_sender_id()
     if not host.slots.has(sender):
         return
     var rate: Dictionary = host.rates.get(sender, {"frame": host.sim.frame, "count": 0})
@@ -208,10 +234,9 @@ func _order(order: Dictionary) -> void:
         return
     var error: String = host.sim.command(int(host.slots[sender]), order)
     if not error.is_empty():
-        _order_error.rpc_id(sender, error)
+        reply.rpc_id(sender, "_order_error", error)
 
 
-@rpc("authority", "reliable")
-func _order_error(message: String) -> void:
+func receive_order_error(message: String) -> void:
     if host != null:
         host._notify(message)

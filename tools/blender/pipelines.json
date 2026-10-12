@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "shared": ["project_paths.py", "shared/create_bunker.py", "shared/render_bunker_preview.py"],
+  "mobile_infantry": {
+    "entry": "mobile_infantry/build_mobile_infantry_weapon_set.py",
+    "body_recipe": "mobile_infantry/create_mobile_infantry_v5.py",
+    "required_foundations": ["mobile_infantry/create_mobile_infantry_v3.py", "mobile_infantry/create_mobile_infantry_v2.py", "mobile_infantry/create_mobile_infantry.py"],
+    "support": ["mobile_infantry/bake_mobile_infantry_v2.py", "mobile_infantry/finalize_mobile_infantry_v2.py", "mobile_infantry/rig_mobile_infantry.py", "mobile_infantry/audit_mobile_infantry_skin.py", "mobile_infantry/create_mobile_machine_gun.py"]
+  },
+  "harvester": {"entry": "harvester/create_hover_harvester.py"},
+  "ore": {"entry": "ore/create_crystal_ore.py"},
+  "refinery": {"entry": "refinery/create_ore_depot.py"},
+  "gaia": {"entry": "gaia/create_gaia_command_base.py", "support": ["gaia/gaia_materials.py"]},
+  "barracks": {"entry": "barracks/optimize_barracks_rts.py", "support": ["barracks/barracks_weathering.py"]},
+  "retained_assets": ["soldier/create_heavy_soldier.py", "legacy_base/create_base.py"]
+}

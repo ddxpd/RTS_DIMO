@@ -2,25 +2,26 @@ class_name EntityVisual
 extends Node3D
 
 const MODEL_SCENES := {
-    "soldier": preload("res://assets/models/soldier.glb"),
-    "harvester": preload("res://assets/models/harvester.glb"),
-    "base": preload("res://assets/models/base.glb"),
-    "barracks": preload("res://assets/models/barracks.glb"),
-    "refinery": preload("res://assets/models/refinery.glb"),
-    "bunker": preload("res://assets/models/bunker.glb"),
-    "ore": preload("res://assets/models/ore.glb"),
-    "rock": preload("res://assets/models/rock.glb")
+    "mobile_infantry": preload("res://assets/models/units/mobile_infantry/mobile_infantry.glb"),
+    "soldier": preload("res://assets/models/units/soldier/soldier.glb"),
+    "harvester": preload("res://assets/models/units/harvester/harvester.glb"),
+    "base": preload("res://assets/art/buildings/gaia/gaia_command_base.tscn"),
+    "barracks": preload("res://assets/models/buildings/barracks/barracks.glb"),
+    "refinery": preload("res://assets/art/buildings/refinery/ore_depot.tscn"),
+    "bunker": preload("res://assets/models/buildings/bunker/bunker.glb"),
+    "ore": preload("res://assets/models/environment/ore/ore.glb"),
 }
 
+const MOBILE_INFANTRY_SIZE_FACTOR := 2.0 / 3.0
 const MODEL_SETTINGS := {
+    "mobile_infantry": {"scale": 68.0 * MOBILE_INFANTRY_SIZE_FACTOR / 1.849, "height": 68.0 * MOBILE_INFANTRY_SIZE_FACTOR},
     "soldier": {"scale": 24.0, "height": 68.0},
-    "harvester": {"scale": 19.0, "height": 44.0},
-    "base": {"scale": 32.0, "height": 108.0},
+    "harvester": {"scale": 17.5, "height": 44.0},
+    "base": {"scale": 1.0, "height": 160.0},
     "barracks": {"scale": 12.0, "height": 104.0},
-    "refinery": {"scale": 18.0, "height": 70.0},
+    "refinery": {"scale": 20.0, "height": 72.0},
     "bunker": {"scale": 23.0, "height": 62.0},
-    "ore": {"scale": 45.0, "height": 40.0},
-    "rock": {"scale": 26.0, "height": 28.0}
+    "ore": {"scale": 45.0, "height": 80.0},
 }
 
 const TEAM_COLORS := {
@@ -28,6 +29,16 @@ const TEAM_COLORS := {
     2: Color("#d66551")
 }
 const SELECTION_GREEN := Color("#65ff78")
+const SELECTION_RING_WIDTH := 1.65
+# Display bounds include a small gap around the completed model, independent
+# of collision cells (the bunker base extends beyond its logical footprint).
+const BUILDING_SELECTION_SIZES := {
+    "base": Vector2(336.0, 208.0),
+    "barracks": Vector2(140.0, 112.0),
+    "refinery": Vector2(144.0, 144.0),
+    "bunker": Vector2(96.0, 96.0),
+}
+const BUILDING_SELECTION_WIDTH := 2.4
 
 var kind := ""
 var owner_id := 1
@@ -41,22 +52,14 @@ var _model_scale := 1.0
 var _materials: Array[Dictionary] = []
 var _faction_applied := false
 var soldier_motion: RefCounted
+var mobile_motion: RefCounted
+var harvester_motion: RefCounted
+var mobile_weapon: Node3D
 var barracks_motion: RefCounted
 var barracks_presentation: RefCounted
 var _soldier_shadow_meshes: Array[MeshInstance3D] = []
 var _soldier_shadows := false
 var _bunker_construction_defaults: Dictionary = {}
-var _base_construction_defaults: Dictionary = {}
-var _base_light_materials: Array[Dictionary] = []
-# Animation tracks target these properties on this instance, not shared resources.
-var base_scan_phase := 0.0:
-    set(value):
-        base_scan_phase = value
-        _refresh_base_lights()
-var base_windows_power := 1.0:
-    set(value):
-        base_windows_power = value
-        _refresh_base_lights()
 var selection_ring: MeshInstance3D
 var _selection_ring_material: StandardMaterial3D
 var _selection_ring_enabled := false
@@ -64,6 +67,7 @@ var _selection_ring_radius := 1.0
 
 static var _shared_animation_libraries: Dictionary = {}
 static var _neutral_faction_textures: Dictionary = {}
+static var _building_selection_meshes: Dictionary = {}
 
 
 func _init(model_kind: String, model_owner: int = 1) -> void:
@@ -78,15 +82,23 @@ func _ready() -> void:
     add_child(model)
     model.scale = Vector3.ONE * _model_scale
     _capture_bunker_construction_defaults()
-    _capture_base_construction_defaults()
-    _instance_materials()
+    if kind == "ore":
+        preload("res://assets/art/environment/ore/crystal_ore.gd").attach(self)
+    elif kind != "base":
+        _instance_materials()
+    if kind == "mobile_infantry":
+        mobile_weapon = preload("res://assets/art/units/mobile_infantry/mobile_infantry_weapon.gd").attach(model)
     _apply_lod_and_shadow_policy()
     _create_animation_player()
     if kind == "barracks":
-        barracks_motion = preload("res://assets/art/barracks_motion.gd").new(self)
-        barracks_presentation = preload("res://assets/art/barracks_presentation.gd").new(self)
+        barracks_motion = preload("res://assets/art/buildings/barracks/barracks_motion.gd").new(self)
+        barracks_presentation = preload("res://assets/art/buildings/barracks/barracks_presentation.gd").new(self)
     if kind == "soldier":
-        soldier_motion = preload("res://assets/art/soldier_motion.gd").new(self)
+        soldier_motion = preload("res://assets/art/units/soldier/soldier_motion.gd").new(self)
+    if kind == "mobile_infantry":
+        mobile_motion = preload("res://assets/art/units/mobile_infantry/mobile_infantry_motion.gd").new(self)
+    if kind == "harvester":
+        harvester_motion = preload("res://assets/art/units/harvester/hover_harvester_motion.gd").new(self)
     set_faction(owner_id)
     set_animation("idle")
     _apply_selection_ring_state()
@@ -117,15 +129,15 @@ func get_visual_forward() -> Vector3:
 
 
 func _forward_z() -> float:
-    # The soldier body is authored facing local +Z. The harvester drill is
+    # The soldier body is authored facing local +Z. The harvester arms are
     # authored facing local -Z, so facing must be resolved per model kind.
-    return 1.0 if kind == "soldier" else -1.0
+    return 1.0 if kind in ["soldier", "mobile_infantry"] else -1.0
 
 
 func set_animation(next_state: String) -> void:
     if animation_state == next_state:
         return
-    if kind == "soldier":
+    if kind in ["soldier", "mobile_infantry"]:
         animation_state = next_state
         return
     # Construction scales the model inner root. Reset it when leaving that
@@ -136,11 +148,6 @@ func set_animation(next_state: String) -> void:
             animated_root.scale = Vector3.ONE
         if kind == "bunker":
             _reset_bunker_construction_state()
-        elif kind == "base":
-            for node_path: String in _base_construction_defaults:
-                model.get_node(node_path).position = _base_construction_defaults[node_path]
-            base_windows_power = 1.0
-            base_scan_phase = 0.0
     animation_state = next_state
     if kind == "barracks" and barracks_motion != null:
         barracks_motion.apply({"state": "grounded", "ticks": 0})
@@ -199,18 +206,28 @@ func _apply_selection_ring_state() -> void:
     if selection_ring == null:
         return
     selection_ring.visible = _selection_ring_enabled
-    selection_ring.scale = Vector3.ONE * _selection_ring_radius
+    var torus := selection_ring.mesh as TorusMesh
+    if torus == null:
+        return
+    if not is_equal_approx(torus.outer_radius, _selection_ring_radius):
+        # Change the circle radius without scaling its stroke or vertical thickness.
+        torus.outer_radius = _selection_ring_radius
+        torus.inner_radius = maxf(0.0, _selection_ring_radius - SELECTION_RING_WIDTH)
 
 
 func _create_selection_ring() -> void:
     selection_ring = MeshInstance3D.new()
     selection_ring.name = "SelectionRing"
-    var torus := TorusMesh.new()
-    torus.inner_radius = 0.88
-    torus.outer_radius = 1.0
-    torus.rings = 32
-    torus.ring_segments = 8
-    selection_ring.mesh = torus
+    var is_building := BUILDING_SELECTION_SIZES.has(kind)
+    if is_building:
+        selection_ring.mesh = _get_building_selection_mesh(kind)
+    else:
+        var torus := TorusMesh.new()
+        torus.outer_radius = _selection_ring_radius
+        torus.inner_radius = maxf(0.0, _selection_ring_radius - SELECTION_RING_WIDTH)
+        torus.rings = 32
+        torus.ring_segments = 8
+        selection_ring.mesh = torus
     selection_ring.position.y = 0.42
     selection_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
     _selection_ring_material = StandardMaterial3D.new()
@@ -219,10 +236,53 @@ func _create_selection_ring() -> void:
     _selection_ring_material.albedo_color = Color(SELECTION_GREEN, 0.9)
     _selection_ring_material.emission_enabled = true
     _selection_ring_material.emission = SELECTION_GREEN
-    _selection_ring_material.emission_energy_multiplier = 1.8
+    _selection_ring_material.emission_energy_multiplier = 1.1 if is_building else 1.8
+    if is_building:
+        _selection_ring_material.cull_mode = BaseMaterial3D.CULL_DISABLED
     selection_ring.material_override = _selection_ring_material
     selection_ring.visible = false
     add_child(selection_ring)
+
+
+static func _get_building_selection_mesh(building_kind: String) -> ArrayMesh:
+    if _building_selection_meshes.has(building_kind):
+        return _building_selection_meshes[building_kind]
+    # Shorten the arms on small buildings while keeping a fixed world stroke.
+    # All four side centers stay open, and instances share immutable geometry.
+    var size: Vector2 = BUILDING_SELECTION_SIZES[building_kind]
+    var half_size := size * 0.5
+    var width := BUILDING_SELECTION_WIDTH
+    var arm := minf(30.0, minf(size.x, size.y) * 0.22)
+    var chamfer := minf(8.0, arm * 0.28)
+    var inner_cut := chamfer + width * (sqrt(2.0) - 1.0)
+    var corner := PackedVector2Array([
+        Vector2(half_size.x - arm, half_size.y),
+        Vector2(half_size.x - chamfer, half_size.y),
+        Vector2(half_size.x, half_size.y - chamfer),
+        Vector2(half_size.x, half_size.y - arm),
+        Vector2(half_size.x - width, half_size.y - arm),
+        Vector2(half_size.x - width, half_size.y - inner_cut),
+        Vector2(half_size.x - inner_cut, half_size.y - width),
+        Vector2(half_size.x - arm, half_size.y - width),
+    ])
+    var triangles := Geometry2D.triangulate_polygon(corner)
+    var vertices := PackedVector3Array()
+    var indices := PackedInt32Array()
+    for x_sign in [-1.0, 1.0]:
+        for z_sign in [-1.0, 1.0]:
+            var offset := vertices.size()
+            for point in corner:
+                vertices.append(Vector3(point.x * x_sign, 0.0, point.y * z_sign))
+            for index in triangles:
+                indices.append(offset + index)
+    var arrays := []
+    arrays.resize(Mesh.ARRAY_MAX)
+    arrays[Mesh.ARRAY_VERTEX] = vertices
+    arrays[Mesh.ARRAY_INDEX] = indices
+    var mesh := ArrayMesh.new()
+    mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+    _building_selection_meshes[building_kind] = mesh
+    return mesh
 
 
 func set_faction(next_owner: int) -> void:
@@ -231,6 +291,9 @@ func set_faction(next_owner: int) -> void:
     owner_id = next_owner
     _faction_applied = true
     var team: Color = TEAM_COLORS.get(owner_id, Color("#8d8d8d"))
+    if kind == "base":
+        (model as GaiaCommandBase).set_team_color(team)
+        return
     for entry: Dictionary in _materials:
         if not bool(entry.faction):
             continue
@@ -239,10 +302,6 @@ func set_faction(next_owner: int) -> void:
         material.emission_enabled = true
         material.emission = team.lightened(0.25)
         material.emission_energy_multiplier = 1.25 if "Glow" in material.resource_name else 0.12
-        if kind == "base":
-            # Saturated emission stays visibly blue/red under Compatibility rendering.
-            material.albedo_color = team
-            material.emission = team * team * team
         entry.base_color = material.albedo_color
     _refresh_material_tint()
 
@@ -265,7 +324,7 @@ func _instance_materials() -> void:
         if mesh_instance.mesh == null:
             continue
         for surface_index: int in range(mesh_instance.mesh.get_surface_count()):
-            var source: Material = mesh_instance.mesh.surface_get_material(surface_index)
+            var source: Material = mesh_instance.get_active_material(surface_index)
             if source == null or not source is StandardMaterial3D:
                 continue
             if kind == "barracks" and barracks_materials.has(source):
@@ -289,12 +348,10 @@ func _instance_materials() -> void:
             var entry := {
                 "material": material,
                 "base_color": material.albedo_color,
-                "faction": "Faction" in material.resource_name or (kind == "barracks" and material.resource_name == "FlagBlueFabric")
+                "faction": "Faction" in material.resource_name or (kind == "refinery" and str(mesh_instance.name).begins_with("FactionBadge")) or (kind == "barracks" and material.resource_name == "FlagBlueFabric")
             }
             _materials.append(entry)
-            if kind == "base" and "Base_Faction" in material.resource_name:
-                entry["tower_index"] = int(material.resource_name.get_slice("_", 2)) if "TowerGlow" in material.resource_name else -1
-                _base_light_materials.append(entry)
+
 
 
 func _apply_lod_and_shadow_policy() -> void:
@@ -316,12 +373,13 @@ func _apply_lod_and_shadow_policy() -> void:
             "WeaponMesh": true
         }
     elif kind == "harvester":
-        unit_core = {"Hull": true, "harvester_Static_Armor": true, "harvester_Static_Steel": true}
+        for mesh: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
+            unit_core[mesh.name] = true
 
     var is_unit := kind == "soldier" or kind == "harvester"
     for mesh_instance: MeshInstance3D in model.find_children("*", "MeshInstance3D", true, false):
         if is_unit:
-            mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+            mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if kind == "harvester" and mesh_instance.name != "CargoGlass" else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
             if kind == "soldier":
                 _soldier_shadow_meshes.append(mesh_instance)
             if not unit_core.has(mesh_instance.name) and mesh_instance.skin == null:
@@ -331,6 +389,9 @@ func _apply_lod_and_shadow_policy() -> void:
 
 
 func _refresh_material_tint() -> void:
+    if kind == "base":
+        (model as GaiaCommandBase).set_visual_tint(construction_tint, flash_enabled)
+        return
     var tint := 1.0
     if construction_tint:
         tint = 0.62
@@ -339,42 +400,16 @@ func _refresh_material_tint() -> void:
     for entry: Dictionary in _materials:
         var material: StandardMaterial3D = entry.material
         material.albedo_color = (entry.base_color as Color) * tint
-    _refresh_base_lights()
-
-
-func _refresh_base_lights() -> void:
-    for entry: Dictionary in _base_light_materials:
-        var index: int = entry.tower_index
-        var energy := clampf(base_windows_power, 0.0, 1.0)
-        if index >= 0:
-            var local_time := fposmod(base_scan_phase, 2.4) - float(index) * 0.32
-            energy = 0.0
-            if base_windows_power > 0.0 and local_time >= 0.0 and local_time < 0.28:
-                energy = minf(clampf(local_time / 0.04, 0.0, 1.0), clampf((0.28 - local_time) / 0.06, 0.0, 1.0))
-        var material: StandardMaterial3D = entry.material
-        var tint := 1.9 if flash_enabled else (0.62 if construction_tint else 1.0)
-        material.albedo_color = (entry.base_color as Color) * lerpf(0.035, 0.55 if index < 0 else 0.25, energy) * tint
-        material.emission_energy_multiplier = energy * (0.65 if index < 0 else 2.5)
-
-
-func _capture_base_construction_defaults() -> void:
-    if kind != "base":
-        return
-    for node_name: String in ["BaseFoundation", "BaseRing_0", "BaseRing_1", "BaseRing_2", "BaseRing_3", "BaseTower", "BaseCrown"]:
-        var node_path := "base/" + node_name
-        var node := model.get_node(node_path) as Node3D
-        _base_construction_defaults[node_path] = node.position
-
-
-func _base_property_track(animation: Animation, property: String, keys: Array) -> void:
-    var track := animation.add_track(Animation.TYPE_VALUE)
-    animation.track_set_path(track, "..:" + property)
-    animation.value_track_set_update_mode(track, Animation.UPDATE_CONTINUOUS)
-    for key: Array in keys:
-        animation.track_insert_key(track, float(key[0]), key[1])
 
 
 func _create_animation_player() -> void:
+    if kind == "mobile_infantry":
+        var players := model.find_children("*", "AnimationPlayer", true, false)
+        if not players.is_empty():
+            animation_player = players[0]
+            animation_player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+            animation_player.active = true
+        return
     animation_player = AnimationPlayer.new()
     animation_player.name = "StateAnimationPlayer"
     add_child(animation_player)
@@ -382,7 +417,7 @@ func _create_animation_player() -> void:
     if not _shared_animation_libraries.has(kind):
         _shared_animation_libraries[kind] = _build_animation_library()
     animation_player.add_animation_library("", _shared_animation_libraries[kind])
-    animation_player.active = kind not in ["rock", "soldier"]
+    animation_player.active = kind != "soldier"
 
 
 
@@ -432,20 +467,19 @@ func _build_animation_library() -> AnimationLibrary:
             for state: String in ["idle", "move", "attack"]:
                 library.add_animation(state, _make_animation(1.0))
         "harvester":
-            library.add_animation("idle", _harvester_idle())
-            library.add_animation("move", _harvester_move())
-            library.add_animation("mine", _harvester_mine())
-            library.add_animation("unload", _harvester_unload())
+            # The hover controller poses the rigid mechanism and cargo stages.
+            for state: String in ["idle", "move", "mine", "unload"]:
+                library.add_animation(state, _make_animation(1.0))
         "base":
-            library.add_animation("idle", _base_idle())
+            library.add_animation("idle", _make_animation(1.0))
             library.add_animation("construction", _construction_animation())
         "barracks":
             library.add_animation("idle", _barracks_idle())
             library.add_animation("active", _barracks_active())
             library.add_animation("construction", _construction_animation())
         "refinery":
-            library.add_animation("idle", _refinery_idle())
-            library.add_animation("active", _refinery_active())
+            library.add_animation("idle", _make_animation(1.0))
+            library.add_animation("active", _make_animation(1.0))
             library.add_animation("construction", _construction_animation())
         "bunker":
             library.add_animation("idle", _bunker_idle())
@@ -476,44 +510,6 @@ func _add_value_track(animation: Animation, node_name: String, property: String,
 
 
 
-func _harvester_idle() -> Animation:
-    var animation := _make_animation(2.0)
-    _add_value_track(animation, "harvester/Drill", "rotation", [Vector3(1.507, 0, 0), Vector3(1.507, 0, 0.3), Vector3(1.507, 0, 0)])
-    _add_value_track(animation, "harvester/FactionBeacon", "scale", [Vector3.ONE, Vector3(1.16, 1.16, 1.16), Vector3.ONE])
-    return animation
-
-
-func _harvester_move() -> Animation:
-    var animation := _make_animation(0.45)
-    for wheel_name: String in ["LeftWheel_0", "LeftWheel_1", "LeftWheel_2", "LeftWheel_3", "LeftWheel_4", "RightWheel_0", "RightWheel_1", "RightWheel_2", "RightWheel_3", "RightWheel_4"]:
-        _add_value_track(animation, "harvester/" + wheel_name, "rotation", [Vector3(0, 1.5708, 0), Vector3(0, 1.5708, TAU), Vector3(0, 1.5708, TAU * 2.0)])
-    _add_value_track(animation, "harvester/Hull", "position", [Vector3(0, 0.83, 0.04), Vector3(0, 0.85, 0.04), Vector3(0, 0.83, 0.04)])
-    return animation
-
-
-func _harvester_mine() -> Animation:
-    var animation := _make_animation(0.22)
-    _add_value_track(animation, "harvester/Drill", "rotation", [Vector3(1.507, 0, 0), Vector3(1.507, 0, TAU), Vector3(1.507, 0, TAU * 2.0)])
-    _add_value_track(animation, "harvester/DrillShaft", "rotation", [Vector3(1.5708, 0, 0), Vector3(1.5708, 0, TAU), Vector3(1.5708, 0, TAU * 2.0)])
-    _add_value_track(animation, "harvester/Chassis", "position", [Vector3(0, 0.54, 0), Vector3(0, 0.555, 0), Vector3(0, 0.54, 0)])
-    return animation
-
-
-func _harvester_unload() -> Animation:
-    var animation := _make_animation(0.75)
-    _add_value_track(animation, "harvester/CargoGate", "position", [Vector3(0, 0.96, -0.82), Vector3(0, 0.82, -0.82), Vector3(0, 0.96, -0.82)])
-    _add_value_track(animation, "harvester/CargoHopper", "rotation", [Vector3.ZERO, Vector3(0.08, 0, 0), Vector3.ZERO])
-    _add_value_track(animation, "harvester/FactionBeacon", "scale", [Vector3.ONE, Vector3(1.35, 1.35, 1.35), Vector3.ONE])
-    return animation
-
-
-func _base_idle() -> Animation:
-    var animation := _make_animation(2.4)
-    _base_property_track(animation, "base_windows_power", [[0.0, 1.0], [2.4, 1.0]])
-    _base_property_track(animation, "base_scan_phase", [[0.0, 0.0], [2.4, 2.4]])
-    return animation
-
-
 func _barracks_idle() -> Animation:
     return _make_animation(2.0)
 
@@ -521,20 +517,6 @@ func _barracks_idle() -> Animation:
 func _barracks_active() -> Animation:
     return _make_animation(2.0)
 
-
-func _refinery_idle() -> Animation:
-    var animation := _make_animation(2.5)
-    _add_value_track(animation, "refinery/Pump", "position", [Vector3(0.85, 0.58, 0.85), Vector3(0.85, 0.66, 0.85), Vector3(0.85, 0.58, 0.85)])
-    _add_value_track(animation, "refinery/Flare", "scale", [Vector3.ONE, Vector3(1.15, 0.9, 1.15), Vector3.ONE])
-    return animation
-
-
-func _refinery_active() -> Animation:
-    var animation := _make_animation(0.5)
-    _add_value_track(animation, "refinery/Pump", "position", [Vector3(0.85, 0.58, 0.85), Vector3(0.85, 0.74, 0.85), Vector3(0.85, 0.58, 0.85)])
-    _add_value_track(animation, "refinery/Motor", "rotation", [Vector3.ZERO, Vector3(0, TAU, 0), Vector3(0, TAU * 2.0, 0)])
-    _add_value_track(animation, "refinery/Flare", "scale", [Vector3.ONE, Vector3(1.35, 1.1, 1.35), Vector3.ONE])
-    return animation
 
 
 func _bunker_idle() -> Animation:
@@ -584,38 +566,16 @@ func _bunker_fire() -> Animation:
 
 
 func _ore_idle() -> Animation:
-    var animation := _make_animation(1.6)
-    _add_value_track(animation, "ore/OreCrystal_0", "scale", [Vector3.ONE, Vector3(1.08, 0.94, 1.08), Vector3.ONE])
-    _add_value_track(animation, "ore/OreCrystal_1", "scale", [Vector3.ONE, Vector3(0.95, 1.08, 0.95), Vector3.ONE])
-    return animation
+    # Mineral geometry stays rigid; a subtle shared shader pulse supplies motion.
+    return _make_animation(5.5)
 
 
 func _construction_animation() -> Animation:
     # Keep this clip normalized. `set_construction_progress()` maps it to the
     # building's actual build time and seeks to the current construction ratio.
     var animation := _make_animation(1.0, false)
+    # GAIA keeps a track-free normalized clip for snapshot timing only.
     if kind == "base":
-        var stages := [
-            ["BaseFoundation", 0.0, 0.12, 0.18],
-            ["BaseRing_0", 0.12, 0.24, 1.25],
-            ["BaseRing_1", 0.24, 0.36, 1.25],
-            ["BaseRing_2", 0.36, 0.48, 1.25],
-            ["BaseRing_3", 0.48, 0.60, 1.25],
-            ["BaseTower", 0.60, 0.82, 2.75],
-            ["BaseCrown", 0.82, 0.95, 3.45]
-        ]
-        for stage: Array in stages:
-            var node_path := "base/" + str(stage[0])
-            var final_position: Vector3 = _base_construction_defaults[node_path]
-            var hidden_position := final_position - Vector3(0, float(stage[3]), 0)
-            var track := animation.add_track(Animation.TYPE_VALUE)
-            animation.track_set_path(track, node_path + ":position")
-            animation.track_insert_key(track, 0.0, hidden_position)
-            animation.track_insert_key(track, float(stage[1]), hidden_position)
-            animation.track_insert_key(track, float(stage[2]), final_position)
-            animation.track_insert_key(track, 1.0, final_position)
-        _base_property_track(animation, "base_windows_power", [[0.0, 0.0], [1.0, 0.0]])
-        _base_property_track(animation, "base_scan_phase", [[0.0, 0.0], [1.0, 0.0]])
         return animation
     if kind == "bunker":
         var body_position := _bunker_default_transform("bunker/BunkerBody", "position", Vector3.ZERO)

@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1")
 data = {
-"id": "desert_quarry", "version": 1, "seed": 29471,
+"id": "desert_quarry", "version": 2, "seed": 29471,
 "title": "荒漠矿区 / Desert Quarry",
 "description": "对称矿区 · 三线交战 · 坡道、高台与阶梯矿坑",
 "size": Vector2(4800, 3200),
@@ -31,10 +31,10 @@ data = {
 {"points": [Vector2(2400, 1600), Vector2(1888, 2016), Vector2(1696, 2496), Vector2(928, 2496)], "width": 192.0}
 ],
 "ores": [
-{"pos": Vector2(704, 704), "amount": 4000}, {"pos": Vector2(4096, 2496), "amount": 4000},
-{"pos": Vector2(2400, 1600), "amount": 6000},
-{"pos": Vector2(704, 1568), "amount": 5000}, {"pos": Vector2(4096, 1632), "amount": 5000},
-{"pos": Vector2(1536, 1088), "amount": 6000}, {"pos": Vector2(3264, 2112), "amount": 6000},
-{"pos": Vector2(3936, 704), "amount": 7000}, {"pos": Vector2(864, 2496), "amount": 7000}
+{"pos": Vector2(720, 720), "amount": 4000}, {"pos": Vector2(4112, 2512), "amount": 4000},
+{"pos": Vector2(2416, 1616), "amount": 6000},
+{"pos": Vector2(720, 1584), "amount": 5000}, {"pos": Vector2(4112, 1648), "amount": 5000},
+{"pos": Vector2(1552, 1104), "amount": 6000}, {"pos": Vector2(3280, 2128), "amount": 6000},
+{"pos": Vector2(3952, 720), "amount": 7000}, {"pos": Vector2(880, 2512), "amount": 7000}
 ]
 }

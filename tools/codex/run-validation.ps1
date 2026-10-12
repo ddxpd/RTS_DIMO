@@ -4,7 +4,9 @@ param(
     [ValidateSet('Light', 'Full')]
     [string]$Level,
     [string]$Area = '',
-    [string]$GodotPath
+    [string]$GodotPath,
+    [ValidatePattern('^(\d+(,\d+)*)?$')]
+    [string]$PreserveProcessId = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,47 +33,12 @@ $runGodot = Join-Path $PSScriptRoot 'run-godot.ps1'
 $runNetwork = Join-Path $PSScriptRoot 'run-network.ps1'
 $verifyPermissions = Join-Path $PSScriptRoot 'verify-permissions.ps1'
 $cleanup = Join-Path $PSScriptRoot 'cleanup-project-processes.ps1'
-$suiteOrder = @('gameplay', 'arrival_formation', 'presentation', 'features', 'camera', 'action_bar', 'visual_models', 'soldier_locomotion', 'soldier_rig', 'visual_performance', 'terrain_maps', 'terrain_presentation', 'terrain_sample', 'terrain_sample_view')
-$suiteScripts = @{
-    arrival_formation = 'res://tests/arrival_formation.gd'
-    soldier_locomotion = 'res://tests/soldier_locomotion.gd'
-    soldier_rig = 'res://tests/soldier_rig.gd'
-    terrain_sample     = 'res://tests/terrain_sample.gd'
-    terrain_sample_view = 'res://tests/terrain_sample_view.gd'
-    terrain_maps       = 'res://tests/terrain_maps.gd'
-    terrain_presentation = 'res://tests/terrain_presentation.gd'
-    gameplay           = 'res://tests/gameplay.gd'
-    presentation       = 'res://tests/presentation.gd'
-    features           = 'res://tests/features.gd'
-    camera             = 'res://tests/camera.gd'
-    action_bar         = 'res://tests/action_bar.gd'
-    visual_models      = 'res://tests/visual_models.gd'
-    visual_performance = 'res://tests/visual_performance.gd'
-}
-$areaSuites = @{
-    Simulation   = @('gameplay', 'arrival_formation', 'terrain_maps', 'terrain_sample')
-    Presentation = @('presentation')
-    Features     = @('features', 'terrain_presentation', 'terrain_sample_view')
-    Camera       = @('camera')
-    ActionBar    = @('action_bar')
-    Visual       = @('visual_models', 'soldier_locomotion', 'soldier_rig', 'terrain_presentation', 'terrain_sample_view')
-    Performance  = @('visual_performance')
-    Network      = @('gameplay', 'terrain_maps')
-    Tooling      = @()
-}
-
-$requestedSuites = @()
+$registry = Get-Content -Raw -Encoding UTF8 -LiteralPath (Join-Path $PSScriptRoot 'validation-suites.json') | ConvertFrom-Json
+$requestedSuites = @($registry.suites | Where-Object {
+    $_.full -and ($Level -eq 'Full' -or @($_.areas | Where-Object { $_ -in $selectedAreas }).Count -gt 0)
+})
 $runEnet = $Level -eq 'Full' -or $selectedAreas -contains 'Network'
-$runTooling = $Level -eq 'Light' -and $selectedAreas -contains 'Tooling'
-
-if ($Level -eq 'Full') {
-    $requestedSuites = @($suiteOrder)
-} else {
-    foreach ($selectedArea in $selectedAreas) {
-        $requestedSuites += @($areaSuites[$selectedArea])
-    }
-    $requestedSuites = @($suiteOrder | Where-Object { $requestedSuites -contains $_ })
-}
+$runTooling = $selectedAreas -contains 'Tooling'
 
 $results = [Collections.Generic.List[object]]::new()
 $hasFailure = $false
@@ -112,6 +79,9 @@ function Invoke-ValidationStage {
 }
 
 try {
+    Invoke-ValidationStage -Name 'structure' -Action {
+        & (Join-Path $PSScriptRoot 'run-structure.ps1')
+    }
     if ($runTooling) {
         # Tooling includes a Godot startup regression with duplicate Path keys.
         $cleanupNeeded = $true
@@ -120,23 +90,20 @@ try {
         }
     }
 
-    foreach ($suiteName in $requestedSuites) {
+    foreach ($suite in $requestedSuites) {
+        $suiteName = $suite.name
         $cleanupNeeded = $true
-        $scriptPath = $suiteScripts[$suiteName]
+        $scriptPath = $suite.script
         Invoke-ValidationStage -Name $suiteName -Action {
             $stageLog = Join-Path $script:ProjectRoot ".godot\validation\$runId\$suiteName.log"
             New-Item -ItemType Directory -Force -Path (Split-Path -Parent $stageLog) | Out-Null
-            & $runGodot -Action script -Script $scriptPath -GodotPath $GodotPath -TimeoutSeconds 180 -LogFile $stageLog
+            & $runGodot -Action script -Script $scriptPath -GodotPath $GodotPath -TimeoutSeconds $suite.timeout -LogFile $stageLog -Rendered:($suite.mode -eq 'rendered')
             $stageText = (Get-Content -Raw -LiteralPath $stageLog) + (Get-Content -Raw -LiteralPath ($stageLog + '.err'))
             Write-Output $stageText
+            if ($suite.marker -and $stageText -notmatch [regex]::Escape($suite.marker)) { throw "Missing completion marker in $suiteName. See $stageLog" }
+            if ($stageText -match '"?failures"?\s*[:=]\s*[1-9][0-9]*') { throw "Godot reported failed assertions in $suiteName. See $stageLog" }
             if ($stageText -match 'SCRIPT ERROR|(?m)^ERROR:') { throw "Godot logged an error in $suiteName. See $stageLog" }
-            if ($suiteName -eq 'visual_performance') {
-                $desertLog = Join-Path $script:ProjectRoot ".godot\validation\$runId\desert_performance.log"
-                & $runGodot -Action script -Script $scriptPath -GodotPath $GodotPath -Arguments @('--desert') -TimeoutSeconds 180 -LogFile $desertLog
-                $desertText = (Get-Content -Raw -LiteralPath $desertLog) + (Get-Content -Raw -LiteralPath ($desertLog + '.err'))
-                Write-Output $desertText
-                if ($desertText -match 'SCRIPT ERROR|(?m)^ERROR:' -or $desertText -notmatch 'failures=\[\]') { throw "Desert performance failed. See $desertLog" }
-            }
+            if ($stageText -match '"?failures"?\s*[:=]\s*\[\s*[^\s\]]') { throw "Godot reported failed assertions in $suiteName. See $stageLog" }
         }
     }
 
@@ -153,7 +120,7 @@ try {
 } finally {
     if ($cleanupNeeded) {
         Invoke-ValidationStage -Name 'cleanup' -Action {
-            & $cleanup -StopTracked -StopUntracked
+            & $cleanup -StopTracked -StopUntracked -PreserveProcessId $PreserveProcessId
         }
     }
 }

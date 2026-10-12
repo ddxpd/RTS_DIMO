@@ -2,6 +2,9 @@ extends Button
 ## Persistent command tile; child controls never consume pointer events.
 const Simulation = preload("res://scripts/simulation.gd")
 const ICONS := {
+    "rally": preload("res://assets/ui/commands/rally.svg"),
+    "clear_rally": preload("res://assets/ui/commands/clear_rally.svg"),
+    "mobile_infantry": preload("res://assets/ui/commands/mobile_infantry.svg"),
     "stop": preload("res://assets/ui/commands/stop.svg"),
     "move": preload("res://assets/ui/commands/move.svg"),
     "attack": preload("res://assets/ui/commands/attack.svg"),
@@ -16,26 +19,22 @@ const ICONS := {
     "takeoff": preload("res://assets/ui/commands/takeoff.svg"),
     "deploy": preload("res://assets/ui/commands/deploy.svg"),
 }
+const Frame = preload("res://scripts/ui/mechanical_frame.gd")
 const TITLES := {
-    "stop": "Stop", "move": "Move", "attack": "Attack", "gather": "Gather",
-    "soldier": "Train soldier", "harvester": "Build miner", "cancel": "Cancel production",
-    "barracks": "Build barracks", "refinery": "Build refinery", "bunker": "Build bunker",
-    "base": "Build base", "takeoff": "Lift off", "deploy": "Deploy"
+    "rally": "设置集结点", "clear_rally": "清除集结点",
+    "mobile_infantry": "训练机动兵", "stop": "停止", "move": "移动", "attack": "攻击", "gather": "采矿",
+    "soldier": "训练士兵", "harvester": "生产矿车", "cancel": "取消生产", "barracks": "建造兵营",
+    "refinery": "卸载站", "bunker": "建造地堡", "base": "指挥基地", "takeoff": "升空", "deploy": "降落部署"
 }
 const HELP := {
-    "stop": "Stop the selected units or flying barracks.",
-    "move": "Click this button, then left-click a destination. Right-click ground to move directly.",
-    "attack": "Toggle attack targeting, then left-click an enemy or ground.",
-    "gather": "Click this button, then left-click ore. Right-click ore to gather directly.",
-    "soldier": "Add a soldier to this barracks' production queue.",
-    "harvester": "Add a miner to this refinery's production queue.",
-    "cancel": "Cancel the last queued unit and refund its cost.",
-    "barracks": "Choose a location for a barracks.",
-    "refinery": "Choose a location for a refinery.",
-    "bunker": "Choose a location for a bunker.",
-    "base": "Choose a location for a base.",
-    "takeoff": "Lift this barracks into the air. Requires completed construction and an empty queue.",
-    "deploy": "Choose a clear landing site for this flying barracks."
+    "rally": "左键指定位置，也可直接右键地面；卸载站可指向晶矿。",
+    "clear_rally": "恢复默认生产行为，不改变已出生单位的命令。",
+    "mobile_infantry": "将机动兵加入生产队列。", "stop": "停止选中的单位或飞行兵营。",
+    "move": "点击后左键选择目的地；也可直接右键地面。", "attack": "进入攻击模式，再左键选择敌人或地面。",
+    "gather": "点击后左键选择矿点；也可直接右键矿点。", "soldier": "将士兵加入生产队列。",
+    "harvester": "将采集作业机加入卸载站生产队列。", "cancel": "取消最后一个生产任务并返还费用。",
+    "barracks": "选择位置部署兵营。", "refinery": "选择位置部署矿石卸载站。", "bunker": "选择位置部署地堡。",
+    "base": "选择位置部署指挥基地。", "takeoff": "兵营需施工完成且生产队列为空。", "deploy": "选择无阻挡的兵营降落位置。"
 }
 
 var action_id := ""
@@ -44,40 +43,64 @@ var glyph: TextureRect
 var hotkey: Label
 var normal_style: StyleBoxFlat
 var active_style: StyleBoxFlat
+var caption: Label
 
 
 func _init() -> void:
-    custom_minimum_size = Vector2(100, 42)
+    custom_minimum_size = Vector2(150, 84)
     mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
     disabled = true
-    normal_style = _style(Color("#24363d"), Color("#59766f"))
-    active_style = _style(Color("#314e4b"), Color("#e5ce81"))
-    add_theme_stylebox_override("normal", normal_style)
-    add_theme_stylebox_override("hover", _style(Color("#36514f"), Color("#b9d7cc")))
-    add_theme_stylebox_override("pressed", _style(Color("#152d31"), Color("#e5ce81")))
-    add_theme_stylebox_override("disabled", _style(Color("#19282e"), Color("#35474b")))
+    normal_style = _style(Color.TRANSPARENT, Color.TRANSPARENT)
+    active_style = normal_style
+    for state: String in ["normal", "hover", "pressed", "disabled", "focus"]:
+        add_theme_stylebox_override(state, normal_style)
     glyph = TextureRect.new()
     glyph.name = "Glyph"
     glyph.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
     glyph.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
     glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
     add_child(glyph)
-    glyph.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-    glyph.offset_left = -16
-    glyph.offset_top = -16
-    glyph.offset_right = 16
-    glyph.offset_bottom = 16
+    caption = Label.new()
+    caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    caption.add_theme_font_size_override("font_size", 19)
+    add_child(caption)
     hotkey = Label.new()
     hotkey.name = "Hotkey"
     hotkey.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    hotkey.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-    hotkey.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-    hotkey.add_theme_font_size_override("font_size", 11)
+    hotkey.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    hotkey.add_theme_font_size_override("font_size", 14)
     add_child(hotkey)
-    hotkey.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-    hotkey.offset_left = 4
-    hotkey.offset_right = -5
-    hotkey.offset_bottom = -2
+    resized.connect(_layout)
+    mouse_entered.connect(queue_redraw)
+    mouse_exited.connect(queue_redraw)
+    button_down.connect(queue_redraw)
+    button_up.connect(queue_redraw)
+
+
+func _layout() -> void:
+    var large := size.y > 110
+    var extent := 64.0 if large else 28.0
+    glyph.position = Vector2((size.x - extent) * 0.5, 22 if large else 12)
+    glyph.size = Vector2.ONE * extent
+    caption.position = Vector2(9, 98 if large else 36)
+    caption.size = Vector2(size.x - 18, 28 if large else 23)
+    caption.add_theme_font_size_override("font_size", 22 if large else 17)
+    hotkey.position = Vector2(9, size.y - (29 if large else 23))
+    hotkey.size = Vector2(size.x - 18, 21 if large else 17)
+    hotkey.add_theme_font_size_override("font_size", 14 if large else 12)
+    queue_redraw()
+
+
+func _draw() -> void:
+    var color := Color("#2d80d1")
+    if disabled:
+        color = Color("#3b4b5d")
+    elif active or is_pressed():
+        color = Color("#efb451")
+    elif is_hovered():
+        color = Color("#87d8ff")
+    Frame.plate(self, Rect2(Vector2.ZERO, size), color, true)
 
 
 func _style(fill: Color, border: Color) -> StyleBoxFlat:
@@ -101,6 +124,9 @@ func present(command: String, enabled: bool, key: String = "", selected: bool = 
     # Assigning an unchanged disabled value preserves an in-progress mouse press.
     disabled = not enabled
     glyph.texture = ICONS.get(command)
+    caption.text = TITLES.get(command, "")
+    caption.modulate = Color.WHITE if enabled else Color("#6a7c90")
+    queue_redraw()
     glyph.modulate = Color.WHITE if enabled else Color(1, 1, 1, 0.3)
     hotkey.text = next_key
     hotkey.modulate = Color("#eed89b") if enabled else Color("#66716f")
@@ -110,13 +136,13 @@ func present(command: String, enabled: bool, key: String = "", selected: bool = 
         return
     tooltip_text = str(TITLES[command])
     if Simulation.UNIT_TYPES.has(command):
-        tooltip_text += " ($%d)" % int(Simulation.UNIT_TYPES[command].cost)
+        tooltip_text += "（矿石 $%d）" % int(Simulation.UNIT_TYPES[command].cost)
     elif Simulation.BUILD_TYPES.has(command):
-        tooltip_text += " ($%d)" % int(Simulation.BUILD_TYPES[command].cost)
+        tooltip_text += "（矿石 $%d）" % int(Simulation.BUILD_TYPES[command].cost)
     if not key.is_empty():
         tooltip_text += " [%s]" % key
     if active:
-        tooltip_text += " - ON"
+        tooltip_text += " · 已激活"
     tooltip_text += "\n" + str(HELP[command])
     if not enabled:
-        tooltip_text += "\nCurrently unavailable."
+        tooltip_text += "\n当前不可用。"

@@ -8,6 +8,13 @@ build/IronFront3D-review.exe
 # Concept art and previews are managed separately by the user.
 /assets/concept_art/
 /assets/concept_art.zip
+/.local/
+/tools/art_library/node_modules/
+/tools/balance_designer/node_modules/
+__pycache__/
+*.py[cod]
+# Regenerable checks live under .godot; earlier evidence is in archive/verification.
+/build/verification/
 
 # Machine-local tool registration and exact command rules.
 /.codex/toolchain.local.json

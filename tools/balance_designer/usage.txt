@@ -1,0 +1,33 @@
+IronFront 单位百科与数值草案
+
+双击 start.cmd，浏览器打开 http://127.0.0.1:8811。双击 stop.cmd 关闭本工具服务。
+需要本机 Node.js 22+ 与项目工具链中的 Godot；无需安装新网页依赖。
+
+百科详情：选择左侧对象；游戏基线与当前草案并排显示。当前方案中的数值会自动保存。
+编辑总表：搜索、分类、属性排序、修改优先、只看差异。
+方案对比：勾选多个命名方案；游戏基线始终单独显示。
+公共规则：现有采矿、卸矿、生产及视野设置。复杂几何尚不作为可编辑数值。
+所有模型图均由当前 Godot 模型渲染，截图与数值资料分别更新。
+
+存档：项目 .local/balance_designer/state.json
+上次保存备份：state.json.bak。主存档损坏时自动从备份恢复，并保留损坏文件。
+浏览器缓存不是存档。复制项目时请一并备份上述目录。
+有效数值输入后 450 毫秒保存；非法值不覆盖上次有效值。关闭未保存页面会提示。
+另一窗口改动时会拒绝旧版本提交；先记录未保存输入，再点击重新加载。
+完整 JSON 导出包含方案原始基线、覆盖值、冲突和历史字段；CSV 提供当前值或差异。
+当前不提供 JSON 导入，也不向游戏写回任何数值。
+
+刷新游戏资料：只读运行 Godot 导出，更新所有方案。
+未修改字段跟随游戏；草案独有改动保留；双方同时修改时逐项选择。
+游戏新增简单字段自动加入；未知复杂类型只读待适配；移除字段保存在历史记录和导出中。
+硬编码特殊规则若定位失败将标记待核对。
+独立数值的合法性不代表整份平衡方案适用于游戏；未来同步时仍需处理半径/泊位几何、容量/快照等关联约束。
+
+维护入口（从项目根目录运行）：
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/codex/run-balance-designer.ps1 -Action refresh
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/codex/run-balance-designer.ps1 -Action portraits
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/codex/run-balance-designer.ps1 -Action test
+portraits 需要可用显卡，使用项目 Forward+；截图保存在 assets/concept_art/balance_designer。
+依赖安装：powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/codex/run-balance-designer.ps1 -Action install
+test 使用本工具自己的 Playwright 依赖与本机 Chromium；测试存档位于独立临时目录。已有 npm 缓存可在 install 时加 -Offline。
+数值通过 Godot 显式导出，不解析玩法源码中的数字；来源清单统一保存在 sources.json。

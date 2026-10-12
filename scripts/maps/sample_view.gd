@@ -16,6 +16,11 @@ func build(data: Terrain, _fog: Texture2D) -> void:
             ground_material.set_shader_parameter(kind + "_" + channel, load("res://assets/maps/sample/" + kind + "_" + channel + ".png"))
     for parameter: String in data.definition.materials:
         ground_material.set_shader_parameter(parameter, data.definition.materials[parameter])
+    if data.sample_surface.layout != null:
+        ground_material.set_shader_parameter("sand_color", load("res://assets/maps/components/sand_basecolor.png"))
+        ground_material.set_shader_parameter("sand_nr", load("res://assets/maps/components/sand_normal.png"))
+        ground_material.set_shader_parameter("rock_color", load("res://assets/maps/components/cliff_basecolor.png"))
+        ground_material.set_shader_parameter("rock_nr", load("res://assets/maps/components/cliff_normal.png"))
     rock_material = ground_material.duplicate()
     rock_material.set_shader_parameter("decoration", true)
     var field = terrain.sample_surface
@@ -64,6 +69,8 @@ func build(data: Terrain, _fog: Texture2D) -> void:
             ground_meshes.append(_finish(surface, ground_material))
     _buffer_ground()
     _sample_rubble()
+    if field.layout != null:
+        _component_decorations()
     sample_build_ms = Time.get_ticks_msec() - started
     print("SAMPLE_VIEW triangles=", triangle_count, " build_ms=", sample_build_ms)
 
@@ -97,6 +104,8 @@ func _sample_rubble() -> void:
         if edge > 96.0 or field.road_sample(p).x > 0.08:
             continue
         var slope: float = field.gradient_at(p).length()
+        if field.layout != null and slope > 0.55:
+            continue
         var size := rng.randf_range(2.0, 6.0)
         if slope > 0.55:
             size = rng.randf_range(9.0, 23.0)
@@ -137,11 +146,13 @@ func _sample_rubble() -> void:
     var instance := MultiMeshInstance3D.new()
     instance.name = "CliffRubble"
     instance.multimesh = multi
-    instance.material_override = rock_material
+    instance.material_override = load("res://assets/maps/components/rock.tres") if field.layout != null else rock_material
     add_child(instance)
 
 
 func _sample_stone() -> ArrayMesh:
+    if terrain.sample_surface.layout != null:
+        return load("res://assets/maps/components/detail_rubble.res")
     var surface := SurfaceTool.new()
     surface.begin(Mesh.PRIMITIVE_TRIANGLES)
     for side in range(7):
@@ -155,3 +166,31 @@ func _sample_stone() -> ArrayMesh:
         _quad(surface, [top_a, top_b, Vector3(0.1,0.85,0), Vector3(0.1,0.85,0)], [Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE])
     surface.index()
     return surface.commit()
+
+
+func _component_decorations() -> void:
+    # Cache batching by component; the JSON retains individual editable objects.
+    var catalog = preload("res://scripts/maps/component_catalog.gd")
+    var groups := {}
+    var components: Array = terrain.sample_surface.layout.decorations.duplicate()
+    for instance: Dictionary in terrain.sample_surface.layout.surfaces:
+        if instance.component == "cliff_straight":
+            components.append(instance)
+    for instance: Dictionary in components:
+        if not groups.has(instance.component):
+            groups[instance.component] = []
+        groups[instance.component].append(catalog.transform(instance))
+    for id: String in groups:
+        var scene: PackedScene = load(catalog.entry(id).scene)
+        var source := scene.instantiate() as MeshInstance3D
+        var multi := MultiMesh.new()
+        multi.transform_format = MultiMesh.TRANSFORM_3D
+        multi.mesh = source.mesh
+        multi.instance_count = groups[id].size()
+        for index in range(multi.instance_count):
+            multi.set_instance_transform(index, groups[id][index])
+        source.free()
+        var batch := MultiMeshInstance3D.new()
+        batch.name = "Components_" + id
+        batch.multimesh = multi
+        add_child(batch)

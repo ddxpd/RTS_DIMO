@@ -1,0 +1,88 @@
+"""Read-only layout checks; run via run-structure.ps1."""
+import ast
+import hashlib
+import importlib.util
+import json
+from pathlib import Path
+import re
+import struct
+import sys
+
+ROOT = Path(__file__).resolve().parents[2]
+failures = []
+checks = 0
+
+
+def check(ok, label):
+    global checks
+    checks += 1
+    if not ok:
+        failures.append(label)
+
+
+def read(path):
+    return path.read_text(encoding='utf-8-sig')
+
+
+def main():
+    registry = json.loads(read(ROOT / 'tools/codex/validation-suites.json'))['suites']
+    registered = [entry['script'][6:] for entry in registry]
+    check(len(registered) == len(set(registered)), 'Registry has unique paths')
+    for entry in registry:
+        check((ROOT / entry['script'][6:]).is_file(), entry['script'])
+        if entry['full']:
+            check(entry['mode'] in ('headless', 'rendered') and bool(entry['marker']), 'Executable suite: ' + entry['name'])
+    scripts = {p.relative_to(ROOT).as_posix() for p in (ROOT / 'tests').rglob('*') if p.suffix in ('.gd', '.ps1') and 'fixtures' not in p.parts}
+    check(scripts == set(registered), 'Every test/preview/helper is registered')
+    for folder in ('scripts', 'assets/art', 'tests', 'tools/balance_designer'):
+        for p in (ROOT / folder).rglob('*.gd'):
+            for resource in re.findall(r'(?:preload|load)\("(res://[^"%]+)"\)', read(p)):
+                check((ROOT / resource[6:]).is_file(), f'{p.relative_to(ROOT)}: {resource}')
+    uids = {}
+    for p in (ROOT / 'assets/models').rglob('*.import'):
+        text = read(p)
+        sources = re.findall(r'^source_file="res://(.*)"', text, re.M)
+        for source in sources:
+            check((ROOT / source).is_file(), 'Import source ' + source)
+        uid = re.search(r'^uid="(.*)"', text, re.M)
+        if uid:
+            check(uid[1] not in uids, 'Unique resource UID: ' + str(p))
+            uids[uid[1]] = p
+    for p in (ROOT / 'assets/models').rglob('*.glb'):
+        data = p.read_bytes()
+        length = struct.unpack_from('<I', data, 12)[0]
+        doc = json.loads(data[20:20 + length])
+        for item in doc.get('images', []) + doc.get('buffers', []):
+            uri = item.get('uri', '')
+            if uri and not uri.startswith('data:'):
+                check((p.parent / uri).is_file(), f'GLB dependency {p.name}: {uri}')
+    for p in (ROOT / 'tools/blender').rglob('*.py'):
+        ast.parse(read(p), filename=str(p))
+        check(True, 'Python syntax ' + str(p))
+    pipelines = json.loads(read(ROOT / 'tools/blender/pipelines.json'))
+    def check_pipeline(value):
+        if isinstance(value, dict):
+            for child in value.values(): check_pipeline(child)
+        elif isinstance(value, list):
+            for child in value: check_pipeline(child)
+        elif isinstance(value, str) and value.endswith('.py'):
+            check((ROOT / 'tools/blender' / value).is_file(), 'Recipe: ' + value)
+    check_pipeline(pipelines)
+    spec = importlib.util.spec_from_file_location('project_paths', ROOT / 'tools/blender/project_paths.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    migration = json.loads(read(ROOT / 'tools/codex/structure-migration.json'))['paths']
+    for old, new in migration.items():
+        if old.startswith('assets/models/') and not old.endswith('.import'):
+            check(module.model_path(Path(old).name) == ROOT / new, 'Recipe output ' + old)
+    if len(sys.argv) > 1:
+        preserved = json.loads(read(Path(sys.argv[1])))
+        for old, digest in preserved.items():
+            p = ROOT / migration.get(old, old)
+            check(p.is_file() and hashlib.sha256(p.read_bytes()).hexdigest() == digest, 'Preserved bytes: ' + old)
+    print(json.dumps({'checks': checks, 'failures': failures}, ensure_ascii=False))
+    return bool(failures)
+
+
+if __name__ == '__main__':
+    sys.exit(main())

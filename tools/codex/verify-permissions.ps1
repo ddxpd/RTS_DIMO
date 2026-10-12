@@ -36,7 +36,7 @@ if ($parseErrors.Count -gt 0) {
 
 Write-Output 'WRAPPER_SYNTAX PASS'
 Assert-LocalRulesCurrent
-& (Join-Path $script:ProjectRoot 'tests\toolchain_paths.ps1')
+& (Join-Path $script:ProjectRoot 'tests\tooling\toolchain_paths.ps1')
 
 $pathFixture = [Collections.Hashtable]::new([StringComparer]::Ordinal)
 $pathFixture.Add('Path', 'C:\sandbox-tools;C:\Windows;C:\tools with spaces')
@@ -66,7 +66,7 @@ if ($actualPathAfter.Count -gt 1 -or $actualPathAfter.Value -cne $actualPathBefo
     throw 'Process Path normalization is not idempotent or changed the effective value.'
 }
 Write-Output 'PROCESS_PATH_CHECK PASS (duplicate/single/missing/conflict fixtures; live value preserved)'
-& (Join-Path $script:ProjectRoot 'tests\process_environment.ps1')
+& (Join-Path $script:ProjectRoot 'tests\tooling\process_environment.ps1')
 
 $codex = Get-Command codex -ErrorAction SilentlyContinue
 $codexPath = if ($null -ne $codex) { $codex.Source } else { $null }
@@ -103,7 +103,7 @@ if (-not $codexPath) {
 
     $godotPrefix = @('powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'run-godot.ps1'))
     foreach ($logName in @('.godot\path-check-a.log', '.godot\path-check-b.log')) {
-        $policy = Get-CommandPolicy -CommandArguments ($godotPrefix + @('-Action', 'script', '-Script', 'res://tests/terrain_sample_view.gd', '-Rendered', '-LogFile', $logName, '-TimeoutSeconds', '150'))
+        $policy = Get-CommandPolicy -CommandArguments ($godotPrefix + @('-Action', 'script', '-Script', 'res://tests/previews/terrain_sample_view.gd', '-Rendered', '-LogFile', $logName, '-TimeoutSeconds', '150'))
         if ($policy.PSObject.Properties.Name -notcontains 'decision' -or $policy.decision -ne 'allow') {
             throw "Godot command with variable log parameters is not allowed: $logName"
         }

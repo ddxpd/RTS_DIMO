@@ -1,0 +1,89 @@
+{
+  "source_dimensions": [
+    18,
+    10,
+    9
+  ],
+  "display_dimensions": [
+    320,
+    192,
+    144
+  ],
+  "display_scale": [17.77777777777778, 19.2, 16],
+  "armor_atlas": 4096,
+  "mechanical_atlas": 2048,
+  "normal_method": "Cycles selected-to-active high detail armor trim bake; mechanical height normal",
+  "ao_method": "Cycles high trim local AO baked into ORM.R",
+  "legacy_hashes": {
+    "assets\\models\\base.glb": "1c8bc2ceb470b0ea7e541feee5809c9da4eead59198f3a02463d898738d35d9f",
+    "assets\\models\\source\\ironfront_models.blend": "bc4da1f5b0d67357b2012215380ea459f941dcc07a277231e6235c1dcd441c67",
+    "tools\\blender\\create_base.py": "5d204e13c95e5488d08f28d33e78c06811c15fa755e95e059df33b852888edbc"
+  },
+  "lods": [
+    {
+      "level": 0,
+      "triangles": 93088,
+      "meshes": 13,
+      "materials": 4,
+      "bounds_min": [
+        -9.0,
+        -4.999894142150879,
+        0.0
+      ],
+      "bounds_max": [
+        9.0,
+        5.000105381011963,
+        9.0
+      ]
+    },
+    {
+      "level": 1,
+      "triangles": 26588,
+      "meshes": 13,
+      "materials": 4,
+      "bounds_min": [
+        -9.0,
+        -5.0,
+        0.0
+      ],
+      "bounds_max": [
+        9.0,
+        5.0,
+        9.0
+      ]
+    },
+    {
+      "level": 2,
+      "triangles": 4092,
+      "meshes": 13,
+      "materials": 4,
+      "bounds_min": [
+        -9.0,
+        -5.0,
+        0.0
+      ],
+      "bounds_max": [
+        9.0,
+        5.0,
+        9.0
+      ]
+    }
+  ],
+  "legacy_unchanged": true,
+  "construction_animation": "not implemented; awaiting reference",
+  "texture_packaging": "GLBs reference adjacent gaia_shared_*.png; deliver together",
+  "presentation": {
+    "scene": "res://assets/art/gaia_command_base.tscn",
+    "preview": "res://tests/gaia_command_base_preview.tscn",
+    "clearance": 12,
+    "idle_bob_amplitude": 0.5,
+    "idle_period_seconds": 6,
+    "takeoff_landing_seconds": 6,
+    "lift": 96,
+    "cruise_pitch_degrees": 2,
+    "radar_period_seconds": 24,
+    "lod_out_distances": [950, 1850],
+    "lod_in_distances": [850, 1750],
+    "animation_delivery": "Independent Godot controller; GLB contains rigid part hierarchy, not embedded animation clips"
+  }
+}

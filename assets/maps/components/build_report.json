@@ -1,0 +1,129 @@
+{
+  "catalog_revision": 1,
+  "components": {
+    "cliff_end": {
+      "boundary_preserved": true,
+      "footprint": [
+        128.0,
+        64.0
+      ],
+      "indices": 768,
+      "lods": 0,
+      "vertices": 153
+    },
+    "cliff_inner": {
+      "boundary_preserved": true,
+      "footprint": [
+        64.0,
+        64.0
+      ],
+      "indices": 384,
+      "lods": 0,
+      "vertices": 81
+    },
+    "cliff_outer": {
+      "boundary_preserved": true,
+      "footprint": [
+        64.0,
+        64.0
+      ],
+      "indices": 384,
+      "lods": 0,
+      "vertices": 81
+    },
+    "cliff_straight": {
+      "boundary_preserved": true,
+      "footprint": [
+        256.0,
+        64.0
+      ],
+      "indices": 11214,
+      "lods": 0,
+      "vertices": 11070
+    },
+    "detail_rubble": {
+      "triangles": 36
+    },
+    "plateau_top": {
+      "boundary_preserved": true,
+      "footprint": [
+        256.0,
+        256.0
+      ],
+      "indices": 6,
+      "lods": 0,
+      "vertices": 4
+    },
+    "ramp_crest": {
+      "boundary_preserved": true,
+      "footprint": [
+        256.0,
+        32.0
+      ],
+      "indices": 24,
+      "lods": 0,
+      "vertices": 10
+    },
+    "ramp_run": {
+      "boundary_preserved": true,
+      "footprint": [
+        256.0,
+        192.0
+      ],
+      "indices": 6,
+      "lods": 0,
+      "vertices": 4
+    },
+    "ramp_toe": {
+      "boundary_preserved": true,
+      "footprint": [
+        256.0,
+        32.0
+      ],
+      "indices": 24,
+      "lods": 0,
+      "vertices": 10
+    },
+    "rock_large": {
+      "boundary_preserved": false,
+      "footprint": [
+        128.0,
+        112.0
+      ],
+      "indices": 2586,
+      "lods": 1,
+      "vertices": 2539
+    },
+    "rock_medium": {
+      "boundary_preserved": false,
+      "footprint": [
+        64.0,
+        56.0
+      ],
+      "indices": 2586,
+      "lods": 1,
+      "vertices": 2539
+    },
+    "rubble_cluster": {
+      "boundary_preserved": false,
+      "footprint": [
+        96.0,
+        96.0
+      ],
+      "indices": 2058,
+      "lods": 5,
+      "vertices": 559
+    },
+    "sand_flat": {
+      "boundary_preserved": true,
+      "footprint": [
+        256.0,
+        256.0
+      ],
+      "indices": 6,
+      "lods": 0,
+      "vertices": 4
+    }
+  },
+  "minimum_hardware_tested": false
+}

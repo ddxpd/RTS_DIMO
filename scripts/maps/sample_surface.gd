@@ -3,19 +3,37 @@ extends RefCounted
 ## The original maps do not use this sampler.
 
 const STEP := 8.0
-const REVISION := 2
+const REVISION := 3
+const Layout = preload("res://scripts/maps/component_layout.gd")
+var layout: Layout
+var error := ""
 var definition: Dictionary
 var bounds: Rect2
 var cache_bounds: Rect2
 var columns: int
 var rows: int
 var heights := PackedFloat32Array()
+var surface_flags := PackedByteArray()
+var flat_clearance := PackedFloat32Array()
 var roads: Array[Dictionary] = []
 
 
 func configure(data: Dictionary) -> void:
     definition = data
+    roads.clear()
+    layout = null
+    error = ""
+    if data.has("component_layout"):
+        layout = Layout.new()
+        if not layout.load_file(data.component_layout):
+            error = layout.error
+            return
+        definition.ramps = layout.ramps()
     bounds = data.sample_bounds
+    if layout != null:
+        var area: Array = layout.data.bounds
+        bounds = Rect2(area[0], area[1], area[2], area[3])
+        definition.sample_bounds = bounds
     cache_bounds = bounds.grow(128.0)
     columns = int(cache_bounds.size.x / STEP) + 1
     rows = int(cache_bounds.size.y / STEP) + 1
@@ -37,6 +55,42 @@ func configure(data: Dictionary) -> void:
         for x in range(columns):
             var p := cache_bounds.position + Vector2(x, z) * STEP
             heights[z * columns + x] = _authored_height(p)
+    if layout != null:
+        _cache_clearance()
+
+
+func _cache_clearance() -> void:
+    # Immutable layout -> conservative distance to any slope, cliff or blocker.
+    # Most RTS movement probes are on flat pads and need only one array read.
+    surface_flags.resize(columns * rows)
+    var distances := PackedInt32Array()
+    distances.resize(columns * rows)
+    distances.fill(0)
+    for z in range(rows - 1):
+        for x in range(columns - 1):
+            var index := z * columns + x
+            var p := cache_bounds.position + Vector2(x + 0.5, z + 0.5) * STEP
+            var kind := str(layout.surface_at(p).get("component", ""))
+            surface_flags[index] = 2 if kind.begins_with("ramp") else 1 if kind.begins_with("cliff") else 0
+            var h := heights[index]
+            if surface_flags[index] == 0 and h == heights[index + 1] and h == heights[index + columns] and h == heights[index + columns + 1] and not layout.blocked(p, STEP):
+                distances[index] = 10000
+    for z in range(1, rows - 1):
+        for x in range(1, columns - 1):
+            var i := z * columns + x
+            distances[i] = mini(distances[i], 1 + mini(mini(distances[i - 1], distances[i - columns]), mini(distances[i - columns - 1], distances[i - columns + 1])))
+    for z in range(rows - 2, 0, -1):
+        for x in range(columns - 2, 0, -1):
+            var i := z * columns + x
+            distances[i] = mini(distances[i], 1 + mini(mini(distances[i + 1], distances[i + columns]), mini(distances[i + columns - 1], distances[i + columns + 1])))
+    flat_clearance.resize(columns * rows)
+    for i in range(distances.size()):
+        flat_clearance[i] = maxf(0, (distances[i] - 2) * STEP)
+
+
+func _cache_index(p: Vector2) -> int:
+    var q := (p - cache_bounds.position) / STEP
+    return clampi(floori(q.y), 0, rows - 1) * columns + clampi(floori(q.x), 0, columns - 1)
 
 
 func edge_distance(p: Vector2, center: Vector2, radius: Vector2) -> float:
@@ -52,6 +106,8 @@ func _level(distance: float, width: float) -> float:
 
 
 func _authored_height(p: Vector2) -> float:
+    if layout != null:
+        return layout.height_at(p)
     var plateau: Dictionary = definition.plateau
     var quarry: Dictionary = definition.quarry
     var top_edge := edge_distance(p, plateau.center, plateau.radius)
@@ -81,6 +137,8 @@ func ramp_coordinates(p: Vector2, ramp: Dictionary) -> Vector3:
 
 
 func ramp_rise(along: float, length: float) -> float:
+    if layout != null:
+        return Layout.Catalog.ramp_height(along) / 128.0
     # Integrate a trapezoidal gradient: flat at the ends, constant through the
     # middle. The short quadratic caps meet without steps or normal breaks.
     var cap := minf(float(definition.ramp_style.end_blend), length * 0.45)
@@ -180,6 +238,13 @@ func road_sample(p: Vector2) -> Vector3:
 
 
 func cliff_distance(p: Vector2) -> float:
+    if layout != null:
+        var distance := INF
+        for instance in layout.surfaces:
+            if instance.component.begins_with("cliff"):
+                var rect: Rect2 = instance._rect
+                distance = minf(distance, p.distance_to(p.clamp(rect.position, rect.end)))
+        return distance
     var plateau: Dictionary = definition.plateau
     var quarry: Dictionary = definition.quarry
     return minf(absf(edge_distance(p, plateau.center, plateau.radius)), minf(absf(edge_distance(p, quarry.center, quarry.radius)), absf(edge_distance(p, quarry.center, quarry.inner_radius))))
@@ -188,12 +253,24 @@ func cliff_distance(p: Vector2) -> float:
 func position_clear(p: Vector2, radius: float) -> bool:
     if not bounds.grow(-radius).has_point(p):
         return false
+    if layout != null and flat_clearance[_cache_index(p)] >= radius and radius > 0:
+        return true
+    return position_clear_precise(p, radius)
+
+
+func position_clear_precise(p: Vector2, radius: float) -> bool:
+    if not bounds.grow(-radius).has_point(p):
+        return false
+    if layout != null and layout.blocked(p, radius):
+        return false
     var height := height_at(p)
-    if gradient_at(p).length() > 0.4:
+    var limit := 0.72 if layout != null and _ramp_at(p) else 0.4
+    if gradient_at(p).length() > limit or _cliff_at(p):
         return false
     for direction: Vector2 in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1), Vector2(0.707, 0.707), Vector2(-0.707, 0.707), Vector2(0.707, -0.707), Vector2(-0.707, -0.707)]:
         var probe := p + direction * radius
-        if absf(height_at(probe) - height) > radius * 0.4 + 0.25 or gradient_at(probe).length() > 0.42:
+        var probe_limit := 0.72 if layout != null and _ramp_at(probe) else 0.42
+        if absf(height_at(probe) - height) > radius * maxf(limit, probe_limit) + 0.25 or gradient_at(probe).length() > probe_limit or _cliff_at(probe):
             return false
     return true
 
@@ -205,6 +282,22 @@ func build_error(rect: Rect2) -> String:
     for z in range(int(rect.position.y) - 16, int(rect.end.y) + 17, 8):
         for x in range(int(rect.position.x) - 16, int(rect.end.x) + 17, 8):
             var p := Vector2(x, z)
+            if layout != null:
+                var component := layout.surface_at(p)
+                if (not component.is_empty() and not Layout.Catalog.entry(component.component).buildable) or layout.blocked(p, 0):
+                    return "Build on a flat platform, away from slopes and cliffs"
             if absf(height_at(p) - expected) > 0.1 or gradient_at(p).length() > 0.005:
                 return "Build on a flat platform, away from slopes and cliffs"
     return ""
+
+
+func _ramp_at(p: Vector2) -> bool:
+    if layout == null:
+        return false
+    return surface_flags[_cache_index(p)] == 2
+
+
+func _cliff_at(p: Vector2) -> bool:
+    if layout == null:
+        return false
+    return surface_flags[_cache_index(p)] == 1

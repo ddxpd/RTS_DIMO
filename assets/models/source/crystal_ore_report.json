@@ -1,0 +1,13 @@
+{
+  "triangles": 4852,
+  "meshes": 2,
+  "crystals": 34,
+  "rocks": 84,
+  "radius": 0.7988783039523355,
+  "height": 1.7542096376419067,
+  "seed": 7419,
+  "crystal_texture": 2048,
+  "rock_texture": 1024,
+  "runtime_material": "res://assets/art/crystal_ore.gdshader",
+  "source": "independent editable geometry; portable base PBR; engine layers supplied separately"
+}

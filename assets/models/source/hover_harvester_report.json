@@ -1,0 +1,44 @@
+{
+  "triangles": 29786,
+  "meshes": 18,
+  "bounds_min": [
+    -1.7609999179840088,
+    -1.5410000085830688,
+    0.38999998569488525
+  ],
+  "bounds_max": [
+    1.7609999179840088,
+    2.082120180130005,
+    2.0845000743865967
+  ],
+  "axes": "source Z up +Y front; GLB Y up -Z front",
+  "cargo_stages": [
+    0,
+    1,
+    20,
+    40
+  ],
+  "parts": [
+    "harvester",
+    "HoverBody",
+    "Arm_L",
+    "ArmExtension_L",
+    "Claw_L_A",
+    "Claw_L_B",
+    "Arm_R",
+    "ArmExtension_R",
+    "Claw_R_A",
+    "Claw_R_B",
+    "CargoFrame",
+    "CargoHigh",
+    "CargoLow",
+    "CargoMid",
+    "CargoWindows",
+    "HullAssembly",
+    "Thruster_L",
+    "Fan_L",
+    "Thruster_R",
+    "Fan_R"
+  ],
+  "scope": "ground unit; visual hover only; no carry-to-bin or tipping animation"
+}

@@ -1,0 +1,732 @@
+{
+  "schema": 1,
+  "suites": [
+    {
+      "name": "simulation_systems",
+      "script": "res://tests/simulation/simulation_systems.gd",
+      "areas": [
+        "Simulation"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "SIMULATION_SYSTEMS"
+    },
+    {
+      "name": "active_roster",
+      "script": "res://tests/simulation/active_roster.gd",
+      "areas": [
+        "Simulation"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "ACTIVE_ROSTER"
+    },
+    {
+      "name": "mining_capacity",
+      "script": "res://tests/simulation/mining_capacity.gd",
+      "areas": [
+        "Simulation"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "MINING_CAPACITY"
+    },
+    {
+      "name": "mining_slope",
+      "script": "res://tests/simulation/mining_slope_probe.gd",
+      "areas": [
+        "Simulation"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "SLOPE_RESULT"
+    },
+    {
+      "name": "building_grid",
+      "script": "res://tests/simulation/building_grid.gd",
+      "areas": [
+        "Simulation"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "BUILDING_GRID"
+    },
+    {
+      "name": "ore_depot",
+      "script": "res://tests/visual/ore_depot.gd",
+      "areas": [
+        "Simulation",
+        "Network"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "ORE_DEPOT"
+    },
+    {
+      "name": "gameplay",
+      "script": "res://tests/simulation/gameplay.gd",
+      "areas": [
+        "Simulation",
+        "Network"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "GAMEPLAY_TEST"
+    },
+    {
+      "name": "arrival_formation",
+      "script": "res://tests/simulation/arrival_formation.gd",
+      "areas": [
+        "Simulation"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "ARRIVAL_FORMATION"
+    },
+    {
+      "name": "presentation",
+      "script": "res://tests/ui/presentation.gd",
+      "areas": [
+        "Presentation"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "PRESENTATION_TEST"
+    },
+    {
+      "name": "features",
+      "script": "res://tests/ui/features.gd",
+      "areas": [
+        "Features"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "FEATURES_TEST"
+    },
+    {
+      "name": "camera",
+      "script": "res://tests/ui/camera.gd",
+      "areas": [
+        "Camera"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "CAMERA_TEST"
+    },
+    {
+      "name": "action_bar",
+      "script": "res://tests/ui/action_bar.gd",
+      "areas": [
+        "ActionBar"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "COMMAND_LAYOUT"
+    },
+    {
+      "name": "visual_models",
+      "script": "res://tests/visual/visual_models.gd",
+      "areas": [
+        "Visual"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "VISUAL_MODELS_TEST"
+    },
+    {
+      "name": "build_footprints",
+      "script": "res://tests/visual/build_footprints.gd",
+      "areas": [
+        "Visual"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "BUILD_FOOTPRINTS"
+    },
+    {
+      "name": "soldier_locomotion",
+      "script": "res://tests/visual/soldier_locomotion.gd",
+      "areas": [
+        "Visual"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "SOLDIER_LOCOMOTION"
+    },
+    {
+      "name": "soldier_rig",
+      "script": "res://tests/visual/soldier_rig.gd",
+      "areas": [
+        "Visual"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "SOLDIER_RIG"
+    },
+    {
+      "name": "mobile_infantry",
+      "script": "res://tests/visual/mobile_infantry.gd",
+      "areas": [
+        "Visual"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "MOBILE_INFANTRY_RUNTIME_CHECKS"
+    },
+    {
+      "name": "mobile_impact",
+      "script": "res://tests/visual/mobile_impact.gd",
+      "areas": [
+        "Visual",
+        "Network"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "MOBILE_IMPACT"
+    },
+    {
+      "name": "visual_performance",
+      "script": "res://tests/performance/visual_performance.gd",
+      "areas": [
+        "Performance"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "VISUAL_PERFORMANCE_TEST"
+    },
+    {
+      "name": "terrain_maps",
+      "script": "res://tests/simulation/terrain_maps.gd",
+      "areas": [
+        "Simulation",
+        "Network"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "TERRAIN_MAPS"
+    },
+    {
+      "name": "terrain_components",
+      "script": "res://tests/simulation/terrain_components.gd",
+      "areas": [
+        "Simulation",
+        "Visual"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "TERRAIN_COMPONENTS"
+    },
+    {
+      "name": "terrain_presentation",
+      "script": "res://tests/visual/terrain_presentation.gd",
+      "areas": [
+        "Features",
+        "Visual"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "TERRAIN_PRESENTATION"
+    },
+    {
+      "name": "terrain_sample",
+      "script": "res://tests/simulation/terrain_sample.gd",
+      "areas": [
+        "Simulation"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "TERRAIN_SAMPLE"
+    },
+    {
+      "name": "terrain_sample_view",
+      "script": "res://tests/previews/terrain_sample_view.gd",
+      "areas": [
+        "Features",
+        "Visual"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "TERRAIN_SAMPLE_VIEW"
+    },
+    {
+      "name": "mechanical_hud",
+      "script": "res://tests/ui/mechanical_hud.gd",
+      "areas": [
+        "Presentation",
+        "ActionBar"
+      ],
+      "mode": "rendered",
+      "full": true,
+      "timeout": 180,
+      "marker": "MECHANICAL_HUD"
+    },
+    {
+      "name": "rally_points",
+      "script": "res://tests/ui/rally_points.gd",
+      "areas": [
+        "Simulation",
+        "ActionBar"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "RALLY_POINTS"
+    },
+    {
+      "name": "audio",
+      "script": "res://tests/ui/audio.gd",
+      "areas": [
+        "Presentation"
+      ],
+      "mode": "rendered",
+      "full": true,
+      "timeout": 180,
+      "marker": "AUDIO_CHECKS"
+    },
+    {
+      "name": "movement_volumes",
+      "script": "res://tests/simulation/movement_volumes.gd",
+      "areas": [
+        "Simulation"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "MOVEMENT_VOLUMES"
+    },
+    {
+      "name": "barracks_flight",
+      "script": "res://tests/simulation/barracks_flight.gd",
+      "areas": [
+        "Simulation"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "BARRACKS_FLIGHT"
+    },
+    {
+      "name": "barracks_heading",
+      "script": "res://tests/visual/barracks_heading.gd",
+      "areas": [
+        "Visual"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "BARRACKS_HEADING"
+    },
+    {
+      "name": "barracks_integration",
+      "script": "res://tests/visual/barracks_integration.gd",
+      "areas": [
+        "Visual"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "BARRACKS_INTEGRATION"
+    },
+    {
+      "name": "gaia_base_integration",
+      "script": "res://tests/simulation/gaia_base_integration.gd",
+      "areas": [
+        "Simulation"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "GAIA_BASE_INTEGRATION"
+    },
+    {
+      "name": "gaia_command_base",
+      "script": "res://tests/visual/gaia_command_base.gd",
+      "areas": [
+        "Visual"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "GAIA_ASSET_TEST"
+    },
+    {
+      "name": "hover_harvester",
+      "script": "res://tests/visual/hover_harvester.gd",
+      "areas": [
+        "Visual"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "HOVER_HARVESTER_TEST"
+    },
+    {
+      "name": "arrival_preview",
+      "script": "res://tests/previews/arrival_preview.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "barracks_preview",
+      "script": "res://tests/previews/barracks_preview.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "barracks_realistic_preview",
+      "script": "res://tests/previews/barracks_realistic_preview.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "barracks_rts",
+      "script": "res://tests/visual/barracks_rts.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "barracks_underbody_preview",
+      "script": "res://tests/previews/barracks_underbody_preview.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "barracks_weathering",
+      "script": "res://tests/visual/barracks_weathering.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "base_preview",
+      "script": "res://tests/previews/base_preview.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "building_grid_view",
+      "script": "res://tests/previews/building_grid_view.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "capture_depot_baseline",
+      "script": "res://tests/helpers/capture_depot_baseline.gd",
+      "areas": [],
+      "mode": "helper",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "crystal_ore_review",
+      "script": "res://tests/previews/crystal_ore_review.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "cursor_checks",
+      "script": "res://tests/ui/cursor_checks.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "cursor_preview",
+      "script": "res://tests/previews/cursor_preview.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "desert_kit_geometry",
+      "script": "res://tests/helpers/desert_kit_geometry.gd",
+      "areas": [],
+      "mode": "helper",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "desert_kit_pbr",
+      "script": "res://tests/helpers/desert_kit_pbr.gd",
+      "areas": [],
+      "mode": "helper",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "desert_kit_pbr_review",
+      "script": "res://tests/previews/desert_kit_pbr_review.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "desert_kit_review",
+      "script": "res://tests/previews/desert_kit_review.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "desert_rock_v3_review",
+      "script": "res://tests/previews/desert_rock_v3_review.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "gaia_command_base_performance",
+      "script": "res://tests/performance/gaia_command_base_performance.gd",
+      "areas": [],
+      "mode": "benchmark",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "gaia_command_base_preview",
+      "script": "res://tests/previews/gaia_command_base_preview.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "gaia_command_base_review",
+      "script": "res://tests/previews/gaia_command_base_review.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "hover_harvester_review",
+      "script": "res://tests/previews/hover_harvester_review.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "mining_view",
+      "script": "res://tests/previews/mining_view.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "mobile_infantry_animation_preview",
+      "script": "res://tests/previews/mobile_infantry_animation_preview.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "mobile_infantry_field_preview",
+      "script": "res://tests/previews/mobile_infantry_field_preview.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "mobile_infantry_network_preview",
+      "script": "res://tests/previews/mobile_infantry_network_preview.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "mobile_infantry_preview",
+      "script": "res://tests/previews/mobile_infantry_preview.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "mobile_infantry_runtime_checks",
+      "script": "res://tests/previews/mobile_infantry_runtime_checks.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "mobile_infantry_size_view",
+      "script": "res://tests/previews/mobile_infantry_size_view.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "movement_profile",
+      "script": "res://tests/performance/movement_profile.gd",
+      "areas": [],
+      "mode": "benchmark",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "movement_review",
+      "script": "res://tests/previews/movement_review.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "network_guest",
+      "script": "res://tests/network/network_guest.gd",
+      "areas": [],
+      "mode": "network",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "network_probe",
+      "script": "res://tests/network/network_probe.gd",
+      "areas": [],
+      "mode": "network",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "ore_depot_preview",
+      "script": "res://tests/previews/ore_depot_preview.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "process_environment",
+      "script": "res://tests/tooling/process_environment.ps1",
+      "areas": [],
+      "mode": "tooling",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "run_network_guest",
+      "script": "res://tests/network/run_network_guest.ps1",
+      "areas": [],
+      "mode": "network",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "soldier_heading_checks",
+      "script": "res://tests/helpers/soldier_heading_checks.gd",
+      "areas": [],
+      "mode": "helper",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "soldier_motion_preview",
+      "script": "res://tests/previews/soldier_motion_preview.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "soldier_quality",
+      "script": "res://tests/visual/soldier_quality.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "terrain_component_previews",
+      "script": "res://tests/previews/terrain_component_previews.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "terrain_profile",
+      "script": "res://tests/performance/terrain_profile.gd",
+      "areas": [],
+      "mode": "benchmark",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "test_mobile_infantry",
+      "script": "res://tests/visual/test_mobile_infantry.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "test_mobile_infantry_gameplay",
+      "script": "res://tests/simulation/test_mobile_infantry_gameplay.gd",
+      "areas": [],
+      "mode": "manual",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "toolchain_paths",
+      "script": "res://tests/tooling/toolchain_paths.ps1",
+      "areas": [],
+      "mode": "tooling",
+      "full": false,
+      "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    }
+  ]
+}

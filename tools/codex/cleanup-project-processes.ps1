@@ -2,11 +2,16 @@
 param(
     [switch]$StopTracked,
     [switch]$StopUntracked,
-    [switch]$ReportOnly
+    [switch]$ReportOnly,
+    [ValidatePattern('^(\d+(,\d+)*)?$')]
+    [string]$PreserveProcessId = ''
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'project-common.ps1')
+
+# Explicit caller-owned services must survive test cleanup, including their ports.
+$preservedIds = @($PreserveProcessId.Split(',') | Where-Object { $_ } | ForEach-Object { [int]$_ })
 
 if ($ReportOnly) {
     $StopTracked = $false
@@ -15,9 +20,10 @@ if ($ReportOnly) {
 
 if ($StopTracked) {
     foreach ($entry in @(Read-TrackedProcesses)) {
+        if ([int]$entry.ProcessId -in $preservedIds) { continue }
         Stop-TrackedProcess -ProcessId ([int]$entry.ProcessId)
     }
-    Write-TrackedProcesses -Processes @()
+    Write-TrackedProcesses -Processes @(Read-TrackedProcesses | Where-Object { [int]$_.ProcessId -in $preservedIds })
 }
 
 $projectMarker = $script:ProjectRoot.TrimEnd('\')
@@ -33,7 +39,7 @@ try {
 } catch {
     Write-Warning ('Shared MCP identification unavailable: ' + $_.Exception.Message)
 }
-$processNames = @('Godot*.exe', 'blender.exe', 'blender-launcher.exe', 'blender-mcp.exe', 'python.exe', 'pythonw.exe')
+$processNames = @('Godot*.exe', 'blender.exe', 'blender-launcher.exe', 'blender-mcp.exe', 'python.exe', 'pythonw.exe', 'node.exe')
 
 function Get-RelevantProcessState {
     $projectProcesses = @()
@@ -46,6 +52,10 @@ function Get-RelevantProcessState {
         if (-not $nameMatch) { continue }
 
         $commandLine = [string]$process.CommandLine
+        if ([int]$process.ProcessId -in $preservedIds) {
+            $sharedProcesses += $process
+            continue
+        }
         if ($commandLine.IndexOf($projectMarker, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
             $projectProcesses += $process
             continue
@@ -78,7 +88,7 @@ if ($StopUntracked) {
     $state = Get-RelevantProcessState
 }
 
-$ports = @(24560, 8766)
+$ports = @(24560, 8766, 8810, 8811)
 $listeners = @()
 foreach ($port in $ports) {
     $listeners += @(Get-NetTCPConnection -State Listen -LocalAddress 127.0.0.1 -LocalPort $port -ErrorAction SilentlyContinue)
@@ -98,12 +108,16 @@ if ($state.Shared.Count -gt 0) {
 }
 
 if ($listeners.Count -eq 0) {
-    Write-Output 'PROJECT_PORTS none (checked 24560, 8766)'
+    Write-Output 'PROJECT_PORTS none (checked 24560, 8766, 8810, 8811)'
 } else {
     Write-Output 'PROJECT_PORTS'
     $listeners | Select-Object LocalAddress, LocalPort, OwningProcess | Format-Table -AutoSize
 }
 
-if ($StopUntracked -and ($state.Project.Count -gt 0 -or $listeners.Count -gt 0)) {
+$remainingListeners = @($listeners | Where-Object { [int]$_.OwningProcess -notin $preservedIds })
+if ($preservedIds.Count -gt 0) {
+    Write-Output ('PRESERVED_PROCESS_IDS ' + ($preservedIds -join ','))
+}
+if ($StopUntracked -and ($state.Project.Count -gt 0 -or $remainingListeners.Count -gt 0)) {
     throw 'Project processes or ports remain after cleanup.'
 }

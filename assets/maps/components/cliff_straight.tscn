@@ -1,0 +1,8 @@
+[gd_scene format=3]
+
+[ext_resource type="ArrayMesh" path="res://assets/maps/components/cliff_straight.res" id="1_e02o8"]
+
+[node name="cliff_straight" type="MeshInstance3D" unique_id=353114271]
+mesh = ExtResource("1_e02o8")
+metadata/component_id = "cliff_straight"
+metadata/catalog_revision = 1

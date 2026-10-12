@@ -1,0 +1,12 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/maps/components/cliff_basecolor.png" id="1_i7ca3"]
+[ext_resource type="Texture2D" path="res://assets/maps/components/cliff_normal.png" id="2_vby8f"]
+
+[resource]
+albedo_texture = ExtResource("1_i7ca3")
+roughness = 0.93
+normal_enabled = true
+normal_scale = 0.18
+normal_texture = ExtResource("2_vby8f")
+texture_filter = 5

@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>IronFront · 单位百科与数值草案</title><link rel="stylesheet" href="/style.css"></head>
+<body>
+<aside><a class="brand" href="/">IF<span>IRONFRONT<br><small>单位百科 · 数值设计</small></span></a><div class="eyebrow">资料目录</div><nav id="catalog"></nav><div class="aside-note">草案独立保存<br>网页修改不会改变游戏</div></aside>
+<main><header><div><div class="eyebrow">LOCAL DESIGN WORKSPACE</div><h1>单位百科与数值草案</h1></div><button id="refresh">刷新游戏资料</button></header>
+<div id="notice" role="status"></div><section class="toolbar"><label>当前方案 <select id="profiles" aria-label="当前方案"></select></label><button data-op="create">新建</button><button data-op="copy">复制</button><button data-op="rename">重命名</button><button data-op="delete" class="danger">删除</button><span id="save-status" aria-live="polite">加载中…</span><button id="reload" hidden>重新加载</button></section>
+<div class="tabs" role="tablist"><button class="active" data-tab="detail" role="tab">百科详情</button><button data-tab="table" role="tab">编辑总表</button><button data-tab="compare" role="tab">方案对比</button></div>
+<section class="filter"><input id="search" type="search" placeholder="搜索对象、属性或来源…" aria-label="搜索"><select id="category" aria-label="分类"><option value="">全部分类</option><option value="unit">单位</option><option value="building">建筑</option><option value="shared">公共规则</option></select><select id="sort" aria-label="排序"><option value="entity">按对象排序</option><option value="label">按属性排序</option><option value="changed">修改优先</option></select><label><input id="diff-only" type="checkbox"> 只看差异</label></section>
+<div id="content"></div><footer><div id="version"></div><details><summary>资料来源与文件指纹</summary><div id="fingerprints"></div></details><div class="exports"><a id="export-json">导出完整方案 JSON</a><a id="export-csv">导出数值 CSV</a><a id="export-diff">导出差异 CSV</a></div><p>时间以秒显示，保存为完整模拟 tick；数值单位沿用当前游戏逻辑尺度。每次保存保留上一版备份，刷新采用三方合并。此工具没有写回游戏入口。</p></footer></main>
+<script type="module" src="/app.mjs"></script></body></html>

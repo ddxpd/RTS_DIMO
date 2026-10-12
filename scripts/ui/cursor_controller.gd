@@ -68,7 +68,7 @@ func has_units(kind: String = "") -> bool:
         if not host.sim.units.has(id):
             continue
         var unit: Dictionary = host.sim.units[id]
-        if unit.owner == host.local_slot and unit.hp > 0 and (kind.is_empty() or unit.type == kind):
+        if unit.owner == host.local_slot and unit.hp > 0 and (kind.is_empty() or unit.type == kind or (kind == "combat" and host.sim.is_combat_unit(unit.type))):
             return true
     return false
 
@@ -134,6 +134,8 @@ func world_state(pos: Vector2) -> StringName:
     if not host.build_mode.is_empty():
         return &"default" if host.sim.build_error(host.local_slot, host.build_mode, pos).is_empty() else &"blocked"
     if not host.pending_command.is_empty():
+        if host.pending_command == "rally":
+            return &"move" if not host._rally_targets().is_empty() else &"blocked"
         if host.pending_command == "gather":
             return &"move" if has_units("harvester") and ore_at(pos) else &"blocked"
         return &"move" if has_units() else &"blocked"
@@ -141,7 +143,7 @@ func world_state(pos: Vector2) -> StringName:
         if not has_units():
             return &"blocked"
         # Force-attack on friendlies remains valid; invisible enemies are not inspected.
-        return &"blocked" if not target_at(pos).is_empty() and not has_units("soldier") else &"attack"
+        return &"blocked" if not target_at(pos).is_empty() and not has_units("combat") else &"attack"
     if host.selection_dragging:
         return &"default"
     if not target_at(pos, true).is_empty():
@@ -151,6 +153,6 @@ func world_state(pos: Vector2) -> StringName:
         if ore_at(pos):
             return &"move" if has_units("harvester") else &"blocked"
         if not target_at(pos, false, true).is_empty():
-            return &"attack" if has_units("soldier") else &"blocked"
+            return &"attack" if has_units("combat") else &"blocked"
         return &"move"
-    return &"move" if has_buildings() else &"default"
+    return &"move" if not host._rally_targets().is_empty() or (has_buildings() and host.sim.BarracksFlight.state(host.sim.buildings[host.active_building_id()]) == "airborne") else &"default"

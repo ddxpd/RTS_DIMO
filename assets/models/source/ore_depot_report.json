@@ -1,0 +1,46 @@
+{
+  "lods": [
+    {
+      "lod": 0,
+      "triangles": 14495,
+      "meshes": 10,
+      "materials": 6,
+      "file": "refinery.glb"
+    },
+    {
+      "lod": 1,
+      "triangles": 8324,
+      "meshes": 10,
+      "materials": 6,
+      "file": "refinery_lod1.glb"
+    },
+    {
+      "lod": 2,
+      "triangles": 1076,
+      "meshes": 9,
+      "materials": 5,
+      "file": "refinery_lod2.glb"
+    }
+  ],
+  "world_size": [
+    128,
+    128,
+    72
+  ],
+  "footprint_cells": [
+    4,
+    4
+  ],
+  "solid_cells": 12,
+  "dock_cells": [
+    1,
+    2
+  ],
+  "reserved_cells": 16,
+  "scale": 20,
+  "lane_width": 32,
+  "lane_spacing": 96,
+  "temporary_stop_spacing": 104,
+  "cargo_visual": "fixed ~60%, no economy inventory",
+  "material_categories": 6
+}

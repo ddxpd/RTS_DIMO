@@ -41,8 +41,8 @@ func _unhandled_input(event: InputEvent) -> void:
             get_viewport().set_input_as_handled()
             return
         if host.rebinding_attack:
-            if event.keycode in [KEY_L, KEY_D] or event.physical_keycode in [KEY_L, KEY_D]:
-                host._notify("L and D are reserved for barracks takeoff / deploy. Choose another attack key.")
+            if event.keycode in [KEY_L, KEY_D, KEY_R] or event.physical_keycode in [KEY_L, KEY_D, KEY_R]:
+                host._notify("L、D、R用于升空、部署和集结点，请选择其他攻击键。")
                 get_viewport().set_input_as_handled()
                 return
             host.attack_keycode = event.keycode if event.keycode != KEY_NONE else event.physical_keycode
@@ -51,7 +51,11 @@ func _unhandled_input(event: InputEvent) -> void:
             host._notify("Attack key set to %s." % OS.get_keycode_string(host.attack_keycode))
             get_viewport().set_input_as_handled()
             return
-        if host.active and not host.menu_visible and _is_attack_key(event):
+        if host.pending_command == "rally" and (_is_attack_key(event) or event.keycode in [KEY_L, KEY_D, KEY_B, KEY_S]):
+            host.pending_command = ""
+        if host.active and not host.menu_visible and (event.keycode == KEY_R or event.physical_keycode == KEY_R):
+            host._begin_pending("rally")
+        elif host.active and not host.menu_visible and _is_attack_key(event):
             host.attack_mode = not host.attack_mode
             host._notify("Attack mode %s. Left-click a target or ground." % ("ON" if host.attack_mode else "OFF"))
         elif host.active and not host.menu_visible and event.keycode == KEY_L:
@@ -99,7 +103,9 @@ func _unhandled_input(event: InputEvent) -> void:
             if not button.pressed and not button.canceled:
                 host.left_button_held = false
         elif button.button_index == MOUSE_BUTTON_RIGHT and button.pressed and host._screen_is_map(event.position):
-            if host.deploy_building >= 0:
+            if host.pending_command == "rally":
+                host.pending_command = ""
+            elif host.deploy_building >= 0:
                 host.deploy_building = -1
             elif not host.build_mode.is_empty():
                 host.build_mode = ""
@@ -179,6 +185,7 @@ func _left_click(pos: Vector2) -> void:
         _attack_click(pos)
         return
     host._clear_selection()
+    host.selected_ore = -1
     var airborne_id: int = host.airborne_building_at(host._world_to_screen(pos), true)
     if airborne_id >= 0:
         host.selected_building = airborne_id
@@ -208,6 +215,12 @@ func _left_click(pos: Vector2) -> void:
                 host.selected_buildings.append(id)
                 host.last_click_building = id
             host.last_click_building_time = now
+            return
+
+    for id: int in host.sim.ores:
+        var ore: Dictionary = host.sim.ores[id]
+        if ore.amount > 0 and host.sim.can_see(host.local_slot, ore.pos) and (ore.pos as Vector2).distance_to(pos) < 38.0:
+            host.selected_ore = id
             return
 
 # Double-click: grab every on-screen building of the same kind as the clicked one.
@@ -325,6 +338,8 @@ func _control_group_key(group: int, ctrl: bool, shift: bool) -> void:
         var id := int(value)
         if host.sim.units.has(id) and host.sim.units[id].owner == host.local_slot and not group_units.has(id):
             group_units.append(id)
+    if host.pending_command == "rally":
+        host.pending_command = ""
     var group_building := int(state.get("building", -1))
     if group_building >= 0 and (not host.sim.buildings.has(group_building) or host.sim.buildings[group_building].owner != host.local_slot):
         group_building = -1

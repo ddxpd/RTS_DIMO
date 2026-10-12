@@ -1,0 +1,12 @@
+[gd_resource type="StandardMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/maps/components/sand_basecolor.png" id="1_0npqf"]
+[ext_resource type="Texture2D" path="res://assets/maps/components/sand_normal.png" id="2_qybfg"]
+
+[resource]
+albedo_texture = ExtResource("1_0npqf")
+roughness = 0.93
+normal_enabled = true
+normal_scale = 0.18
+normal_texture = ExtResource("2_qybfg")
+texture_filter = 5
