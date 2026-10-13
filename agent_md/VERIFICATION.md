@@ -5,7 +5,8 @@
 - 125个正式二进制文件、392279696字节全部核对SHA256、长度及HEAD指针内容；`git lfs fsck`通过。该统计包括二进制.res，不包括SVG/文本场景，与此前美术总量统计口径不同。
 - `run-structure.ps1`1064项通过；origin/main仍为HEAD祖先，个人配置哈希未变，concept_art/.local/.godot/EXE没有被跟踪。
 - 仅迁移3个未发布提交；两个backup分支保留本地恢复点，不上传。首轮Git元数据写入受沙箱拒绝，平台授权后成功；此前TLS故障本轮fetch已恢复。
-- 本次不改变资源内容或游戏逻辑，不重复Light/Full/ENet、不导出EXE；此前Presentation/Tooling验证仍适用。远端下载验证待推送后执行。
+- 本次不改变资源内容或游戏逻辑，不重复Light/Full/ENet、不导出EXE；此前Presentation/Tooling验证仍适用。
+- main正常快进上传成功（8fdc3d6至d9e8576），LFS上传119个去重对象、约363 MB。在.local/lfs-migration-20261013/remote-check从GitHub隔离浅克隆，使用独立LFS缓存下载，125个资源大小及SHA256全部匹配迁移前清单，fsck通过，克隆工作区干净，提交与本地一致。随后仅补充本验证记录；没有进行另一台电脑上的Godot实机启动。
 
 ## 2026-10-13：运行美术依赖边界
 
