@@ -9,6 +9,9 @@ build/IronFront3D-review.exe
 /assets/concept_art/
 /assets/concept_art.zip
 /.local/
+# Full simulation snapshots and audit reports are local-only diagnostics.
+# Never upload these files to Git, Git LFS, or Release attachments.
+/.local/simulation_audits/
 /tools/art_library/node_modules/
 /tools/balance_designer/node_modules/
 __pycache__/

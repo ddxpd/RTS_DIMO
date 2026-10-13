@@ -1037,7 +1037,7 @@ func _update_map_description() -> void:
         sample_host_button.tooltip_text = "样板区仅供单机测试" if sample else ""
     if solo_button != null:
         solo_button.text = "进入样板测试场" if sample else "New solo match (vs AI)"
-    var preview_path := "res://assets/concept_art/desert-quarry-overview.png" if selected_map_id == "desert_quarry" else ""
+    var preview_path := "res://assets/maps/desert_quarry_preview.png" if selected_map_id == "desert_quarry" else ""
     preview_path = data.get("preview", preview_path)
     if not preview_path.is_empty() and ResourceLoader.exists(preview_path):
         map_preview.texture = load(preview_path)

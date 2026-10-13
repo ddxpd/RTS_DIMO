@@ -35,6 +35,7 @@ Iron Front 是一个 Godot 4 RTS 主机对等联机原型，主分支 `main` 使
 
 ## 目录与代码入口
 
+- 运行所需美术必须独立保存在正式`assets/`子目录，并随项目版本管理。不得直接引用不上传的`assets/concept_art/`、`.local/art-library/`或其他本机路径；从资源库采用素材时先复制正式资源，再修改游戏引用。GLB使用外置贴图时也必须携带这些依赖。`run-structure.ps1`自动检查该边界。
 - `scripts/definitions/`：单位、建筑、名称、生产关系和公共规则的统一定义；`simulation.gd` 保留兼容常量和权威状态。
 - `scripts/simulation_systems/`：同步模拟系统；`snapshot_validator.gd`：快照合法性；`runtime/network_session.gd`：共享 RPC 处理。
 - `scripts/presentation/`：单位、建筑、特效和覆盖层显示；`world_visual_sync.gd` 管理节点生命周期，`ui/` 管理 HUD。

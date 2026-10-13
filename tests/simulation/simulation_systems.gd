@@ -8,6 +8,8 @@ const PREVIOUS_GRID := "res://tests/fixtures/simulation_systems_v14_compact_depo
 const ARCHIVE := "res://tests/fixtures/simulation_systems_baseline.json"
 const ARCHIVE_SHA := "44314a7b43d74c796e574b936696fdf5dafededdc2791c3fc3ddfac68c1509a8"
 const ORIGINAL_SHA := "b360c9975aede67a969aec3fc4dff48a8852125252aab6f6ea575c69955f8811"
+# Local diagnostic data only: never commit, upload to LFS, or attach to Releases.
+const AUDIT_DIR := "res://.local/simulation_audits/"
 var trace: Array = []
 var failures: Array[String] = []
 var capture := false
@@ -61,18 +63,34 @@ func record(sim, scenario: String, tick: int) -> void:
             expected_entry = sample_expected[tick - 30]
     if not capture and not capture_grid and not (sample_tick and capture_sample) and entry != expected_entry and failures.is_empty():
         check(false, "Behavior changed at %s tick %d: expected %s, got %s" % [scenario, tick, expected[trace.size()], entry])
-        var file := FileAccess.open("res://.godot/simulation-systems-mismatch.bin", FileAccess.WRITE)
-        file.store_var(state)
+        var file := open_audit_output("simulation-systems-mismatch.bin")
+        if file != null:
+            file.store_var(state)
     trace.append(entry)
     commands.clear()
 
 
+func open_audit_output(filename: String) -> FileAccess:
+    var error := DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(AUDIT_DIR))
+    check(error == OK, "Cannot create local audit directory: " + AUDIT_DIR)
+    if error != OK:
+        return null
+    var ignore := FileAccess.open(AUDIT_DIR + ".gdignore", FileAccess.WRITE)
+    check(ignore != null, "Cannot exclude local audits from Godot imports")
+    if ignore == null:
+        return null
+    ignore.close()
+    var file := FileAccess.open(AUDIT_DIR + filename, FileAccess.WRITE)
+    check(file != null, "Cannot write local audit: " + filename)
+    return file
+
+
 func run() -> void:
-    audit_before = "--audit-grid-before" in OS.get_cmdline_args() or "--audit-mobile-size-before" in OS.get_cmdline_args() or "--audit-roster-before" in OS.get_cmdline_args() or "--audit-base-only-before" in OS.get_cmdline_args()
+    audit_before = "--audit-before" in OS.get_cmdline_args() or "--audit-grid-before" in OS.get_cmdline_args() or "--audit-mobile-size-before" in OS.get_cmdline_args() or "--audit-roster-before" in OS.get_cmdline_args() or "--audit-base-only-before" in OS.get_cmdline_args()
     capture_grid = "--capture-depot4" in OS.get_cmdline_args()
     if capture_grid:
         check(not FileAccess.file_exists(GRID_BASELINE), "Refusing to overwrite 4x4 depot baseline")
-        var audit_file := FileAccess.open("res://.godot/base-only-before.bin", FileAccess.READ)
+        var audit_file := FileAccess.open(AUDIT_DIR + "base-only-before.bin", FileAccess.READ)
         check(audit_file != null, "Pre-change audit states are required")
         if audit_file != null:
             grid_audit = audit_file.get_var()
@@ -133,8 +151,9 @@ func run() -> void:
                     if before.state[0].get(field) != after.state[0][field]:
                         section.changed_fields[field] = int(section.changed_fields.get(field, 0)) + 1
             report[after.scenario] = section
-        var report_file := FileAccess.open("res://.godot/depot4-baseline-audit.json", FileAccess.WRITE)
-        report_file.store_string(JSON.stringify(report, "  "))
+        var report_file := open_audit_output("depot4-baseline-audit.json")
+        if report_file != null:
+            report_file.store_string(JSON.stringify(report, "  "))
         var grid_file := FileAccess.open(GRID_BASELINE, FileAccess.WRITE)
         grid_file.store_string(JSON.stringify({"protocol": Sim.VERSION, "mobile_radius": Sim.UNIT_TYPES.mobile_infantry.radius, "active_units": Sim.ACTIVE_UNIT_TYPES, "base_only_start": true, "hash_projection": "v11 snapshot fields", "previous_grid_sha256": FileAccess.get_sha256(PREVIOUS_GRID), "previous_sha256": FileAccess.get_sha256(BASELINE), "sample_sha256": FileAccess.get_sha256(SAMPLE_BASELINE), "reason": "Approved 4x4 ore depot: 12 solid cells and two internal 1x2 traversable lanes; full 16-cell construction reservation. Harvester size unchanged, temporary exterior unload stops. Previous compact depot trace retained.", "audit": report, "trace": trace}, "  ") + "\n")
     if capture_sample and failures.is_empty():
@@ -147,13 +166,21 @@ func run() -> void:
     elif not capture:
         check(trace.size() == expected.size(), "All frozen ticks were compared")
     if audit_before and failures.is_empty():
-        var audit_path := "res://.godot/mobile-size-before.bin" if "--audit-mobile-size-before" in OS.get_cmdline_args() else "res://.godot/mining-before.bin"
+        var audit_name := "mobile-size-before.bin" if "--audit-mobile-size-before" in OS.get_cmdline_args() else "mining-before.bin"
         if "--audit-roster-before" in OS.get_cmdline_args():
-            audit_path = "res://.godot/roster-before.bin"
+            audit_name = "roster-before.bin"
         if "--audit-base-only-before" in OS.get_cmdline_args():
-            audit_path = "res://.godot/base-only-before.bin"
-        var audit_file := FileAccess.open(audit_path, FileAccess.WRITE)
-        audit_file.store_var(audit_states)
+            audit_name = "base-only-before.bin"
+        if "--audit-before" in OS.get_cmdline_args():
+            audit_name = "current-before.bin"
+        var audit_file := open_audit_output(audit_name)
+        if audit_file != null:
+            audit_file.store_var(audit_states)
+            audit_file.close()
+            var saved := FileAccess.open(AUDIT_DIR + audit_name, FileAccess.READ)
+            check(saved != null, "Local audit can be reopened")
+            if saved != null:
+                check(saved.get_var() == audit_states, "Local audit round trip preserves full states")
     print("SIMULATION_SYSTEMS ticks=", trace.size(), " capture=", capture, " failures=", failures)
     quit(0 if failures.is_empty() else 1)
 

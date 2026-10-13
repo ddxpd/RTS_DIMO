@@ -1,5 +1,13 @@
 # 项目工具 wrapper
 
+## 本地模拟审计文件（不上传）
+
+- 完整模拟快照、失败状态转储及逐字段差异报告统一放在 `.local/simulation_audits/`，不再使用 `.godot/`。脚本首次写入时自动创建目录与 `.gdignore`，Git 忽略规则同时排除该目录。
+- 这些文件仅用于本机排查，**不得提交 Git、上传 Git LFS 或作为 Release 附件发布**。提交/推送“全部改动”时也不包含它们，不使用强制添加绕过忽略规则。
+- `tests/fixtures/` 中的版本化状态哈希基线继续随代码提交；普通回归只读取这些小型基线，不需要完整 `.bin` 快照。
+- 显式保存当前完整状态：通过 `run-godot.ps1 -Action script -Script res://tests/simulation/simulation_systems.gd -Arguments --audit-before`，生成 `current-before.bin`；同名文件在下次显式采集时更新。旧专项采集参数保留，其输入/输出均改为新目录。
+- 历史文档里的 `.godot/*-before.bin` 和差异报告路径描述当时位置；现存文件已迁入新目录。清理该目录不影响游戏或普通回归，但会失去完整历史排查资料。
+
 ## 单位百科与数值草案
 
 独立工具位于 `tools/balance_designer/`。双击 `tools/balance_designer/start.cmd`，打开 `http://127.0.0.1:8811`；`stop.cmd` 停止服务。Node.js 22+ 与本机项目 Godot 工具链即可运行，无运行时 npm 依赖。端口占用只报错，不停止其他进程。

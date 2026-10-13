@@ -1,5 +1,18 @@
 # 验证索引
 
+## 2026-10-13：运行美术依赖边界
+
+- 结构检查修复前失败项仅`main.gd -> assets/concept_art/desert-quarry-overview.png`；复制正式资源并修正引用后1064项通过，扫描运行脚本/场景/资源文本、Git忽略状态与全部模型GLB外部图片/缓冲区。检查覆盖静态资源路径与正式资产，不声称任意动态字符串可被静态证明。
+- 预览源和副本SHA256一致，副本与.import文件不受Git忽略；它们目前待提交，远端尚未获得本轮修复。`.godot/runtime-art-boundary-import.log`导入通过、stderr空；菜单回归确认预览纹理存在且使用正式maps路径。
+- Light/Presentation,Tooling最终`.godot/validation/20261013-115713-34172/`全通过，24.201秒，包括结构、工具、界面、Forward+ HUD82项、音频47项和cleanup。首次113949受沙箱日志/证书/Codex临时目录访问限制，获准固定入口重跑通过。
+- 仅资源依赖和界面显示变化，未运行Full、ENet或EXE导出；未在另一台电脑做安装验收。保留现有两个工具服务及共享MCP。
+
+## 2026-10-13：本地模拟审计目录
+
+- `.godot/simulation-audit-path.log`：2023状态匹配原冻结基线，`--audit-before`成功写入`.local/simulation_audits/current-before.bin`并读回与完整内存状态比较一致，stderr空。没有重录或修改`tests/fixtures/`。
+- 13份历史文件从`.godot/`迁移到新目录，迁移前后SHA256逐项一致；新目录有`.gdignore`。`git check-ignore -v`确认快照/报告被忽略，`git ls-files .local/simulation_audits`为空。
+- Light/Tooling最终passed（5.102秒）：结构629项、包装器语法、路径与进程环境、参数规则、27允许/7拒绝规则用例及cleanup。首次运行被沙箱Codex临时目录访问限制阻断，批准固定入口重跑通过；可选完整工具链smoke未启用。此改动仅涉及测试输出，不运行Full、ENet或模型导入。
+
 ## 2026-10-12：基地模型占地对齐、兵营去旗
 
 - `.godot/barracks-no-flag-build.log`三档7758/3589/1587三角面、每档三个杆件移除断言、97姿态净空通过，生产LOD0仅Landing/Takeoff动画；原带旗纹理动画基线未修改。`.godot/base-size-no-flag-import.log`资源导入成功，stderr空。

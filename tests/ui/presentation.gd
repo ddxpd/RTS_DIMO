@@ -28,6 +28,9 @@ func run() -> void:
     game = MAIN.instantiate()
     game.selected_map_id = "desert_quarry"
     root.add_child(game)
+    check(game.map_preview.texture != null, "Desert menu preview loads without the local art library")
+    if game.map_preview.texture != null:
+        check(game.map_preview.texture.resource_path == "res://assets/maps/desert_quarry_preview.png", "Desert preview uses a distributable resource")
     game.play_solo()
     preload("res://tests/fixtures/army_setup.gd").seed(game.sim)
     # Input assertions use a fixed camera; headless mouse (0,0) must not edge-pan

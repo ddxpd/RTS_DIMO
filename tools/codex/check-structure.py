@@ -6,7 +6,9 @@ import json
 from pathlib import Path
 import re
 import struct
+import subprocess
 import sys
+from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
 failures = []
@@ -24,7 +26,41 @@ def read(path):
     return path.read_text(encoding='utf-8-sig')
 
 
+def check_runtime_path(path, label):
+    resolved = path.resolve()
+    if not resolved.is_relative_to(ROOT):
+        check(False, 'Runtime dependency outside project: ' + label)
+        return
+    relative = resolved.relative_to(ROOT).as_posix()
+    forbidden = ('assets/concept_art', '.local', '.godot', 'tools', 'tests', 'archive')
+    check(not any(relative == prefix or relative.startswith(prefix + '/') for prefix in forbidden),
+          'Runtime dependency must be a distributable resource: ' + label)
+    if '%' not in relative and '{' not in relative:
+        check(resolved.exists(), 'Runtime dependency exists: ' + label)
+
+
+def check_runtime_boundaries():
+    # Library scans production resources too; only its private data and concept
+    # originals are excluded. Runtime assets must have their own project copy.
+    files = [ROOT / 'project.godot']
+    for folder in ('scripts', 'scenes', 'assets'):
+        files.extend(p for p in (ROOT / folder).rglob('*') if p.is_file()
+                     and not p.is_relative_to(ROOT / 'assets/concept_art')
+                     and not p.is_relative_to(ROOT / 'assets/models/source'))
+    for p in files:
+        if p.suffix not in ('.gd', '.tscn', '.tres', '.godot', '.json', '.gdshader'):
+            continue
+        for resource in re.findall(r'''res://([^"'\s)]+)''', read(p)):
+            check_runtime_path(ROOT / resource, f'{p.relative_to(ROOT)}: {resource}')
+    result = subprocess.run(['git', 'check-ignore', '--no-index', '--stdin'], cwd=ROOT,
+                            input='\n'.join(p.relative_to(ROOT).as_posix() for p in files) + '\n',
+                            text=True, capture_output=True, encoding='utf-8')
+    check(result.returncode in (0, 1), 'Git ignore audit succeeds: ' + result.stderr.strip())
+    check(not result.stdout.strip(), 'Runtime files must not be Git-ignored: ' + result.stdout.strip())
+
+
 def main():
+    check_runtime_boundaries()
     registry = json.loads(read(ROOT / 'tools/codex/validation-suites.json'))['suites']
     registered = [entry['script'][6:] for entry in registry]
     check(len(registered) == len(set(registered)), 'Registry has unique paths')
@@ -55,7 +91,12 @@ def main():
         for item in doc.get('images', []) + doc.get('buffers', []):
             uri = item.get('uri', '')
             if uri and not uri.startswith('data:'):
-                check((p.parent / uri).is_file(), f'GLB dependency {p.name}: {uri}')
+                parsed = urlsplit(uri)
+                check(not parsed.scheme and not parsed.netloc, f'GLB dependency must be local: {p.name}: {uri}')
+                dependency = p.parent / unquote(parsed.path)
+                check(dependency.is_file(), f'GLB dependency {p.name}: {uri}')
+                if not p.is_relative_to(ROOT / 'assets/models/source'):
+                    check_runtime_path(dependency, f'GLB {p.name}: {uri}')
     for p in (ROOT / 'tools/blender').rglob('*.py'):
         ast.parse(read(p), filename=str(p))
         check(True, 'Python syntax ' + str(p))
