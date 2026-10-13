@@ -4,6 +4,19 @@ Iron Front 是一个 Godot 4 RTS 主机对等联机原型，主分支 `main` 使
 
 ## 运行
 
+开发源码需要先安装 Git LFS，然后执行：
+
+```powershell
+git lfs install
+git clone https://github.com/ddxpd/RTS_DIMO.git
+cd RTS_DIMO
+git lfs pull
+```
+
+已有克隆更新后也应执行 `git lfs pull`，再用 Godot 打开项目。正式 `assets/` 中的模型、Blender 源文件及备份、位图、音频、字体和二进制 `.res` 使用 LFS；SVG、场景、文本资源与导入配置仍为普通 Git 文件。不要通过仓库 Download ZIP 获取完整美术资源。
+
+`assets/concept_art/`、`.local/` 资源库和模拟快照不上传 Git、LFS 或 Release；游戏采用的素材必须复制到正式资源目录。EXE 继续通过 Release 发布。本次迁移仅处理未发布提交和当前资源，已发布历史中的普通二进制仍然保留。
+
 - 开局菜单提供“荒漠矿区”和单机地形样板区；默认使用荒漠矿区，LAN 加入者跟随主机。荒漠地图含可进入矿坑、高台、坡道及地形视线遮挡。旧原型地图已移除。
 - Windows 下载：前往 [GitHub Releases](https://github.com/ddxpd/RTS_DIMO/releases)，下载发布附件 `IronFront.exe`；资源已内嵌，无需另配 PCK。预发布版本的已知限制见对应发布说明。
 - EXE 不再随 Git 跟踪；开发者仍可导出到本地 `build/IronFront.exe`。发布附件提供 SHA256 校验文件。
