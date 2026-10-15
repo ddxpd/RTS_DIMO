@@ -55,7 +55,11 @@ func run() -> void:
     check(app.home_modes.visible and not app.mode_panel.visible, "home modes have no enclosing form panel")
     var versus: Button = app.home_modes.get_node("Multiplayer")
     versus.grab_focus()
-    await create_timer(0.20).timeout
+    # Cold exported resources can stall the first frame. Wait for tween
+    # completion within a bound instead of comparing wall time to frame time.
+    var focus_deadline := Time.get_ticks_msec() + 1500
+    while versus.highlight <= 0.95 and Time.get_ticks_msec() < focus_deadline:
+        await process_frame
     check(versus.highlight > 0.95, "keyboard focus animates mode highlight")
     check(not versus._has_point(Vector2.ZERO) and versus._has_point(versus.size * 0.5), "mode hit area excludes transparent corners")
     versus.pressed.emit()

@@ -3,8 +3,9 @@ param(
     [ValidateSet('version', 'import', 'script', 'export')]
     [string]$Action = 'version',
     [string]$Script,
+    [string]$Pack,
     [string]$Preset = 'Windows Desktop',
-    [string]$Output = 'build\IronFront.exe',
+    [string]$Output = 'build\GAIA_Frontier.exe',
     [string]$GodotPath,
     [string]$LogFile,
     [switch]$Rendered,
@@ -33,7 +34,7 @@ switch ($Action) {
     }
     'script' {
         if (-not $Script) { throw 'The script action requires -Script res://path.' }
-        [void](Resolve-ProjectScript -Script $Script)
+        $scriptPath = Resolve-ProjectScript -Script $Script
         foreach ($argument in $Arguments) {
             if ($argument -match '^(--path|--editor|--path=|--editor=)') {
                 throw "The wrapper owns the project path and editor mode: $argument"
@@ -41,7 +42,17 @@ switch ($Action) {
         }
         $displayArguments = @()
         if (-not $Rendered) { $displayArguments += '--headless' }
-        $godotArguments = $displayArguments + @('--path', $script:ProjectRoot, '--script', $Script) + $Arguments
+        if ($Pack) {
+            $packPath = Resolve-ProjectPath -Path $Pack
+            if ([IO.Path]::GetExtension($packPath) -notin @('.exe', '.pck')) { throw 'Pack must be a project-local EXE or PCK.' }
+            # Validate the exported resources with the editor engine; export
+            # templates intentionally disable --script and path overrides.
+            $isolatedRoot = Join-Path $script:ProjectRoot '.godot\pack-validation'
+            [void][IO.Directory]::CreateDirectory($isolatedRoot)
+            $godotArguments = $displayArguments + @('--path', $isolatedRoot, '--main-pack', $packPath, '--script', $scriptPath.Replace('\', '/')) + $Arguments
+        } else {
+            $godotArguments = $displayArguments + @('--path', $script:ProjectRoot, '--script', $Script) + $Arguments
+        }
     }
     'export' {
         $outputPath = Resolve-ProjectPath -Path $Output -AllowMissing

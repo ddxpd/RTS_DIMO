@@ -1,5 +1,19 @@
 # 验证索引
 
+## 2026-10-16：GAIA FRONTIER Alpha发布验收（进行中）
+
+- Full `.godot/validation/20261015-234848-4220/`耗时581.6秒：46阶段通过、4失败、ENet按入口规则跳过；不将此轮标为全绿。更早沙箱轮因日志/证书权限错误中断，保留日志。
+- 弱网重连夹具在固定600ms后发请求，握手可能尚未完成；改为有4秒上限的connection_ready等待及服务端席位恢复等待。`.godot/release-weak-fixed.log`通过，200单位、1483包/15丢包，原快照时效门槛不变。
+- 本机开服测试退出时Ogg混音引用尚未释放；释放前端后等待0.15秒。`.godot/release-local-fixed.log`实际Forward+通过，无stderr，检查本机服务、入局、返回。
+- 历史AI tick -1哈希43a705bf…与当前1edec830…差异已定位：矿点字典字段顺序由pos/amount变为amount/pos，直接var_to_bytes哈希及地图checksum随之变化，语义相等。只读审计恢复历史矿点顺序及历史v15地图checksum后，精确得到43a705bf80b7cef97935a9d4405b18e58e25229bcc4fa222d6c07b511d86dd2d。证据`.godot/release-trace-origin.log`，旧状态取自本地quarry-weak-final归档。未修改生产状态或旧基线；后续轨迹还含已批准的货盘/飞行等规则变化，整个旧轨迹套件仍未通过。
+- `.godot/release-trace-audit.log`诊断运行2023帧，AI建设生产、采矿回款、取消生产、死亡清理、飞行部署和重置快照功能断言通过；这是行为审计，不替代历史哈希回归。完整状态只在.local/simulation_audits，不上传。
+- Full性能168单位：模拟25.5784ms、单位同步2.22586ms、动画8.7366ms，超过25/2/8ms原门槛；独立`.godot/release-performance-isolated.log`模拟24.568ms通过，单位同步2.04919ms、动画10.79153ms仍失败，保留为Alpha限制。跨公网、另一台无Godot电脑及长时弱网均未验证。
+- 独立完整ENet `.godot/validation/release-alpha-enet/desert_quarry/`通过：旧协议拒绝、观战、两轮采矿/建设/生产/建筑迁移/战斗与完整快照一致、重新入场和主机断开。
+- 最终工具Light Tooling `.godot/release-tooling-final.log`通过，结构1294、路径/权限/环境检查及保留进程清理通过。
+- `.godot/release-alpha-export.log`新EXE为347839384字节、Windows文件版本0.2.0.0、产品GAIA FRONTIER；导出stderr为空。`.godot/release-exe-graphical.log.stdout`实际EXE Forward+/RTX5070Ti启动8秒存活、stderr为空。
+- 官方模板禁用外部--script，最初两次EXE脚本尝试忽略参数并超时，不算通过。改为固定run-godot的-Pack模式，在空目录加载EXE内嵌包，防止源码后备：`.godot/release-packed-resources-isolated.log`462个资源、音乐145.428秒、无concept_art/.local/tests/tools/addons/.blend；`.godot/release-packed-frontier-final.log`Forward+生命周期通过；`.godot/release-packed-settings.log`87项通过，均无stderr。菜单焦点旧固定0.2秒等待在冷启动失败，改为1.5秒内等待实际Tween完成，保持高亮断言。
+- `.godot/release-exe-clients-clean.log`使用内嵌客户端代码对真实EXE服务：双客户端鉴权、房间、推进快照、建精炼厂并生产采集车、重连、投降结算通过，客户端stderr为空。服务端`.godot/release-exe-server-clean.log.err`断线期间仍有一次`Unable to send packet on channel 0, max channels: 0`，根因尚未完全定位、未修复，发布说明保留，不声称服务端全程无错误。更早夹具RPC根路径不匹配和错误从基地生产已修正，原失败日志保留。
+
 ## 2026-10-15：主界面音乐与尾部淡出
 
 - `.godot/menu-music-preparation.json`：源SHA256 `8fbc8f4bfca806224a8a06563071d65aea6194eca3ad1d82b1872cc50c91060e`前后相同；OGG 145.428秒/48kHz/单声道、1269423字节，峰值-2.93dBFS。末尾5秒cos²包络、开头0.35秒sin²包络；最后五个1秒窗口相对源依次-0.27/-2.18/-6.59/-11.85/-29.25dB，最后一秒衰减大于20dB，首尾近零，编码回读通过。

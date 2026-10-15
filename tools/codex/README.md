@@ -120,7 +120,7 @@ $toolDir = (Resolve-Path .\tools\codex).Path
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$toolDir\run-godot.ps1" -Action version
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$toolDir\run-validation.ps1" -Level Light -Area Simulation
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$toolDir\run-validation.ps1" -Level Full
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$toolDir\run-godot.ps1" -Action export -Output build\IronFront.exe
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$toolDir\run-godot.ps1" -Action export -Output build\GAIA_Frontier.exe
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$toolDir\run-network.ps1"
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$toolDir\cleanup-project-processes.ps1" -StopTracked -StopUntracked
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$toolDir\run-exported.ps1" -DurationSeconds 5
@@ -131,7 +131,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$toolDir\verify-permiss
 
 - `run-godot.ps1`：Godot 版本检查、项目脚本执行和 Windows 导出。
 - `run-network.ps1`：荒漠矿区 ENet 回归；样板区只支持单机，旧原型地图已移除。
-- `run-exported.ps1`：启动项目内 Windows EXE 做受限 smoke run，并登记进程供清理 wrapper 回收。
+- `run-exported.ps1`：启动项目内 Windows EXE 做受限 smoke run，并登记进程供清理 wrapper 回收；`-Dedicated -Port 24562`启动实际EXE的loopback服务器并核对监听成功标记。官方导出模板禁用外部`--script`，不把该参数用于验收。
+- `run-godot.ps1 -Action script -Pack build/GAIA_Frontier.exe -Script res://tests/ui/frontier.gd`：使用已注册编辑器引擎检查内嵌资源包，不传源码`--path`；这属于包资源验证，实际EXE另做启动和服务端检查。
+- `package-release.ps1`：将新 EXE、玩家说明、开服脚本与预先生成的 Godot 许可说明封装为便携 ZIP，并生成 SHA256；输出已有目录时拒绝覆盖。
 - `run-blender.ps1`：Blender 版本检查和项目内脚本执行。
 - `run-mcp.ps1`：只启动 loopback 绑定的项目 MCP 服务。
 - `run-validation.ps1`：运行 `Light` 定向验证或不含导出的 `Full` 完整源码验证，并输出机器可读摘要。

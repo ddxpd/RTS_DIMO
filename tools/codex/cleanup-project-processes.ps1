@@ -47,7 +47,7 @@ function Get-RelevantProcessState {
     foreach ($process in @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)) {
         # Export smoke processes can outlive a lost registry entry. Restrict this
         # fallback to project-local test launches; leave normal games/servers alone.
-        $exportSmoke = $process.Name -like 'IronFront*.exe' -and
+        $exportSmoke = ($process.Name -like 'IronFront*.exe' -or $process.Name -eq 'GAIA_Frontier.exe') -and
             ([string]$process.CommandLine -match '(?:^|\s)--smoke(?:\s|$)')
         $nameMatch = $false
         foreach ($pattern in $processNames) {

@@ -7,6 +7,7 @@ var server: Node
 var states := {}
 var lobbies := {}
 var started := {}
+var connections := {}
 var weak := false
 var link: Node
 
@@ -32,6 +33,12 @@ func endpoint(label: String) -> Node:
 func pause(seconds: float = 0.6) -> void:
     await create_timer(seconds).timeout
 
+func wait_until(condition: Callable, timeout_ms: int = 4000) -> bool:
+    var deadline := Time.get_ticks_msec() + timeout_ms
+    while not condition.call() and Time.get_ticks_msec() < deadline:
+        await process_frame
+    return condition.call()
+
 func run() -> void:
     weak = weak or "--weak" in OS.get_cmdline_user_args()
     if weak:
@@ -42,6 +49,7 @@ func run() -> void:
     for i in range(5):
         var client := endpoint("Client%d" % i)
         clients.append(client)
+        client.connection_ready.connect(func(): connections[i] = int(connections.get(i, 0)) + 1)
         client.nickname = "Pilot%d" % i
         client.lobby_changed.connect(func(data): lobbies[i] = data)
         client.match_started.connect(func(data, seat):
@@ -106,11 +114,13 @@ func run() -> void:
     clients[1].disconnect_service(false)
     await pause()
     check(room.absent.has(seat), "reconnect grace period")
-    clients[1].connect_to("127.0.0.1", 24567 if weak else 24566)
-    await pause()
+    var previous_connections: int = connections.get(1, 0)
+    check(clients[1].connect_to("127.0.0.1", 24567 if weak else 24566) == OK, "reconnect transport starts")
+    # Wait for the authenticated handshake; packet loss can trigger ENet retries.
+    # Sleeping 600ms could send the command while the peer was still connecting.
+    check(await wait_until(func(): return int(connections.get(1, 0)) > previous_connections), "reconnect handshake completes")
     clients[1].send("reconnect", {"code": code, "token": token})
-    await pause()
-    check(not room.absent.has(seat) and room.peers.size() == 4, "reconnect restores seat")
+    check(await wait_until(func(): return not room.absent.has(seat) and room.peers.size() == 4), "reconnect restores seat")
     clients[0].send("leave")
     await pause()
     check(room.host != 1 and room.sim.eliminated.has(1), "host departure transfers manager")

@@ -18,21 +18,21 @@ git lfs pull
 `assets/concept_art/`、`.local/` 资源库和模拟快照不上传 Git、LFS 或 Release；游戏采用的素材必须复制到正式资源目录。EXE 继续通过 Release 发布。本次迁移仅处理未发布提交和当前资源，已发布历史中的普通二进制仍然保留。
 
 - 开局菜单提供“荒漠矿区”和单机地形样板区；默认使用荒漠矿区，LAN 加入者跟随主机。荒漠地图含可进入矿坑、高台、坡道及地形视线遮挡。旧原型地图已移除。
-- Windows 下载：前往 [GitHub Releases](https://github.com/ddxpd/RTS_DIMO/releases)，下载发布附件 `IronFront.exe`；资源已内嵌，无需另配 PCK。预发布版本的已知限制见对应发布说明。
-- EXE 不再随 Git 跟踪；开发者仍可导出到本地 `build/IronFront.exe`。发布附件提供 SHA256 校验文件。
+- Windows 下载：前往 [GitHub Releases](https://github.com/ddxpd/RTS_DIMO/releases)，下载发布附件 `GAIA_Frontier.exe` 或便携 ZIP；资源已内嵌，无需另配 PCK 或安装 Godot。预发布版本的已知限制见对应发布说明。
+- EXE 不随 Git 跟踪；开发者导出到本地 `build/GAIA_Frontier.exe`。发布附件提供 SHA256 校验文件。当前发布目标为 Windows x64 `v0.2.0-alpha.1`，不是稳定版。
 - 源码验证：普通改动使用 `tools/codex/run-validation.ps1 -Level Light -Area <影响面>`，跨系统改动使用 `-Level Full`；不要直接调用未固定路径的 Godot/Python。
-- 局域网：主机使用 `Create LAN Host`，客户端输入主机 IP 后选择 `Join Host`；默认 UDP 端口为 `24560`。
+- 多人对战：所有玩家先连接同一服务器，再创建或加入房间，默认 UDP 端口为 `24562`。旧版 `Create LAN Host` / `Join Host`、UDP 24560 仅用于兼容测试，不是当前主界面房间入口。
 
 ### 本地测试包与异地测试
 
-本轮本地交付路径为 `build/IronFront.exe`（资源内嵌），对应校验文件为 `build/IronFront.exe.sha256`。双方使用同一份文件并比对 SHA256；正式荒漠矿区已升级到组件布局 v3，含 256 长坡、128 高差、岩沙材质和迷雾，仍保留九矿、出生点及对称对战结构。
+本轮本地交付路径为 `build/GAIA_Frontier.exe`（资源内嵌），对应校验文件为 `build/GAIA_Frontier.exe.sha256`。双方使用同一份文件并比对 SHA256；正式荒漠矿区使用组件布局，含高台、坡道、岩沙材质和迷雾。
 
-**当前限制：常规双端功能回归通过，持续负载弱网验收未通过。** 全量可靠快照会随负载和往返延迟积压，出现操作滞后、旧快照和超时；此包用于复现和异地连通性测试，不能视为已经通过公网对战验收。性能测试的动画耗时也仍略超原8ms门槛，详细证据见 [验证索引](agent_md/VERIFICATION.md)。
+**Alpha 测试版：跨公网连通性和长时间弱网对战仍待验证。** 本机房间和短时网络扰动测试不等于真实异地验收；历史旧直连弱网矩阵也不能替代当前房间验证。当前构建的实际结果与已知限制见发布说明及 [验证索引](agent_md/VERIFICATION.md)。
 
-1. 同机开两个进程：一个创建主机，另一个填 `127.0.0.1` 加入。局域网测试时改填主机的局域网 IPv4。
-2. 不同网络直连时，客户端填写主机公网 IPv4；主机所在路由器需要将 UDP 24560 转发至主机电脑，系统防火墙需要允许该游戏接收入站 UDP。项目不会自动修改这些设置。
-3. 若主机处于运营商 CGNAT、无可入站公网地址，单纯输入公网 IP 通常无法直连；当前版本没有自动打洞、中继或主机迁移。
-4. 双方检查建造、生产、采矿卸货、移动攻击、建筑起降、战争迷雾、胜负与重开，再检查红方退出重连和主机退出。记录网络类型、双方地址类型、是否转发端口、单位数量、卡顿出现时间及复现操作。
+1. 同机开两个进程：第一个选择“启动本机服务并连接”，第二个连接 `127.0.0.1:24562`；在同一服务器创建并加入房间，全部真人准备后由房主开始。
+2. 局域网开服：运行 `start-exported-server.ps1 -BindAddress <服务器局域网IPv4>`，玩家连接该地址的 UDP 24562。脚本在便携包中与 EXE 同目录，也可显式指定 `-GamePath`。
+3. 不同网络测试需要可达的服务器地址及入站 UDP 24562；家庭服务器可能需要路由器转发和防火墙放行。CGNAT 下仅填写公网 IP 不保证可达；游戏不会自动配置路由器、防火墙或提供中继。
+4. 双方检查建造、生产、采矿卸货、移动攻击、建筑起降、战争迷雾、胜负与重开，再检查意外断线后 60 秒内重连和服务端退出。记录版本、网络类型、单位数量、卡顿时间与复现操作。主动退出对局视为投降。
 
 自动弱网测试使用真实 ENet 数据包经本机 UDP 代理注入延迟、抖动、丢包、限速和短暂断网；它不验证真实路由器、CGNAT、运营商策略或跨网可达性。源码复现入口：`tools/codex/run-network.ps1 -Mode Weak -Profile all -DurationSeconds 180`，默认固定种子 101/202/303，结果位于 `.godot/validation/`。当前两端均启用 ENet FastLZ 压缩，必须使用同一测试包。
 
@@ -47,7 +47,7 @@ git lfs pull
 - 左键选择、拖框选择、选择己方建筑；右键移动、采集或攻击可见敌人。
 - `A` 进入攻击模式，`S` 停止，`R` 设置集结点，鼠标滚轮缩放，中键/方向键移动镜头。
 - `B` 建造兵营；选中建筑后使用生产按钮；`Esc` 取消当前模式或返回菜单。
-- 胜利条件是摧毁敌方全部建筑；主机退出会结束对局，红方客户端断线可重连。
+- 摧毁敌方全部建筑可淘汰对手，结果按房间队伍规则判定；独立服务器退出会中断房间对局，客户端意外断线保留席位 60 秒。
 
 ## 文档
 
@@ -83,8 +83,8 @@ git lfs pull
 
 “启动本机服务并连接”会在后台启动独立服务端，本机同时可以游玩。默认地址 `127.0.0.1`、UDP 端口 `24562`。退出客户端默认保留服务；多人连接页面可取消“退出游戏后保留本机服务”。房间码只在同一台服务器内有效。意外断线保留席位 60 秒，重新连接后点击“重连上一局”。
 
-从源码单独开服：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/codex/run-frontier-server.ps1`。打包后的游戏也支持 `IronFront.exe --headless -- --dedicated --bind=127.0.0.1 --port=24562`；`tools/server/start-exported-server.ps1` 是对应启动入口。窗口中显示名称为 GAIA FRONTIER，已有 Windows 发布文件名保持兼容。
+从源码单独开服：`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/codex/run-frontier-server.ps1`。打包后的游戏也支持 `GAIA_Frontier.exe --headless -- --dedicated --bind=127.0.0.1 --port=24562`；`tools/server/start-exported-server.ps1` 是对应启动入口。发布名称统一为 GAIA FRONTIER / GAIA_Frontier.exe。
 
 局域网服务可显式绑定所在网卡地址，其他电脑填写该地址。未来公网部署使用相同服务程序，Linux systemd 示例位于 `tools/server/gaia-frontier.service`：配置实际 Godot 路径、项目路径及服务用户，并准备完整 LFS 资源与 Godot 导入缓存。公网服务器需允许入站 UDP 24562；普通玩家主动连接服务器，无需配置自己的路由器。仅在本机开服不会自动获得公网入口。本次不包含公网部署、账号系统或匹配服务。
 
-服务端最多同时容纳八个房间、32 个连接。地图和协议不一致会拒绝连接；本版本协议为 `gaia-frontier-16`。正式背景位于 `assets/ui/frontier/command_background.png`，不依赖微信临时文件、概念图库或 `.local/art_library`。
+服务端最多同时容纳八个房间、32 个连接。地图和协议不一致会拒绝连接；本版本协议为 `gaia-frontier-19`，所有玩家应使用同一发布包。正式背景位于 `assets/ui/frontier/command_background.png`，不依赖微信临时文件、概念图库或 `.local/art_library`。

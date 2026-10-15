@@ -33,5 +33,6 @@ func run() -> void:
         OS.kill(app.local_pid)
     app.queue_free()
     await process_frame
+    await create_timer(0.15).timeout
     print("FRONTIER_LOCAL ", JSON.stringify({"passed": failures.is_empty(), "failures": failures}))
     quit(0 if failures.is_empty() else 1)

@@ -2,6 +2,10 @@
 export_templates/
 *.tpz
 # Large binaries are published via Releases, not git history
+/build/GAIA_Frontier.exe
+/build/GAIA_Frontier.console.exe
+/build/GAIA_Frontier.exe.sha256
+/build/releases/
 build/IronFront.exe
 build/IronFront.exe.sha256
 build/IronFront3D-review.exe
