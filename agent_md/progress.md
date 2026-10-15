@@ -11,6 +11,7 @@
 - 新EXE 347839384字节，SHA256 `fe6cfc0b10b90e1762f21015e5090ceb63aada9839a86abdf2749660b3461ad5`；便携ZIP 212028079字节，SHA256 `25c0f7a1e54bf7675ae478666c06c1f4cab7ab94f5a9937ecddc3c1616580ae8`，另附SHA256SUMS.txt。目录build/releases/v0.2.0-alpha.1，包不进入Git。
 - Full 46阶段通过；弱网和本机开服夹具修正后通过。独立ENet、隔离包资源/菜单/设置、实际EXE双客户端功能及图形启动通过。旧模拟轨迹、性能预算和一次断线发送日志错误仍未解决，详见VERIFICATION与release_notes.txt。
 - 所有本任务引擎/游戏/服务器进程已清理，既有编辑器55528及素材服务47508/34692保留。未执行任何GitHub写操作；待确认LFS和Release大文件范围后推送main与标签并发布。
+- 用户已单独确认上述生产LFS、EXE/ZIP/校验文件上传及公开Alpha，进入推送与发布阶段，授权详见authorization_log。
 
 ## 2026-10-15：当前成果本地版本归档
 
