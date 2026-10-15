@@ -1,5 +1,206 @@
 # 验证索引
 
+## 2026-10-15：主界面音乐与尾部淡出
+
+- `.godot/menu-music-preparation.json`：源SHA256 `8fbc8f4bfca806224a8a06563071d65aea6194eca3ad1d82b1872cc50c91060e`前后相同；OGG 145.428秒/48kHz/单声道、1269423字节，峰值-2.93dBFS。末尾5秒cos²包络、开头0.35秒sin²包络；最后五个1秒窗口相对源依次-0.27/-2.18/-6.59/-11.85/-29.25dB，最后一秒衰减大于20dB，首尾近零，编码回读通过。
+- `.godot/menu-music-import.log`独立导入成功，stderr为空。Light Presentation `.godot/validation/20261015-231813-51744/`：结构1294通过、settings87通过、presentation通过、HUD82通过、audio69通过、cleanup通过；frontier首轮结果页时序及退出资源释放报错，原整轮状态failed。
+- 修复测试协程等待后，`.godot/menu-music-frontier-fixed.log`为`FRONTIER_TEST {"failures":[],"passed":true}`、stderr为空。涵盖首页启动、页面切换不重播、loading停播、入局停止、暂停/结果不播、返回首页恢复。其余已通过套件没有重复执行，因为最后只修改frontier测试等待。
+- 实际Forward+音频测试抓取MenuMusic总线峰值0.0161587，退出后峰值0；验证导入OGG、0.6秒进入淡入、尾部seek跨真实循环边界、快速反向切换不叠声、0.4秒停止、重新进入从头播放以及节点销毁静音。原世界音效近远镜头峰值均0.1243024，未改变其音量行为。
+- 新音乐没有进入模拟或同步协议，未跑Simulation/Network/Full；未改变发布配置且未要求交付EXE，因此未导出。专用服务不播放由ready中的早退分支保障，本轮未另启服务器做网络回归。
+- 最后固定cleanup与独立ReportOnly均为`PROJECT_PROCESSES none`，保留素材库47508/8810、数值服务34692/8811和共享MCP。没有误停其他任务，源码范围空白检查通过。
+
+## 2026-10-15：作业车并行采运、开放货盘、固定音量
+
+- 范围：Light `Simulation,Visual,Presentation,Performance,Network`，运行目录 `.godot/validation/20261015-210059-62236/`。包含地图/地形/建筑/编队/模型/界面/音频/性能；不导出EXE，包装路径未变且无交付请求。
+- Blender构建/导入：`.godot/harvester-open-build.log`、`harvester-open-import.log`。17网格/28728三角形；`compact_depot`158项通过，实测1.77845格包络。
+- 首轮失败及处理：新并行移动测试误开启自动采矿，已显式关闭；满载释放名额未即时唤醒，已修复；两项冻结轨迹测试的当前版本断言改v19，冻结文件未改；音频新增混音测试导致自动重置释放播放器，已隔离测量生命周期。初轮压力测试超限，独立复核通过。初轮ENet被前置失败跳过，随后单独完整运行通过。
+- 最终补测日志：`.godot/harvester-final-shared.log`3619项、`harvester-final-capacity.log`89项、`harvester-final-flight.log`22633项、`harvester-final-audio.log`60项均无失败。近/远相机高度的实际峰值均0.12430236488581。
+- 采运：`ore_depot`689项、`gameplay`72项通过；正式9矿和训练场6组往返通过；斜坡6车640tick交付360矿；移动体积1703项通过。
+- 模型：`hover_harvester`410项通过，爪尖到矿心最近33.65，最低喷口离地4.73；`.godot/harvester-open-preview.log`Forward+通过。已查看 `assets/concept_art/hover_harvester/01-front-full.png`、`02-rear-full.png`、`03-cargo-00.png`；预览不上传。
+- 最终性能：`.godot/harvester-final-performance.log`全部通过，168单位simulation=21.65015ms、sync_units=1.73856ms、sync_visuals=1.88375ms、animated_sync=7.52633ms，原阈值不变。
+- 联机：`.godot/validation/harvester-v19-network/desert_quarry/`，旧协议拒绝、观战、采矿容量、采运/生产、建筑迁移、战斗、断线重连、主机退出均通过；两轮完整快照相同。
+- 百科：7张模型肖像已重建，本地服务最终refresh revision=12，91项测试通过。原服务进程保留；model.mjs中的辅助字段标签将在服务下次启动加载，新单位描述与图片已刷新。
+- 最终资源导入 `.godot/harvester-final-import.log`通过。清理无本次项目进程残留；保留资源库47508、百科34692及共享Blender MCP。
+- 仍未解决：`.godot/harvester-final-systems.log`仅既有AI冻结基线在tick -1不匹配，expected43a705bf…，actual1edec830…，与本次任务之前相同；未重写基线或降低断言。Light整轮因此不能标为全绿。
+
+## 2026-10-15：参考第三版《边境机动》
+
+- `MUSIC_V3_PASS`：72.571429秒、44.1kHz/16bit双声道WAV，12801644字节，峰值-2.05dBFS/RMS -19.2dBFS，4倍重采样峰值预留约2dB余量；文件回读、非静音、首尾近零、左右差异与曲中无意外静音通过。SHA256及参数见概念目录`v3/audio_report.json`。
+- 参考M4A只读解码为本地FLAC，未改变用户原件。原先PCM编码失败因该ffmpeg裁剪了PCM编码器，改FLAC后通过；生成脚本一处RMS统计括号错误修复后通过。额外M4A输出尝试失败：裁剪ffmpeg无法读取生成的标准WAV/FLAC；停止额外转码，播放器改用WAV，另由sndfile保存无损FLAC，不声称已生成M4A。
+- 音频参考结论仅为数值分析，已检查频谱图，不声称实际听辨、准确乐器识别、精确BPM或主观相似度验收。播放器提供参考对照，保留旧版；非无缝循环。
+- 仅概念音频/制作脚本及文档变化，未跑Light/Full/ENet或引擎导入/EXE导出；未修改工具入口，无服务或引擎进程启动，无跨任务清理。
+
+## 2026-10-15：单卸载区冶炼场与2格作业车
+
+- 新源模型三档15251/8312/884三角；`.godot/smelter-build-final.log`、`smelter-import-final.log`和`smelter-preview.log`成功，stderr为空。Forward+最终正面/俯视确认右前2×2通行区、左前矿仓、4×4轮廓与实际作业车；图片位于`assets/concept_art/ore_depot/smelter_forward_lod0.png`及`smelter_top.png`。以正面看建筑时右侧对应局部-X，最终泊位(-32,-32)、入口(-32,-100)。
+- 最终方向专项：`smelter-compact-final.log`325项、`smelter-dock-final.log`854项、`smelter-gameplay-final.log`72项通过。覆盖2格圆形碰撞、实际模型外接圆1.77845格、相切/正重叠、偏心对齐、单泊位等待、出口占用/预约阻止生产、一次性扣费和结算、旧协议与非法快照拒绝、恢复续跑。单位原费用、速度、血量、采矿容量不变。
+- `.godot/smelter-quarry-final.log`正式9矿完整往返分别356/2335/1311/823/2106/830/2304/1858/1638tick，各结算60，无穿越阻挡。`smelter-training-final.log`六组501/717/493/1055/989/441tick，各60并快照续跑一致。`.godot/smelter-slope.log`六车各自完成交付1520tick、总360，采矿名额与矿量守恒通过。
+- 运行Light Simulation/Visual/Network/Performance：`.godot/validation/20261015-201121-60344/`。尺寸、模型、建造、采运、队列、AI经济、编队、地形、移动、房间/弱网、建筑动画等通过。三项无完成标记的检查通过`smelter-recheck-terrain_sample_view/barracks_heading/barracks_integration.log`分别复验通过，stderr为空。
+- **未通过项明确保留**：simulation_systems仍为此前已有AI tick -1冻结哈希43a705bf…/1edec830…差异，未覆盖旧基线；AI实际建设/生产断言已通过。visual_performance混合168单位（含退役士兵）动画同步首次8.268ms、独立复验9.230ms，超过8ms阈值；模拟23.523ms低于25ms、普通视觉同步1.941ms/单位同步1.796ms通过。未修改性能阈值，不能宣称综合全绿。
+- Light因上述失败自动跳过ENet，因此另跑完整固定网络回归：`.godot/validation/smelter-v18-network/desert_quarry/`全部通过，含旧协议拒绝、观战权限、5车矿位、生产/集结点/单泊位进出站、经济同步、建筑迁移、战斗、重连、主机退出及两轮完整快照一致。该回归在最终左右方向镜像前完成；镜像不改变v18快照契约，最终方向另由地图采运和单泊位快照专项覆盖。
+- 百科export/portraits成功，91项数值/占格/浏览器测试通过（`.local/balance_designer/test.log`），原服务刷新revision10；服务保留，已缓存的字段说明模块需下次重启加载新文字。选择Light影响区域，未额外运行Full的无关UI/摄像机套件；未涉及发布配置，未导出EXE、提交或上传。
+- 最终固定cleanup检查无本轮进程残留；共享服务及Blender MCP均保留。文本diff检查通过，临时路径探针脚本删除。
+
+## 2026-10-15：背景音乐第二版
+
+- 离线概念制作脚本输出`MUSIC_V2_PASS`，主界面74秒/13053644字节，局内70.206893秒/12384540字节；44.1kHz、16bit、双声道，峰值均-2dBFS。WAV实际回读的有效信号、无削波、左右差异、首尾近零及曲中无意外静音检查通过。
+- 第一版两份WAV生成前后SHA256不变。第二版哈希、音符事件和指标保存在`assets/concept_art/music_samples/v2/`；`V2_PLAYER_LINKS_PASS`验证本地音频和原版对照页面链接存在，未进行浏览器实际播放或主观听感验收。
+- 本轮只有独立概念音频和文档变化，无运行源码/工具入口改动，未跑Light/Full/ENet、引擎导入或EXE导出。未启动引擎、服务或全局清理器；无驻留音频进程。两首仍是带收尾的试听版，未接入游戏。
+
+## 2026-10-15：独立音乐试听样本
+
+- 固定`run-music-samples.ps1`生成两首WAV，`MUSIC_SAMPLES_PASS`；回读检查44.1kHz/16bit双声道、信号非静音、左右声道有差异、无削波、首尾近零及曲中无意外静音通过。主界面76秒/13406444字节、局内77.846秒/13732104字节，峰值均-2dBFS。报告与SHA256在概念目录的`audio_report.json`。
+- `listen.html`全部本地音频链接存在，`LOCAL_AUDIO_PLAYER_LINKS_PASS`；尚未进行浏览器实际播放或主观听感验收。WAV可直接用系统播放器打开，提供淡入淡出试听版而非无缝循环版。
+- 验证等级Light/Tooling：首次1285结构、wrapper语法、路径/环境检查通过，Codex临时目录权限导致tooling失败；获准重跑后结构和tooling全部通过（含27允许/7拒绝规则），可选完整工具链smoke未启用。
+- 清理阶段发生并行任务冲突：首次停止tracked64804，第二次停止tracked63884与Godot60456/61572，随后发现另外的gaia_base_integration测试53088/64552，整轮因残留进程报失败。起始保留名单47508/34692/62392/63036未覆盖其他任务后来启动的PID。已停止进一步清理，ReportOnly确认另一个hover_harvester测试56260/65008仍在运行；这些不是本次音乐生成启动的进程。原素材库/数值服务及共享MCP保留，已向用户说明误停。
+- 本轮未修改玩法、网络或运行美术，因此未执行Simulation/Visual/Network/Full、Godot资源导入和EXE导出。独立Python生成器已自行退出，无本次音频服务常驻。两段音频未接入游戏，不改变包体。
+
+## 2026-10-15：训练场地形与晶矿扩展
+
+- `.godot/training-layout.log`仅布局重建通过，未重烘焙组件美术；`.godot/training-terrain.log`地形/22矿格中心与平坦占地/可达/坡道上下通过。`.godot/training-render.log`Forward+视图、拾取、重开检查通过、stderr为空；总览/高地/洼地在`assets/concept_art/sample-*-expanded-v6.png`，总览与洼地已查看；运行预览`assets/maps/sample/preview.png`同步，`.godot/training-import.log`导入成功。
+- Light Simulation/Visual `.godot/validation/20261015-183638-53016/`完整执行388.635秒，34/38阶段通过。新增六矿组代表采运分别486/659/453/1064/1004/495tick卸货60，无穿崖，当前训练场快照恢复和30tick续跑一致。组件198、网格485、玩法73、双泊位718、移动1703及正式九矿往返通过。
+- 三项测试夹具过时：mining_capacity依赖旧北边界封闭，改为显式障碍；mining_slope只统计单矿但新地图允许转到其他矿，改为隔离单矿；arrival_formation的原西侧平地已成为高地，改为从组件范围取外侧与四个边缘，顺带使用实际兵种半径。`.godot/training-capacity.log`89项、`.godot/training-slope.log`六车872tick卸货360、`.godot/training-arrival.log`四边编队及180单位分配40.339ms复验通过，stderr均为空；没有重跑不受测试夹具修改影响的其他套件。
+- 综合套件仍有此前已有的AI tick -1 expected43a705bf…/got1edec830…冻结差异。历史冻结轨迹包含旧训练场，未覆盖旧文件；本次训练场行为由当前地图直接断言和快照续跑验证，不能宣称历史轨迹全部匹配。无RPC/快照协议变动，本轮未跑Full/ENet压力，未导出EXE或上传。
+- 最终固定cleanup检查无测试进程残留，保留47508资源库、34692百科与共享Blender MCP。正文/代码diff空白检查通过。现有EXE不包含本轮源码地图更新。
+
+## 2026-10-15：紧凑作业车与卸载场
+
+- Light Simulation/Visual最终完整执行`.godot/validation/20261015-155533-58000/`，343.917秒，36/38阶段通过（包含结构及清理）。新专项compact_depot526项覆盖参数变化、模型包络/台面、双出口阻塞/预约、生产费用、快照续跑及三个偏心入口。泊位718、坡地6车卸货360（872tick）、建筑网格485、玩法73、命中53、作业车419项通过；九矿逐一真实卸货60，363～2333tick。地形飞行22633、分层体积1312及其冻结轨迹也通过。
+- 两个失败中，mining_capacity的旧封闭区域在小车尺寸下具有墙内合法角落出口，已收紧夹具并验证几何前提；`.godot/compact-mining-capacity.log`67项复验通过、stderr为空。唯一仍未解决为既有simulation_systems的AI初始化tick -1冻结哈希差异（expected43a705bf…/got1edec830…），与此前相同，未覆盖基线；不称整体全绿。
+- `.godot/compact-terrain-maps.log`独立复验九矿全部通过；原进站4单位容差大于侧隙导致ore1/5卡死，修正后已纳入完整Light复验。音效专项此前47项通过；百科导出及91项测试通过。模型源文件不变，无需重烘焙；新增脚本已走导入并生成UID。
+- 网络协议/RPC/快照结构不变，测试验证同版本快照与相同主机ID分配上下文续跑，未运行Full/ENet压力；未导出EXE、提交或上传。现有EXE不包含本次源码修改。
+- 最终货仓条宽/高/悬挂高度随车身尺寸推导后，`.godot/compact-harvester-final.log`419项复验通过；`.godot/compact-depot-render.log`Forward+实拍PASS且stderr为空，三档及俯视`assets/concept_art/ore_depot/compact_*.png`已检查。百科refresh成功revision9，保留原服务，新只读说明代码待服务下次重启。最终固定cleanup无测试残留，保留47508/34692与共享Blender MCP。
+
+## 2026-10-15：复合空中体积
+
+- `.godot/air-volumes-import.log`导入成功，新增两个脚本UID已生成。`.godot/air-volumes.log`1312项、最终`.godot/air-volumes-render.log`Forward+1314项通过，stderr为空；侧翼128偏移路线直飞、中央路线绕塔97.515单位、144巡航、164塔顶间隙、转向角落、旋转机身与快照续跑均验证。
+- 三档GLB待机/雷达三个时刻、水平及-2度巡航倾斜逐顶点检查。上塔盒扩宽至64；倾斜翼尖允许2单位装饰外伸，不扩展落地格子。已查看`assets/concept_art/building_lifecycle/air_volumes.png`分层叠加及正常预览；预览保存在不上传的concept_art。
+- Light Simulation/Visual `.godot/validation/20261015-100206-46936/`完整运行360.809秒，35/37阶段通过。起飞1263、地形飞行22633及原冻结轨迹、兵营飞行47/朝向1817、基地集成81/模型213通过。
+- 两项失败中：movement_volumes仍检查旧164中心距离与全旋转圆，改为实际矩形重叠、原地转角扫掠和双机相向逐帧检查，`.godot/air-movement-volumes.log`1703项复验通过、stderr为空；另一项是此前已有AI tick -1 expected43a705bf…/got1edec830…，未修改冻结基线，综合套件不能宣称全绿。仅复验受测试定义修改影响的套件，未重跑已通过项。
+- 本次未改变RPC、快照字段或版本，不跑Full/Network/真实ENet，已做同版本快照续跑；未导出EXE。最终独立固定cleanup确认无项目进程残留，保留47508/34692及共享MCP。源码与文档diff --check通过（仅既有CRLF提示）。
+
+## 2026-10-15：喷流尺寸与升空阻挡
+
+- `.godot/thruster-enlarged-render.log` Forward+115项通过、stderr为空，`exhaust_cruise/barracks_detail/rts_hover/ground_wash/wash_detail/fleet.png`已查看相关近远帧。8建筑预览GPU特效关闭0.3583ms、开启0.3804ms；仅描述当前RTX5070Ti场景，不是最低配置或大规模性能验收。
+- `.godot/lift-clearance.log` 首轮1251项通过，加入同时起飞/销毁释放及HUD测试后 `.godot/lift-clearance-render.log` 1262项通过、stderr为空。`assets/concept_art/building_lifecycle/takeoff_blocked.png`已查看，基地保持地面、显示中文占用原因、升空与建造按钮仍可用。快照复制后两端逐帧验证相同升空与横穿行为；先后实体ID两种顺序均覆盖。
+- `.godot/lift-clearance-import.log` 导入完成、stderr为空。Light Simulation/Visual使用此前批准的同一固定入口运行，避免已确认的沙箱用户日志/证书限制。
+- 本次修改同版本权威碰撞规则与表现，不变更RPC、快照字段或协议；未选Full/Network，使用专项快照验证，不声称完成真实ENet回归。没有导出、提交或上传。
+- 最终Light `.godot/validation/20261015-093811-56900/` 348.941秒、35/36阶段通过：起飞1261、喷流107、地形飞行22633及冻结轨迹、兵营飞行47/朝向1817、基地集成81、结构1246全部通过。唯一失败为旧AI tick -1 expected43a705bf…/got1edec830…，与之前记录一致，未修复或覆盖基线。
+- 验证入口最终cleanup返回PROJECT_PROCESSES none，保留47508、34692与共享Blender MCP；本轮diff空白检查通过，新增测试UID已导入。
+
+## 2026-10-15：施工生命值显示
+
+- `.godot/construction-health-render.log` Forward+ 2713检查通过、stderr为空；已查看 `assets/concept_art/building_lifecycle/construction_health/` 初始/受伤/完工截图。真实HUD显示80/800、340/800、700/800，模型上方没有独立黄色施工条。
+- 新专项覆盖所有建筑初始10%、1000血受伤100完工900、非整除整数累计、不同施工阶段多次扣血、原期限完工、完工不再回血、快照恢复后逐帧一致、实际攻击致死及完工当帧致死、销毁效果、释放占地与零血不复活。最终增加选中面板数值断言，headless共2713检查通过（不含4张截图保存）。
+- `.godot/construction-health-import.log` 导入成功。Light Simulation/Visual 首轮 `20261015-084905-60088` 遭沙箱用户日志/系统证书错误，中止后固定cleanup确认无项目残留，获准使用同一入口重跑。
+- 未运行Full/ENet：同版本模拟规则调整，快照/RPC/协议不变；快照续跑已有本次直接测试。未改打包交付路径，未导出EXE。
+- 最终Light目录 `.godot/validation/20261015-085500-46368/`，350.548秒、34/35阶段通过。施工专项2713、基地集成81、玩法73、占地484、结构1242及全部Visual检查通过。唯一失败为旧模拟AI tick -1：expected43a705bf…、got1edec830…，与前轮记录一致；根因未修复，未覆盖旧基线，不宣称全绿。
+- 验证入口最终固定cleanup完成，PROJECT_PROCESSES none；保留资源库47508、百科34692和共享Blender MCP。新增测试UID已导入，本轮代码与记录diff空白检查通过。
+
+## 2026-10-15：机动兵动作改进
+
+- `.godot/mobile-motion-bake.log`：36 蒙皮样本通过，无未加权顶点；几何/蒙皮权重指纹不变。正式源 blend/GLB 和模型报告已更新，单独武器未修改。
+- `.godot/mobile-motion-import-final.log` 导入成功，stderr 为空。`.godot/mobile-motion-render-final.log` Forward+ 正常完成、stderr 为空；已查看 after_idle、stop_turn、uphill、rts 等帧，近远镜头覆盖实际 EntityVisual/独立枪械。静态截图不代表已完成大规模战斗帧率验收。
+- 最终动作专项 7132 检查通过：30/60/144FPS × 5/20Hz，直线/弯道、双向坡道、停步转身、开火混合、瞬移。最大支撑脚水平滑动 0.0000611、双手握把误差 0.0000459 世界单位、胫骨长度误差 0.000000686 模型单位；额外断言有效接触检查超过 1000 样本，避免无接触假通过。
+- 首轮 Light Visual/Performance `20261015-074454-60252` 被沙箱用户日志/证书访问错误中断；固定 cleanup 确认无项目进程，随后获准用相同入口重跑。没有绕过错误或改测试阈值。
+- 本次不改权威模拟/网络接口，未选择 Full 或 ENet；未改导出配置、未导出 EXE。既有弱网房间和旧模拟冻结基线的问题仍保留，未宣称全项目验证通过。
+- 获准重跑目录 `.godot/validation/20261015-081358-31852/`：7132 项动作专项与 238 项既有机动兵运行检查通过；后者 100 人动画 CPU 3.8715ms/帧。结构 1237 项通过。旧普通士兵/矿车性能场景 animated_sync 为 8.0545ms，超过 8ms，整体不能记为全绿；该场景没有机动兵，本轮未修改其预算或实现。
+- 最终 Light 总计 178.919 秒、19/20 阶段通过；全部 Visual 专项通过，唯一失败为上述 Performance 项。固定入口 finally cleanup 完成并复查 PROJECT_PROCESSES none，保留 47508/34692 和共享 Blender MCP。此后仅修改记录，没有再启动测试进程。
+
+## 2026-10-14：地形相对飞行高度
+
+- 专项最终 `.godot/terrain-flight-final-v2.log` 22633 项通过，stderr 为空。覆盖两种建筑平地、远端高山不影响当前高度、上下高台、窄脊、斜坡与斜向移动、提前爬升/不足时等待、停止调高、机头朝向、阻挡解除、降落实际高度与中止、8 单位组件尖峰、紧邻基地起飞/离开/返回部署、非法快照拒绝及恢复续跑。独立 `tests/fixtures/terrain_flight_v17.json` 冻结轨迹回放通过，旧基线完整保留。
+- Forward+ `.godot/terrain-flight-render.log` 3126 项通过，stderr 为空；基地和兵营分别双向跨越 288 单位崖壁，真实 EntityVisual 与 BuildingVisualSync 插值、喷流一并运行，机身不穿地形。已检查 `assets/concept_art/building_lifecycle/terrain_flight_*.png`；这些概念预览不上传。导入 `.godot/terrain-flight-import.log` 无 stderr，新脚本 UID 已生成。
+- Light Simulation/Visual/Network `.godot/validation/20261014-224856-63912/` 完整运行 417.335 秒；地形专项、模型/推进器、生命周期、47 项兵营飞行、1817 项朝向、玩法/地形/采矿、普通房间、本地启动等通过。整体为失败：旧冻结模拟、弱网房间、相邻建筑部署三项失败，ENet 由入口规则跳过，随后独立执行。
+- 本轮修复相邻部署回归：起飞先清开较高地面邻居，降落接近时平滑升至可转正高度，从实际高度降落。`.godot/terrain-flight-grid-v2.log` 484 项、`.godot/terrain-flight-barracks-final.log` 47 项及上述最终专项全部通过。首个新增返回部署夹具未使用奇数格建筑中心，改用 snap_building 后通过，未放宽断言。
+- 旧模拟在修改前 `.godot/terrain-flight-before.log` 已于 ai tick -1 失败；修改后同样 expected `43a705bf…`、got `1edec830…`。未重写全量基线，未宣称综合回归全绿。
+- 弱网房间首次快照延迟超限；独立复测 `.godot/terrain-flight-weak-final.log` 快照时效通过（server179、四客户端172，1485包/15丢包），但 reconnect restores seat 失败。该测试无建筑飞行操作，本轮未改房间实现或等待时间；根因未确认、未修复，保留两次失败。普通房间用例通过不等于弱网验收通过。
+- 首轮综合验证 `.godot/validation/20261014-223512-62184/` 受沙箱用户日志与证书访问限制，中断后固定入口清理；授权重跑无该错误。冻结 JSON 的二进制浮点舍入误判已按相同序列化精度修正，未覆盖夹具。
+- 未运行 Full：本次选择覆盖规则、表现、快照边界的三个 Light 区域；未改打包和交付路径，未导出 EXE，既有 EXE 不含本次改动。未提交、上传；弱网时延问题和旧基线仍为未解决项。
+- 独立完整 ENet `.godot/validation/terrain-flight-enet-final/desert_quarry/` 通过：旧协议拒绝、观战权限、采矿/泊位/建造/生产、基地与兵营起飞移动停止部署、局部地形目标高度同步、两轮完整快照一致、重新入场及主机退出处理均通过。它不覆盖前述四人弱网房间失败，二者分别记录。
+- 最终固定 cleanup 返回 PROJECT_PROCESSES none，保留资源库 47508、百科 34692 与共享 Blender MCP；本轮文本差异空白检查通过。
+
+## 2026-10-14：建筑推进喷流
+
+- 导入 `.godot/thruster-import.log` 无 stderr。Light Visual 首轮 `.godot/validation/20261014-133145-51328/` 全部 17 阶段通过（165.904 秒）；最终复验 `.godot/validation/20261014-134131-51256/` 再次全部通过（166.475 秒），含结构 1218、喷流 104、建筑生命周期 172、模型/占地、基地朝向 1817、兵营集成、GAIA 213 等。
+- 最终 Forward+ `.godot/thruster-render-final.log` 112 检查通过、stderr 为空；验证共享资源、喷口方向、起停/转向、LOD、隐藏/施工、地形采样、真实 GPU 尘粒包围盒与节点释放。6 张截图位于 `assets/concept_art/building_lifecycle/exhaust_*.png`，含巡航、兵营后喷特写、RTS 悬停、近地扬尘及 8 建筑场景，已人工看图。
+- `.godot/thruster-barracks-rts-final.log` PASS，无 stderr。仅执行演出检查，未执行旧 1/16/64 建筑模型基线性能矩阵。首次旧专项失败原因及修复见开发日志，未放宽模型预算。
+- 8 建筑预览、RTX 5070 Ti、1440×810 视口，60 帧平均视口 GPU：关闭特效 0.2270ms，开启 0.2416ms；render CPU 0.1913/0.1902ms。总帧耗时受刷新率限制约 6.9ms；此测量仅描述当前预览场景，未证明最低配置或大规模战斗性能。
+- 仅表现层变化，未运行 Full/ENet，未改权威移动与同步接口；本轮没有导出 EXE，旧可执行文件不包含新效果。
+- 最终补充导入 `.godot/thruster-import-final.log` 无 stderr，脚本 UID 已生成；本轮变更 diff 空白检查通过。固定 cleanup 复查 PROJECT_PROCESSES none，保留素材库 47508、百科 34692 和共享 Blender MCP。
+
+## 2026-10-14：设置分页、50项改键和镜头速度
+
+- Light Camera/Presentation/ActionBar/Features：`.godot/validation/20261014-014906-55324/`除旧空中槽位断言外全部通过；将断言更新为生产槽替换成M移动后，Light ActionBar `.godot/validation/20261014-015515-52676/`全部6阶段通过（40.273秒），含87项设置、命令栏、82项HUD、78项集结点及清理。更早005934轮的旧建筑攻击快捷键断言已按统一可用条件修正并复验。
+- Forward+ `.godot/settings-final-window.log`89项设置/改键/实际生产建造命令检查通过，`.godot/settings-final-camera-window.log`相机检查通过，stderr为空。2窗口尺寸、4缩放、3移动方向最大屏幕速度相对误差0.007855；中键抓点投影误差小于2逻辑像素。截图在 `assets/concept_art/ui_selection/settings/`，检查了通用及小窗口按键页。
+- 新增脚本已单独导入，结构1101项与文本diff检查通过。设置存取测试使用独立缓存配置，资源库和概念图不作为运行依赖。此次仅本地输入与UI转换，复用原命令，无网络协议或模拟规则变更，未重跑ENet/Full，未导出或上传。
+- 兵营集成旧断言同样更新为“空中生产替换为移动”后，`.godot/settings-barracks-final.log`正式矿区和样板两图均通过，stderr为空。全部补充测试之后执行固定清理，无遗留项目进程，保留资源库/百科与共享MCP。
+
+## 2026-10-14：菜单控制窗口鼠标锁定（最终策略）
+
+- Light Camera/Presentation：`.godot/validation/20261014-003518-51300/`全部6阶段通过，52.465秒；窗口与全屏对局锁定、菜单/失焦/最小化释放，实际Esc事件及继续按钮即时切换均通过。
+- Forward+ `.godot/menu-cursor-camera.log`通过；渲染验证后再次清理进程。窗口原生拖动/缩放手感未通过自动化操作验证。
+- 本地鼠标策略修改，无RPC或模拟变更，未重跑ENet/Full，未导出；本节取代上一轮窗口始终释放的行为要求。
+
+## 2026-10-14：原生窗口鼠标释放
+
+- Light Camera/Presentation：`.godot/validation/20261014-002944-56108/`6阶段通过，52.424秒，含1091项结构检查、相机/界面、82项HUD、47项音频及清理。
+- 额外Forward+窗口相机检查 `.godot/window-cursor-camera.log`通过，stderr为空；之后再次执行固定进程清理。
+- 仅本地输入策略变更；未改变RPC/模拟，未重跑ENet或Full，未重导入/导出。Windows原生标题栏拖动过程未自动操作，需用户桌面复验。
+
+## 2026-10-14：基地窄边前进
+
+- Light Network/Visual：`.godot/validation/20261014-001323-19596/`20阶段全部通过，374.528秒；包含1804项建筑朝向、213项基地模型、172项生命周期、玩法/占地/地形与原兵营行为。ENet基地迁移、两轮完整快照一致、重连及主机断开处理通过，清理通过；保留47508资源库、34692百科及共享MCP。
+- 定向检查 `.godot/base-narrow-heading-v3.log`1804项通过；首两轮夹具问题与修复记录在findings。Forward+ `.godot/base-narrow-preview.log`通过，已检查 `assets/concept_art/building_lifecycle/base_airborne.png`，stderr为空。
+- 本轮仅代码与测试修改，不需资源重导入；未跑Full、未导出或上传。文本diff检查通过。
+
+## 2026-10-13：正式地图组件升级与网络验证（本地交付完成，验收限制如下）
+
+- 正式组件布局生成、资源独立导入与 Forward+ 检查通过：`.godot/quarry-layout-build.log`、`.godot/quarry-final-import.log`、`.godot/quarry-render-review.log`。截图 `assets/concept_art/desert-quarry-{overview,highland,pit,gameplay}.png`，总览同步至正式菜单预览。
+- Full `.godot/validation/20261013-155124-49840/`：34个功能套件通过，包括2023状态独立冻结回放、组件/迷雾/拾取/建造/移动/攻击/音效；结构登记缺项与性能门槛失败，故完整Full状态为失败、其内ENet按规则跳过。首次旧地图断言失败保留在 `20261013-153320-36992`。
+- Light Network/Tooling `.godot/validation/20261013-165619-50008/`：结构1089项、工具链、玩法及九矿逐一采运通过；九矿均完成至少60卸货且矿量守恒。ENet观战脚本过早计时导致超时，修复方式为等待资源加载就绪后保留原6秒连接预算。
+- 修复后完整ENet `.godot/validation/quarry-enet-final/desert_quarry/`通过：旧协议拒绝、观战权限、20Hz快照、采矿排队/泊位卸货、建造/生产/集结、兵营与基地迁移、攻击/胜负、两轮全状态一致、红方重连重开及主机退出。
+- Light Performance/Tooling `.godot/validation/20261013-171645-47900/`：结构/工具链通过，动画8.145ms仍超过原8ms门槛，模拟22.651ms及实体同步1.663ms已低于各自25ms/2ms门槛。保留失败及退出时5个ObjectDB实例泄漏警告；未解决、未放宽门槛，不能声称最低配置或稳定60FPS验收通过。
+- 早期弱网 `.godot/validation/quarry-weak-matrix/`记录基准及RTT50失败，并在RTT100启动阶段中断清理。最终状态比较误判的原因是最后一条命令与旧快照同帧；结束标记改用命令通道0，并在冻结时前进一帧，保证比较帧唯一。修复后基准三个种子全状态一致，响应仍失败；原始状态对按项目约定归档至 `.local/simulation_audits/weak_network/<运行>/<档位种子>/states.bin`，迁移SHA256在该目录 `archive_index.json`，字段审计日志 `.godot/quarry-network-state-audit.log`。
+- 最终弱网 `.godot/validation/quarry-weak-final/`完成24轮：计划每轮180秒，50/100/200总单位各约60秒，异常断线会提前失败；每档并发三个种子101/202/303。完整功能回归在基准ENet执行，持续矩阵检查入场、正式命令传输、快照顺序、负载和最终全状态一致。额外收敛预算30秒，未收敛记失败，不等同于已证明状态内容分歧。原始数据在 `summary.json`，精简指标在 `report.json`；并发CPU影响另做单组对照。
+
+| 档位 | 完成最终一致性检查 | 响应验收 | 命令确认P95范围（秒） |
+| --- | --- | --- | --- |
+| 无注入基准 | 3/3 | 0/3 | 47.32～47.59 |
+| RTT50 | 0/3 | 0/3 | 125.36～128.20 |
+| RTT100 | 0/3 | 0/3 | 154.68～154.81 |
+| RTT200 | 0/3 | 0/3 | 169.90～173.44 |
+| 100ms、抖动、1%丢包 | 0/3 | 0/3 | 153.94～157.87 |
+| 200ms、抖动、3%丢包 | 0/3 | 0/3 | 172.76～178.68 |
+| 主机1Mbps、客户端256Kbps | 0/3 | 0/3 | 164.74～165.71 |
+| 三秒断网 | 0/3 | 0/3 | 63.26～154.18 |
+
+- 断网后第一份快照到达延迟1873/5180/2173ms，仅表示收到了数据；仍落后且两轮提前断线，不能判定恢复成功。所有失败弱网轮次均未收到最终比较屏障（frame=-1）；故没有把超时误报为内容分歧。最终工具把结束阶段改为观察端就绪后只发送一份正式快照，避免重复结束快照额外占用队列；隔离复测使用该版本。
+- 最终 Light/Tooling 再次通过：1089项结构检查、wrapper语法、工具路径/环境、27允许及7拒绝规则检查、清理；10629ms。工具链可选完整smoke未启用，实际导出启动另行验证。
+- 单组基准对照 `.godot/validation/quarry-isolated-baseline/`完成：180秒持续负载后最终状态一致，正式快照只在结束握手后补发一次；确认P95仍46155ms、应用ping P95 282ms、快照落后P95 581帧，响应失败。消除三组并发与结束快照重复发送后问题仍复现，未归因于并发本身。
+- 单独计算诊断 `.godot/quarry-network-load-cpu-fixed.log`：50/100/200单位平均模拟步4.649/8.134/29.818ms，红方每秒12单位移动命令平均6.168/1.838/8.805ms，序列化0.253/0.365/0.769ms，原始快照平均90649/103582/149038字节；蓝方每8秒逐单位批量下令耗时未计入该命令均值，主机tick间隔另记录其尖峰。首个脚本类型声明错误保留于同名未加fixed日志，已显式声明循环int后复验通过。
+
+
+- 单组RTT50对照 `.godot/validation/quarry-isolated-rtt50/`已结束：确认P95 122970ms、应用ping P95 240ms、快照落后P95 1820帧；代理没有丢包且最大排队25ms。主机日志确认50/100/200单位阶段均启动，guest watchdog超时、最终屏障/比较未完成，host最终结果缺失；退出后还有节点缓存RPC错误，均保留为失败。不能声称最后状态不同。
+- 打包：固定 `run-godot.ps1 -Action export` 成功，`.godot/quarry-export.log`完成savepack，stderr为空。`build/IronFront.exe`为341453224字节，资源内嵌；SHA256为 `2500a08a1f7e689c76a41931a0578d6ee59583b31d2a971000f8adb1343e5296`，校验文件 `build/IronFront.exe.sha256`。仅本地交付，未上传。
+- EXE smoke：固定 `run-exported.ps1`返回 `EXPORTED_GAME_SMOKE_PASS PID 45548 alive_after_15s`；随后Responding=True，但日志 `.godot/quarry-exported-smoke.log`为0字节且MainWindowHandle=0。因此仅证明进程15秒内未退出，不能由空日志推定地图加载成功；EXE画面/交互和双端对战未自动验证，源码渲染/ENet测试与该限制分开报告。
+- 收尾：固定cleanup关闭45548并重新查询成功，独立ReportOnly也为 `PROJECT_PROCESSES none`；仅保留原素材库47508/8810、数值服务34692/8811及共享MCP。恢复后只核对已结束结果、导出、smoke和文本记录，未修改游戏源码，故未重复Full/弱网矩阵；此前失败保持有效。
+
+## 2026-10-13：荒漠组件与样板美术
+
+- 构建、12组件Forward+预览、游戏7视角截图和单独导入通过，日志 `.godot/terrain-final-{build,previews,sample,import}.log`；截图在 `assets/concept_art/desert_terrain_kit/refined_components/` 与 `assets/concept_art/sample-*-components-v3.png`。崖壁连续补面黑色图集边缘修正后重新生成并检查。
+- Light Simulation/Visual/Performance：`.godot/validation/20261013-144723-33708/`全部阶段通过，包含1080项结构检查、198项组件检查、地形通行/拾取、模拟冻结、模型和性能回归；清理阶段通过，保留既有资源库与百科服务。ENet未重复运行，因为本轮未修改网络边界；未运行Full或导出EXE。
+- 组件共享贴图26.667MiB；RTX5070Ti Forward+实测初始均值6.943ms/P95 7.412ms，200活动单位均值19.667ms/P95 36.709ms，CPU模拟步均值24.951ms。测试脚本通过不代表稳定60FPS或最低配置性能达标；整体场景纹理568MiB包含其他已加载资源。
+- 布局JSON与逻辑组件目录diff为空，新增源与生产res均匹配LFS；概念图不进入版本管理。本轮未提交、上传或导出。
+
+## 2026-10-13：基地迁移与建筑销毁
+
+- Light Network/Visual/Presentation：`.godot/validation/20261013-140739-49952/`23阶段全部通过，196.686秒，含完整ENet、两轮快照一致、重连/主机退出、基地起飞移动停止部署与基地死亡事件。首次133619受沙箱日志/证书限制，中断清理后授权重跑。
+- Light Simulation：`.godot/validation/20261013-141320-48776/`除旧基地不可飞行断言外全部通过，含2023状态冻结投影、占地484项、飞行47项等；按已授权的新行为修正旧断言后，`.godot/base-integration-flight.log`78项通过、stderr空。保留旧基线不覆盖。
+- 最终`.godot/building-lifecycle-final.log`172项通过、stderr空：六秒升降、快照非法数值拒绝、60格吸附、边角单位/迷雾阻止落地、完整机体高度碰撞、四喷流、不重复叠加高度、销毁元数据、塌落/淡出、重复事件不重播及重置清理。
+- `.godot/building-lifecycle-preview-final.log`Forward+成功、stderr空，检查起飞/巡航/降落和三种销毁在0.15/1.20/3.80秒的截图。烟雾从实心球改为径向渐变公告板，显式保留缩放，玻璃提前隐藏、残骸变暗。
+- 本轮未跑Full/最低配置压力测试，未做Blender烘焙动画或新EXE交付；已有完整网络、对应模拟及视觉专项覆盖。共享MCP、资源库47508和百科34692保留。
+
 ## 2026-10-13：美术 Git LFS 迁移
 
 - 125个正式二进制文件、392279696字节全部核对SHA256、长度及HEAD指针内容；`git lfs fsck`通过。该统计包括二进制.res，不包括SVG/文本场景，与此前美术总量统计口径不同。
@@ -950,3 +1151,24 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/codex/cleanup-proj
 - 最终实机画面日志 `.godot/components-render-budget.log`，1080p / Ryzen7 9700X / RTX5070Ti：初始 7 单位平均 6.94ms，200 静态 6.94ms，200 活动 23.01ms（p95 37.92ms），模拟 tick 15.22ms；活动帧率仍有明显波动，未达到稳定 60FPS 验收。最终活动计数 707 draw calls / 910681 primitives（含通道）/ 227.35MiB 纹理；仅新共享贴图 18.67MiB。实际 Rendered 套件所有功能断言通过，不将该 PASS 当作性能达标。
 - 已查看最终 overview 与 cliff 图，确认短坡、组件高地/坑底和 PBR 装饰接入；现阶段模块重复感与规则边界仍明显，不声称等同参考图写实质量。12 个模型 GLB 与封面、7 张场景图均保存在 concept_art，素材库按“组件v1”标签可检索，54 项分类/关联与 12 个模型封面复核成功。
 - 最终菜单/缩略图导入 `.godot/components-handoff-import.log` 成功；之后固定 cleanup -StopTracked -StopUntracked -PreserveProcessId 31880,142840 返回 PROJECT_PROCESSES none，现有 Godot 编辑器、8810 素材库和共享 MCP 均保留。
+# 2026-10-14 GAIA FRONTIER menu / dedicated rooms
+
+- Selected **Full** because this change crosses startup, UI, simulation, snapshot protocol and networking. Final broad run: `.godot/validation/20261014-042541-43080/`. Gameplay, training snapshots, mining, HUD/input/settings, map presentation, aircraft/building visuals and the new frontier/rooms/local-server suites pass after fixes.
+- Full acceptance is **not green**: `simulation_systems` differs from the frozen v15 exact hash at initial AI tick; the original fixture is retained. `visual_performance` measures `animated_sync_ms=10.0476` against its existing 8ms limit (earlier run 8.0446). These are unresolved, not suppressed. The run's initial structure failure from two unregistered new helpers was fixed; standalone structure audit now passes 1173 checks.
+- Full's dependent ENet stage was skipped after those failures, so it was run separately through `run-network.ps1`. `.godot/validation/frontier-final-network/desert_quarry/`: both rounds pass complete snapshot equality, protocol rejection, spectator permission, mining capacity, building/production, adjacent-grid construction, barracks/base relocation, combat, reconnect and host disconnect.
+- New-room tests use actual ENet sockets with five clients across two rooms. A separate UDP proxy injects 40–60ms each-way delay and 1% loss with 200 units. `.godot/frontier-final-expiry.log`: all assertions pass, including room isolation, readiness, host authority, obsolete match rejection, bounded decompression, token reconnect, expiry/forfeit and empty-room cleanup. Short local impairment tests do not establish public connectivity or long-run bandwidth limits.
+- `.godot/frontier-final-ui.log`: rendered home/training lifecycle and aligned symmetric resources pass; `.godot/frontier-home.png` inspected. `.godot/frontier-final-lifecycle.log`: result waits for return, cursor released and battlefield input disabled; clean engine stderr. Its wrapper encountered a shared process-registry write race during simultaneous launches, although the engine finished successfully; subsequent launches are sequential.
+- `.godot/validation/20261014-042541-43080/frontier_local.log`: game starts a separate local server, connects, creates a room, begins vs AI, receives advancing snapshots and returns home.
+- Export `.godot/frontier-export.log`: Windows executable rebuilt, embedded PCK, 343477112 bytes. `.godot/frontier-export-smoke.log`: graphical EXE alive after 5 seconds with no startup errors. `.godot/frontier-server-smoke.log`: the same EXE starts headless on loopback UDP 24569; `FRONTIER_EXPORTED_SERVER_PASS`.
+- Public hosting, Linux deployment and internet traversal are intentionally unexecuted; local server and deployment template are delivered. No remote upload or commit.
+- Latest base drift fix: `.godot/base-drift-before.log` reproduces EntityVisual resetting flight yaw; `.godot/base-drift-after.log` passes 1817 checks. Light Visual `20261014-071903-56280` passes all 16 stages, including building lifecycle, heading, barracks integration, Gaia asset, units and terrain. No simulation/network mutation; Full/ENet not rerun.
+- `.godot/base-drift-rendered.log`: Forward+ real node frame processing passes 1818 checks; 220 translating-frame samples, maximum narrow-nose vs displacement angle 0.0197823 degrees. Preview images `.godot/base-flight-{58,139,220}.png`. Test cadence covers 30/60/144 FPS and 5/20 Hz samples; no claim of an internet impairment test this turn.
+- Current EXE: 346608328 bytes, SHA-256 `5952864224544d9f195cb72317af9632bbfd1e3b6b008bf08cf07e83563a96d1`, superseding older binaries below. `.godot/base-drift-export.log` clean, `.godot/base-drift-smoke.log` confirms successful startup; embedded PCK and checksum refreshed.
+- Latest mode-button visual delivery: Light Presentation `20261014-053303-53232` passed all seven stages (structure 1201 checks; frontier, settings, presentation/cursor, HUD, audio, cleanup). Rendered `.godot/mode-buttons-rendered.log` clean; screenshots at `.godot/frontier-home-{1920x1080,1280x800,960x640}.png` and `.godot/frontier-mode-highlight.png`. Verified focus animation, transparent corner hit testing, mode routes, hiding/reset and layout separation. No network/simulation change, so Full and ENet were not repeated.
+- Latest Windows EXE after mode-button art: 346607992 bytes, embedded PCK, SHA-256 `4303967bdbf17e7a9a4175e5dbd9d4efdc8181e76da9678ff88be08961a0ba45` (supersedes older checksums below). `.godot/mode-buttons-export.log` clean and `.godot/mode-buttons-smoke.log` alive after five seconds without startup errors. Built-in imagegen outputs and exact prompts are saved under `assets/ui/frontier/`.
+- Latest menu cursor update: Light Presentation `20261014-052244-48616` passes structure, frontier, settings, presentation (including cursor_checks), HUD, audio and cleanup. Rendered `.godot/menu-cursor-rendered.log` passes with clean stderr after sandbox-related log/certificate errors were avoided through the approved wrapper. Covers home/settings, pause/focus/resume, results and battlefield disposal; texture dimensions and opaque arrow hotspot checked. SVG raster preview inspected at `.godot/menu-cursor.png`.
+- Current EXE after cursor update: 343485376 bytes, SHA-256 `ba688146bb6f53d74b3eb3a9dc0f66c317e7060e2356ba3f7b1deb1a3d29c76e`; export `.godot/menu-cursor-export.log` and startup `.godot/menu-cursor-smoke.log` pass. This supersedes earlier checksums below. Full/simulation/ENet not repeated for cursor presentation; no network or command change.
+- Latest home copy cleanup: removed the description below mode buttons. Light Presentation passes all seven stages; simulation/ENet suites skipped because only a UI label was removed. `.godot/frontier-copy-export.log` and `.godot/frontier-copy-smoke.log` pass. Current EXE: 343481552 bytes, SHA-256 `07575631001e4cd43e05f88e9344f53538c49930075895d690ac4c5f97aa8067` (supersedes earlier checksums).
+- Subsequent home-action layout: `.godot/frontier-buttons-ui.log` passes with 1920×1080, 1280×800 and 960×640 window captures and overlap assertions. Light Presentation/Features `20261014-045810-54448` passes all 11 stages; supplemental Light Tooling passes. Full/ENet not repeated for this UI-only update; earlier Full limitations remain.
+- Updated `build/IronFront.exe`: 343481776 bytes, embedded PCK; SHA-256 `05cce721430c1c7abb6bb008e4bf4375a0f94fa76c2b8d7fa318127dd9994558`. Export `.godot/frontier-buttons-export-new.log` and final startup `.godot/frontier-buttons-smoke-final.log` pass. Original export path was locked by orphan smoke PID 49296; fixed cleanup recognition, stopped that test process, and copied the verified new executable to the standard path. This supersedes the earlier binary checksum below.
+- Final cleanup passes: no project test processes or game ports remain; resource library PID 47508, encyclopedia PID 34692 and shared Blender MCP services retained. EXE SHA-256: `7f8a7aa858a3791c57da945e9d1aa5a07bb8d1d7b26a259d74335219ee4bd958`; adjacent checksum refreshed. Scoped whitespace validation is clean (Git emits only line-ending conversion notices).

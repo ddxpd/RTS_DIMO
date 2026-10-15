@@ -97,7 +97,8 @@ func run() -> void:
     sim.rebuild_navigation()
     var corridor := origin + Vector2(96, 32)
     check(sim.movement_free(corridor - Vector2(0, 160), corridor + Vector2(0, 160), 16), "Two-cell real passage admits soldier")
-    check(not sim.movement_free(corridor - Vector2(0, 160), corridor + Vector2(0, 160), 48), "Two-cell passage rejects harvester")
+    check(not sim.movement_free(corridor - Vector2(0, 160), corridor + Vector2(0, 160), 48), "Two-cell passage rejects a three-cell body")
+    check(not sim.movement_free(corridor - Vector2(0, 160), corridor + Vector2(0, 160), sim.UNIT_TYPES.harvester.radius), "General routing conservatively rejects zero-clearance seams; reserved dock has exact alignment")
     clean(sim)
     var barracks: int = sim._add_building(1, "barracks", origin + Vector2(64, 48), true)
     var neighbor: int = sim._add_building(1, "base", origin + Vector2(288, 96), true)
@@ -128,20 +129,20 @@ func run() -> void:
     clean(sim)
     var station: int = sim._add_building(1, "refinery", origin + Vector2(176, 160), true)
     var depot: Dictionary = sim.buildings[station]
-    for slot in range(2):
+    for slot in range(Sim.EntityCatalog.REFINERY_DOCK_RECTS.size()):
         sim._add_building(1, "barracks", Dock.entrance(depot, slot), true)
     sim.rebuild_navigation()
     var miner: int = sim.add_unit(1, "harvester", depot.pos + Vector2(0, -480))
     sim.units[miner].cargo = 60
     sim.units[miner].order = "gather"
     check(Dock.choose_station(sim, sim.units[miner]) == -1, "Closed dock entrances are unreachable")
-    check(not sim.position_free(Dock.berth(depot, 0), 48), "Nearby blocking building cannot be ignored during docking")
+    check(not sim.movement_free(Dock.entrance(depot, 0), Dock.berth(depot, 0), sim.UNIT_TYPES.harvester.radius), "Nearby blocking building cannot be ignored during docking")
     for id: int in sim.buildings.keys():
         if sim.buildings[id].type == "barracks":
             sim.buildings.erase(id)
     sim.rebuild_navigation()
     check(Dock.choose_station(sim, sim.units[miner]) == station, "Dock resumes after entrances reopen")
-    check(sim.position_free(Dock.berth(depot, 0), 48), "Compact docking stop has full body clearance after obstruction is removed")
+    check(sim.position_free(Dock.berth(depot, 0), sim.UNIT_TYPES.harvester.radius), "Compact docking stop has full body clearance after obstruction is removed")
     var credits: int = sim.money[1]
     for tick in range(500):
         sim.step()

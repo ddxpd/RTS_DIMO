@@ -93,11 +93,11 @@ func run() -> void:
         base.set_cruising(true)
         for i in range(fps*2):
             base.advance(1.0/fps)
-        check(absf(base.presentation.rotation.x-deg_to_rad(-2)) < 0.0001, "cruise pitch limited to two degrees")
+        check(absf(base.presentation.rotation.z-deg_to_rad(-2)) < 0.0001 and is_zero_approx(base.presentation.rotation.x), "cruise lowers +X narrow nose by two degrees")
         base.set_cruising(false)
         for i in range(fps*2):
             base.advance(1.0/fps)
-        check(absf(base.presentation.rotation.x) < 0.0001, "stopping restores level attitude")
+        check(absf(base.presentation.rotation.z) < 0.0001, "stopping restores level attitude")
         base.land()
         for i in range(fps*6+1):
             base.advance(1.0/fps)

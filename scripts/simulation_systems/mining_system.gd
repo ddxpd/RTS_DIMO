@@ -5,14 +5,16 @@ const CAPACITY := 5
 const ZONE := 128.0
 const SEARCH := 960.0
 const REACH = Rules.MINING_REACH
-const WORK_DISTANCE := 70.0
-const PHASES := ["wait", "approach", "work", "exit", "return"]
+const Catalog = preload("res://scripts/definitions/entity_catalog.gd")
+# Place the shortened claws at the crystal surface, not at the old vehicle reach.
+const WORK_DISTANCE := Rules.MINING_CONTACT_RADIUS + 1.8 * Catalog.HARVESTER_MODEL_SCALE
+const PHASES := ["wait", "approach", "work", "return"]
 
 static func request(sim, u: Dictionary, ore_id: int, preserve_origin: bool = false) -> void:
     var origin: Vector2 = u.get("mining", {}).get("origin", sim.ores[ore_id].pos) if preserve_origin else sim.ores[ore_id].pos
     u.mining = {"ore": ore_id, "origin": origin, "center": sim.ores[ore_id].pos,
         "phase": "wait", "requested": sim.frame, "target": u.pos, "retry": 0,
-        "progress": 0, "best": 1.0e9, "ghost": false, "waiting_set": false}
+        "progress": 0, "best": 1.0e9, "waiting_set": false}
     u.order = "gather"
     u.ore = ore_id
     u.path = []
@@ -21,14 +23,9 @@ static func request(sim, u: Dictionary, ore_id: int, preserve_origin: bool = fal
 static func reserved(u: Dictionary) -> bool:
     return u.hp > 0 and u.has("mining") and u.mining.phase in ["approach", "work"] and u.order == "gather" and not u.has("dock") and u.cargo < Rules.CAPACITY
 
-static func intangible(u: Dictionary) -> bool:
-    if u.type != "harvester" or not u.has("mining"):
-        return false
-    var m: Dictionary = u.mining
-    return bool(m.ghost) and (m.phase == "exit" or (reserved(u) and (u.pos as Vector2).distance_to(m.center) <= ZONE))
-
 static func ignore_pair(a: Dictionary, b: Dictionary) -> bool:
-    return intangible(a) or intangible(b)
+    # Vehicle overlap is a permanent pair rule, independent of owner or order.
+    return a.type == "harvester" and b.type == "harvester"
 
 static func counts(sim, ore_id: int) -> Vector2i:
     var result := Vector2i.ZERO
@@ -44,24 +41,13 @@ static func counts(sim, ore_id: int) -> Vector2i:
 static func cancel(sim, u: Dictionary) -> void:
     if not u.has("mining"):
         return
-    for waiting: Dictionary in sim.units.values():
-        if waiting.has("mining") and waiting.mining.phase == "wait" and waiting.mining.ore == u.mining.ore:
-            waiting.mining.retry = 0
-    if bool(u.mining.ghost):
-        u.mining.phase = "exit"
-        u.mining.retry = 0
-        u.mining.target = exit_point(sim, u)
-    else:
-        u.erase("mining")
+    wake_waiters(sim, u.mining.ore)
+    u.erase("mining")
 
-static func has_overlap(sim, u: Dictionary) -> bool:
-    for other: Dictionary in sim.units.values():
-        if is_same(u, other) or other.hp <= 0:
-            continue
-        var gap: float = sim.UNIT_TYPES[u.type].radius + sim.UNIT_TYPES[other.type].radius + 1.0
-        if (u.pos as Vector2).distance_to(other.pos) < gap:
-            return true
-    return false
+static func wake_waiters(sim, ore_id: int) -> void:
+    for waiting: Dictionary in sim.units.values():
+        if waiting.has("mining") and waiting.mining.phase == "wait" and waiting.mining.ore == ore_id:
+            waiting.mining.retry = 0
 
 static func connector(sim, u: Dictionary, point: Vector2) -> bool:
     var radius: float = sim.UNIT_TYPES.harvester.radius
@@ -86,7 +72,7 @@ static func work_point(sim, u: Dictionary, ore_id: int) -> Vector2:
             return point
     return Vector2.INF
 
-static func exit_point(sim, u: Dictionary) -> Vector2:
+static func waiting_point(sim, u: Dictionary) -> Vector2:
     var center: Vector2 = u.mining.center
     var points: Array[Vector2] = []
     for ring in range(6, 13, 2):
@@ -99,9 +85,9 @@ static func exit_point(sim, u: Dictionary) -> Vector2:
             continue
         var clear := true
         for other: Dictionary in sim.units.values():
-            if is_same(u, other) or other.hp <= 0:
+            if is_same(u, other) or other.hp <= 0 or ignore_pair(u, other):
                 continue
-            var gap: float = sim.UNIT_TYPES.harvester.radius + sim.UNIT_TYPES[other.type].radius + 4.0
+            var gap: float = sim.UNIT_TYPES.harvester.radius + sim.UNIT_TYPES[other.type].radius + Catalog.BODY_GAP
             var target: Vector2 = other.get("mining", {}).get("target", other.pos)
             if p.distance_to(other.pos) < gap or (other.get("mining", {}).get("phase", "") == "wait" and p.distance_to(target) < gap):
                 clear = false
@@ -124,7 +110,6 @@ static func assign(sim, u: Dictionary, ore_id: int) -> bool:
     m.best = (u.pos as Vector2).distance_to(point)
     m.progress = 0
     m.waiting_set = false
-    m.ghost = (u.pos as Vector2).distance_to(m.center) <= ZONE
     u.ore = ore_id
     u.path = []
     u.repath = 0
@@ -138,42 +123,23 @@ static func prepare(sim) -> void:
             continue
         if u.has("mining"):
             var m: Dictionary = u.mining
-            if m.phase == "exit":
-                if (u.pos as Vector2).distance_to(m.center) > ZONE and not has_overlap(sim, u):
-                    var origin: Vector2 = m.origin
-                    if u.order == "gather" and (u.has("dock") or sim.DepotDocking.returning(sim, u)):
-                        m.phase = "return"
-                        m.ghost = false
-                    elif u.order == "gather" and sim.ores.has(int(u.ore)):
-                        request(sim, u, int(u.ore))
-                        u.mining.origin = origin
-                    else:
-                        u.erase("mining")
-                continue
             if u.order != "gather":
                 cancel(sim, u)
                 continue
             if u.has("dock") or sim.DepotDocking.returning(sim, u):
-                if bool(m.ghost):
-                    cancel(sim, u)
-                else:
-                    m.phase = "return"
-                    m.ghost = false
+                if m.phase in ["approach", "work"]:
+                    wake_waiters(sim, m.ore)
+                    m.retry = 0
+                m.phase = "return"
                 continue
             if m.phase == "return":
                 m.phase = "wait"
                 m.requested = sim.frame
                 m.retry = 0
             if m.phase in ["approach", "work"]:
-                m.ghost = (u.pos as Vector2).distance_to(m.center) <= ZONE
                 if not sim.ores.has(int(m.ore)) or sim.ores[m.ore].amount <= 0:
-                    if intangible(u):
-                        cancel(sim, u)
-                        continue
-                    else:
-                        m.phase = "wait"
-                        m.ghost = false
-                        m.retry = 0
+                    m.phase = "wait"
+                    m.retry = 0
                 else:
                     continue
         if u.order != "gather" or u.has("dock") or sim.DepotDocking.returning(sim, u):
@@ -210,35 +176,24 @@ static func prepare(sim) -> void:
             if assign(sim, u, ore_id):
                 assigned = true
                 break
-        if not assigned and (not m.waiting_set or not sim.position_free(m.target, 48.0)):
-            m.target = exit_point(sim, u)
+        if not assigned and (not m.waiting_set or not sim.position_free(m.target, sim.UNIT_TYPES[u.type].radius)):
+            m.target = waiting_point(sim, u)
             m.waiting_set = true
 
 static func advance(sim, u: Dictionary) -> void:
     if not u.has("mining"):
         return
     var m: Dictionary = u.mining
-    if m.phase == "exit":
-        sim.move_towards(u, m.target, 2.0)
-        if sim.frame >= m.retry:
-            m.retry = sim.frame + sim.TICK
-            var at_target: bool = (u.pos as Vector2).distance_to(m.target) < 4.0
-            var inside: bool = (u.pos as Vector2).distance_to(m.center) <= ZONE
-            if not connector(sim, u, m.target) or (at_target and (inside or has_overlap(sim, u))):
-                m.target = exit_point(sim, u)
-                u.path = []
-                u.repath = 0
-        return
     if m.phase == "wait":
         sim.move_towards(u, m.target, 2.0)
         return
     var distance: float = (u.pos as Vector2).distance_to(m.target)
-    if distance <= 4.0 and sim.position_free(u.pos, 48.0):
+    if distance <= 4.0 and sim.position_free(u.pos, sim.UNIT_TYPES[u.type].radius):
         m.phase = "work"
-        m.ghost = true
         var ore: Dictionary = sim.ores.get(int(u.ore), {})
         if ore.is_empty() or ore.amount <= 0:
             return
+        sim.MovementSystem.turn_harvester(u, (ore.pos as Vector2) - (u.pos as Vector2))
         u.work += 1
         if u.work >= Rules.MINING_INTERVAL:
             var amount := mini(Rules.MINING_AMOUNT, mini(int(ore.amount), Rules.CAPACITY - int(u.cargo)))
@@ -246,7 +201,9 @@ static func advance(sim, u: Dictionary) -> void:
             u.cargo += amount
             u.work = 0
             if sim.DepotDocking.returning(sim, u):
-                cancel(sim, u)
+                m.phase = "return"
+                m.retry = 0
+                wake_waiters(sim, m.ore)
         return
     m.phase = "approach"
     sim.move_towards(u, m.target, 2.0)
@@ -260,15 +217,11 @@ static func advance(sim, u: Dictionary) -> void:
         if point.is_finite():
             m.target = point
         else:
-            if bool(m.ghost):
-                cancel(sim, u)
-            else:
-                # Keep the original overflow anchor when a reserved work point
-                # becomes unreachable; a fresh request would reset the radius.
-                m.phase = "wait"
-                m.retry = sim.frame + sim.TICK
-                m.waiting_set = false
-                u.path = []
+            # Preserve the original overflow anchor when the work point is blocked.
+            m.phase = "wait"
+            m.retry = sim.frame + sim.TICK
+            m.waiting_set = false
+            u.path = []
             return
         m.best = (u.pos as Vector2).distance_to(m.target)
         m.progress = 0
@@ -286,7 +239,7 @@ static func validate(sim, state: Dictionary) -> bool:
         for field in ["ore", "requested", "retry", "progress"]:
             if typeof(m.get(field)) != TYPE_INT or m[field] < 0:
                 return false
-        if m.requested > state.frame or not m.get("phase") in PHASES or typeof(m.get("ghost")) != TYPE_BOOL or typeof(m.get("waiting_set")) != TYPE_BOOL or not m.get("best") is float or not is_finite(m.best):
+        if m.requested > state.frame or not m.get("phase") in PHASES or m.has("ghost") or typeof(m.get("waiting_set")) != TYPE_BOOL or not m.get("best") is float or not is_finite(m.best):
             return false
         for field in ["origin", "center", "target"]:
             if not sim._validate_vector2(m.get(field), sim.WORLD, "mining " + field):
@@ -299,6 +252,4 @@ static func validate(sim, state: Dictionary) -> bool:
             totals[m.ore] = int(totals.get(m.ore, 0)) + 1
             if totals[m.ore] > CAPACITY:
                 return false
-        if m.ghost and m.phase != "exit" and (m.phase == "wait" or (u.pos as Vector2).distance_to(m.center) > ZONE + 4.0):
-            return false
     return true

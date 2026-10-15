@@ -2,7 +2,8 @@
 
 [ext_resource type="ArrayMesh" path="res://assets/maps/components/ramp_run.res" id="1_4muq8"]
 
-[node name="ramp_run" type="MeshInstance3D" unique_id=1911171616]
+[node name="ramp_run" type="MeshInstance3D" unique_id=358118228]
 mesh = ExtResource("1_4muq8")
 metadata/component_id = "ramp_run"
-metadata/catalog_revision = 1
+metadata/catalog_revision = 2
+metadata/art_revision = 3

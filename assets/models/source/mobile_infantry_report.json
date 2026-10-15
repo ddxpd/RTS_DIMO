@@ -95,8 +95,8 @@
   "jog_stride_m": 1.5,
   "rig_origin": "independently authored mobile infantry rig; source revision 6",
   "skin_samples": 36,
-  "skin_min_edge_ratio": 0.24404930647373238,
-  "skin_max_edge_ratio": 2.0250118147011125,
+  "skin_min_edge_ratio": 0.24070061359044956,
+  "skin_max_edge_ratio": 2.044284878440938,
   "skin_unweighted_vertices": 0,
   "skin_max_weight_error": 2.9802322387695312e-08,
   "weapon_mount": [
@@ -112,5 +112,8 @@
     -1.210719347000122e-08,
     2.3543961447103356e-08,
     3.166496753692627e-08
-  ]
+  ],
+  "motion_revision": 2,
+  "motion_geometry_sha256": "d50f373e691cbe8bc8ad310d891d8d9512ba0a20956c84a0c1e01e4eb3fcf859",
+  "motion_style": "weighted low ready, shoulder/pelvis counter rotation, heel/toe roll"
 }

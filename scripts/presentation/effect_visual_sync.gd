@@ -3,12 +3,31 @@ extends RefCounted
 const Simulation = preload("res://scripts/simulation.gd")
 const BULLET_SCENE = preload("res://assets/models/effects/bullet.glb")
 const MobileHitEffect = preload("res://assets/art/effects/mobile_hit_effect.gd")
+const BuildingDestruction = preload("res://assets/art/effects/building_destruction.gd")
 
 
 static func _sync_effects(context: WorldVisualSync, delta: float = 0.0) -> void:
     var seen := {}
     for i: int in context.host.sim.effects.size():
         var e: Dictionary = context.host.sim.effects[i]
+        if e.has("destruction"):
+            var death_key := "building_death_%d_%d_%d" % [context.host.sim.match_id, int(e.frame), int(e.destruction.id)]
+            if not context.effect_visuals.has(death_key):
+                # Do not reveal unseen enemy deaths through the fog.
+                if int(e.owner) != context.host.local_slot and not context.host.sim.can_see(context.host.local_slot, e.to):
+                    continue
+                var death := BuildingDestruction.new()
+                context.add_child(death)
+                death.configure(e, context.host.sim.terrain.height_at(e.to))
+                context.effect_visuals[death_key] = death
+            var death: Node3D = context.effect_visuals[death_key]
+            var age: float = (context.host.sim.frame - int(e.frame)) / float(Simulation.TICK)
+            death.advance(age, delta)
+            death.set_meta("owner", int(e.owner))
+            death.set_meta("point", e.to)
+            death.visible = not death.finished and (int(e.owner) == context.host.local_slot or context.host.sim.can_see(context.host.local_slot, e.to))
+            seen[death_key] = true
+            continue
         if e.kind == "death" and e.get("unit_type") == "mobile_infantry":
             continue
         if e.has("impact"):
@@ -72,5 +91,10 @@ static func _sync_effects(context: WorldVisualSync, delta: float = 0.0) -> void:
         seen[key] = true
     for key: String in context.effect_visuals.keys():
         if not seen.has(key):
+            var effect: Node3D = context.effect_visuals[key]
+            if effect is BuildingDestruction and not effect.finished:
+                effect.advance(0.0, delta)
+                effect.visible = not effect.finished and (int(effect.get_meta("owner")) == context.host.local_slot or context.host.sim.can_see(context.host.local_slot, effect.get_meta("point")))
+                continue
             context.effect_visuals[key].queue_free()
             context.effect_visuals.erase(key)

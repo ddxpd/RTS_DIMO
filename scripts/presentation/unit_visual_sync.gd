@@ -2,6 +2,7 @@ extends RefCounted
 ## Stateless presentation operations; WorldVisualSync owns node lifetime and caches.
 const Simulation = preload("res://scripts/simulation.gd")
 const EntityVisual = preload("res://assets/art/entity_visual.gd")
+const Rules = preload("res://scripts/definitions/gameplay_rules.gd")
 
 
 static func _sync_units(context: WorldVisualSync, delta: float = 0.0) -> void:
@@ -20,10 +21,13 @@ static func _sync_units(context: WorldVisualSync, delta: float = 0.0) -> void:
         # Fog: enemy units only render when currently visible.
         context._set_visual_visible(visual, u.owner == context.host.local_slot or context.host.sim.can_see(context.host.local_slot, u.pos))
         if u.type not in ["soldier", "mobile_infantry"]:
-            visual.set_position_2d(u.pos, context.host.sim.terrain.height_at(u.pos))
+            var surface: float = context.host.sim.terrain.height_at(u.pos)
+            if u.type == "harvester":
+                surface += _harvester_deck_offset(context.host.sim, u.pos)
+            visual.set_position_2d(u.pos, surface)
         visual.set_flash(u.flash > 0)
         if u.type != "mobile_infantry":
-            visual.set_heading(_unit_heading(context, u, id), u.type == "soldier")
+            visual.set_heading(_unit_heading(context, u, id), u.type in ["soldier", "harvester"])
         visual.set_animation(_unit_animation_state(context, u))
         if u.type == "harvester":
             visual.harvester_motion.sample(u, delta, context.host.sim.terrain)
@@ -62,11 +66,12 @@ static func _sync_units(context: WorldVisualSync, delta: float = 0.0) -> void:
         if u.type == "harvester":
             if u.cargo > 0:
                 if not vis.has("cargo_bar"):
-                    var cargo_bar := context._make_status_bar(30, 4, Color("#eac75b"))
-                    cargo_bar.position = Vector3(0, visual.get_model_height() + 20, 0)
+                    var width: float = Simulation.UNIT_TYPES.harvester.radius * 1.6
+                    var cargo_bar := context._make_status_bar(width, width * 0.08, Color("#eac75b"))
+                    cargo_bar.position = Vector3(0, visual.get_model_height() * 1.5, 0)
                     visual.add_child(cargo_bar)
                     vis["cargo_bar"] = cargo_bar
-                context._update_status_bar(vis.cargo_bar, float(u.cargo) / 60.0)
+                context._update_status_bar(vis.cargo_bar, float(u.cargo) / Rules.CAPACITY)
                 vis.cargo_bar.visible = true
             elif vis.has("cargo_bar"):
                 vis.cargo_bar.visible = false
@@ -92,6 +97,22 @@ static func _sync_units(context: WorldVisualSync, delta: float = 0.0) -> void:
             else:
                 removed.queue_free()
             context.unit_visuals.erase(id)
+
+
+static func _harvester_deck_offset(sim, point: Vector2) -> float:
+    var radius: float = Simulation.UNIT_TYPES.harvester.radius
+    var offset := 0.0
+    for building: Dictionary in sim.buildings.values():
+        if building.type != "refinery" or building.hp <= 0:
+            continue
+        for pad: Rect2 in Simulation.EntityCatalog.REFINERY_DOCK_RECTS:
+            var local: Vector2 = point - building.pos
+            var distance := local.distance_to(local.clamp(pad.position, pad.end))
+            # Hover up before the leading edge reaches the decorative raised deck.
+            # The platform remains traversable ground in the authoritative simulation.
+            var blend := 1.0 - smoothstep(radius, radius * 2.0, distance)
+            offset = maxf(offset, Simulation.EntityCatalog.REFINERY_DECK_HEIGHT * blend)
+    return offset
 
 
 static func _sync_mobile_deaths(context: WorldVisualSync, delta: float) -> void:
@@ -234,29 +255,16 @@ static func _soldier_heading(context: WorldVisualSync, u: Dictionary, id: int, v
 
 
 static func _harvester_heading(context: WorldVisualSync, u: Dictionary, id: int) -> Vector2:
-    # Match actual travel, not the final objective on the far side of an obstacle.
+    # Authoritative in-place turns precede movement. For interpolated clients,
+    # actual displacement takes precedence while a snapshot is being traversed.
     var vis: Dictionary = context.unit_visuals.get(id, {})
     var position: Vector2 = u.pos
-    var key := [context.host.sim.frame, position, u.order, int(u.cargo), int(u.ore)]
-    if vis.get("heading_key", []) == key:
-        return vis.get("last_heading", Vector2.UP)
-    vis.heading_key = key
-    var state := _unit_animation_state(context, u)
     var motion := position - (vis.get("last_position", position) as Vector2)
     vis.last_position = position
-    var heading: Vector2 = vis.get("last_heading", Vector2.UP)
-    if state == "mine":
-        heading = _unit_destination(context, u) - position
-    elif state == "move":
-        if context.host.connected and not context.host.is_host:
-            motion = context.host.render_velocities.get(id, Vector2.ZERO)
-        if motion.length_squared() > 0.01:
-            heading = motion.normalized()
-        elif not vis.has("last_heading"):
-            for waypoint: Vector2 in u.path:
-                if waypoint.distance_squared_to(position) > 1.0:
-                    heading = (waypoint - position).normalized()
-                    break
-    if heading.length_squared() > 0.01:
-        vis.last_heading = heading.normalized()
-    return vis.get("last_heading", Vector2.UP)
+    if context.host.connected and not context.host.is_host:
+        motion = context.host.render_velocities.get(id, Vector2.ZERO)
+    var heading := Vector2.from_angle(float(u.heading))
+    if motion.length_squared() > 0.01 and _unit_animation_state(context, u) == "move":
+        heading = motion.normalized()
+    vis.last_heading = heading
+    return heading

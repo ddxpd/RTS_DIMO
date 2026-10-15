@@ -33,9 +33,15 @@ func restore_system_cursor() -> void:
     if DisplayServer.get_name() != "headless":
         Input.set_custom_mouse_cursor(null, Input.CURSOR_ARROW)
     current_state = &""
+    if is_instance_valid(host) and is_instance_valid(host.front_end):
+        host.front_end.menu_cursor_applied = false
 
 
 func _focus_exited() -> void:
+    Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+    if is_instance_valid(host.front_end) and host.front_end.uses_menu_cursor():
+        host.front_end.apply_menu_cursor(true)
+        return
     apply_state(&"default")
 
 
@@ -54,6 +60,12 @@ func apply_state(state: StringName) -> void:
 
 
 func update_cursor() -> void:
+    update_mouse_mode()
+    if is_instance_valid(host.front_end):
+        if host.front_end.uses_menu_cursor():
+            host.front_end.apply_menu_cursor()
+            return
+        host.front_end.release_menu_cursor()
     if DisplayServer.get_name() != "headless" and not get_window().has_focus():
         apply_state(&"default")
         return
@@ -61,6 +73,17 @@ func update_cursor() -> void:
     var hovered: Control = host.get_viewport().gui_get_hovered_control()
     var over_ui := hovered != null and hovered.mouse_filter != Control.MOUSE_FILTER_IGNORE
     apply_state(state_at(screen, over_ui))
+
+
+static func desired_mouse_mode(window_mode: int, playing: bool, focused: bool) -> int:
+    return Input.MOUSE_MODE_CONFINED if playing and focused and window_mode != Window.MODE_MINIMIZED else Input.MOUSE_MODE_VISIBLE
+
+
+func update_mouse_mode() -> void:
+    # Esc releases the cursor for native window movement/resizing; resume confines it.
+    var mode := desired_mouse_mode(get_window().mode, host.active and not host.menu_visible, get_window().has_focus())
+    if Input.mouse_mode != mode:
+        Input.mouse_mode = mode
 
 
 func has_units(kind: String = "") -> bool:
@@ -92,7 +115,7 @@ func target_at(pos: Vector2, friendly_only: bool = false, enemies_only: bool = f
         for id: int in collection:
             var entity: Dictionary = collection[id]
             var friendly: bool = entity.owner == host.local_slot
-            if entity.hp <= 0 or (friendly_only and not friendly) or (enemies_only and friendly):
+            if entity.hp <= 0 or (friendly_only and not friendly) or (enemies_only and host.sim.allied(entity.owner, host.local_slot)):
                 continue
             if not friendly and not host.sim.can_see(host.local_slot, entity.pos):
                 continue

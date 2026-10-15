@@ -1,0 +1,937 @@
+{
+  "bounds": [
+    0,
+    0,
+    4800,
+    3200
+  ],
+  "catalog_revision": 2,
+  "instances": [
+    {
+      "component": "cliff_end",
+      "id": "quarry_0_cliff_end_015",
+      "position": [
+        1216.0,
+        0.0,
+        1344.0
+      ],
+      "rotation": 1.5707963267949,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_end",
+      "id": "quarry_0_cliff_end_016",
+      "position": [
+        1216.0,
+        0.0,
+        960.0
+      ],
+      "rotation": 1.5707963267949,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_end",
+      "id": "quarry_0_cliff_end_027",
+      "position": [
+        3616.0,
+        -128.0,
+        832.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_end",
+      "id": "quarry_0_cliff_end_028",
+      "position": [
+        3616.0,
+        -128.0,
+        448.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_inner",
+      "id": "quarry_0_cliff_inner_035",
+      "position": [
+        3616.0,
+        -128.0,
+        960.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_inner",
+      "id": "quarry_0_cliff_inner_036",
+      "position": [
+        3616.0,
+        -128.0,
+        448.0
+      ],
+      "rotation": 3.1415926535898,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_inner",
+      "id": "quarry_0_cliff_inner_037",
+      "position": [
+        4128.0,
+        -128.0,
+        960.0
+      ],
+      "rotation": 6.28318530717959,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_inner",
+      "id": "quarry_0_cliff_inner_038",
+      "position": [
+        4128.0,
+        -128.0,
+        448.0
+      ],
+      "rotation": 1.5707963267949,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_outer",
+      "id": "quarry_0_cliff_outer_023",
+      "position": [
+        1216.0,
+        0.0,
+        1408.0
+      ],
+      "rotation": 1.5707963267949,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_outer",
+      "id": "quarry_0_cliff_outer_024",
+      "position": [
+        1216.0,
+        0.0,
+        768.0
+      ],
+      "rotation": 6.28318530717959,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_outer",
+      "id": "quarry_0_cliff_outer_025",
+      "position": [
+        1856.0,
+        0.0,
+        1408.0
+      ],
+      "rotation": 3.1415926535898,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_outer",
+      "id": "quarry_0_cliff_outer_026",
+      "position": [
+        1856.0,
+        0.0,
+        768.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_0_cliff_straight_017",
+      "position": [
+        1536.0,
+        0.0,
+        1408.0
+      ],
+      "rotation": 3.1415926535898,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_0_cliff_straight_018",
+      "position": [
+        1280.0,
+        0.0,
+        768.0
+      ],
+      "rotation": 6.28318530717959,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_0_cliff_straight_019",
+      "position": [
+        1856.0,
+        0.0,
+        1088.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_0_cliff_straight_020",
+      "position": [
+        1792.0,
+        0.0,
+        1408.0
+      ],
+      "rotation": 3.1415926535898,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_0_cliff_straight_021",
+      "position": [
+        1536.0,
+        0.0,
+        768.0
+      ],
+      "rotation": 6.28318530717959,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_0_cliff_straight_022",
+      "position": [
+        1856.0,
+        0.0,
+        832.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_0_cliff_straight_029",
+      "position": [
+        3616.0,
+        -128.0,
+        960.0
+      ],
+      "rotation": 6.28318530717959,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_0_cliff_straight_030",
+      "position": [
+        3872.0,
+        -128.0,
+        448.0
+      ],
+      "rotation": 3.1415926535898,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_0_cliff_straight_031",
+      "position": [
+        4128.0,
+        -128.0,
+        960.0
+      ],
+      "rotation": 1.5707963267949,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_0_cliff_straight_032",
+      "position": [
+        3872.0,
+        -128.0,
+        960.0
+      ],
+      "rotation": 6.28318530717959,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_0_cliff_straight_033",
+      "position": [
+        4128.0,
+        -128.0,
+        448.0
+      ],
+      "rotation": 3.1415926535898,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_0_cliff_straight_034",
+      "position": [
+        4128.0,
+        -128.0,
+        704.0
+      ],
+      "rotation": 1.5707963267949,
+      "scale": 1.0
+    },
+    {
+      "component": "plateau_top",
+      "id": "quarry_0_plateau_top_001",
+      "position": [
+        1280.0,
+        128.0,
+        1344.0
+      ],
+      "rotation": 1.5707963267949,
+      "scale": 1.0
+    },
+    {
+      "component": "plateau_top",
+      "id": "quarry_0_plateau_top_003",
+      "position": [
+        1536.0,
+        128.0,
+        1344.0
+      ],
+      "rotation": 1.5707963267949,
+      "scale": 1.0
+    },
+    {
+      "component": "plateau_top",
+      "id": "quarry_0_plateau_top_005",
+      "position": [
+        1280.0,
+        128.0,
+        1088.0
+      ],
+      "rotation": 1.5707963267949,
+      "scale": 1.0
+    },
+    {
+      "component": "plateau_top",
+      "id": "quarry_0_plateau_top_007",
+      "position": [
+        1536.0,
+        128.0,
+        1088.0
+      ],
+      "rotation": 1.5707963267949,
+      "scale": 1.0
+    },
+    {
+      "component": "ramp_crest",
+      "id": "quarry_0_ramp_crest_011",
+      "position": [
+        1248.0,
+        112.0,
+        1216.0
+      ],
+      "rotation": 1.5707963267949,
+      "scale": 1.0
+    },
+    {
+      "component": "ramp_crest",
+      "id": "quarry_0_ramp_crest_014",
+      "position": [
+        3392.0,
+        -16.0,
+        576.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "ramp_run",
+      "id": "quarry_0_ramp_run_010",
+      "position": [
+        1056.0,
+        16.0,
+        1216.0
+      ],
+      "rotation": 1.5707963267949,
+      "scale": 1.0
+    },
+    {
+      "component": "ramp_run",
+      "id": "quarry_0_ramp_run_013",
+      "position": [
+        3584.0,
+        -112.0,
+        576.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "ramp_toe",
+      "id": "quarry_0_ramp_toe_009",
+      "position": [
+        1024.0,
+        0.0,
+        1216.0
+      ],
+      "rotation": 1.5707963267949,
+      "scale": 1.0
+    },
+    {
+      "component": "ramp_toe",
+      "id": "quarry_0_ramp_toe_012",
+      "position": [
+        3616.0,
+        -128.0,
+        576.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "sand_flat",
+      "id": "quarry_0_sand_flat_002",
+      "position": [
+        3616.0,
+        -128.0,
+        960.0
+      ],
+      "rotation": 1.5707963267949,
+      "scale": 1.0
+    },
+    {
+      "component": "sand_flat",
+      "id": "quarry_0_sand_flat_004",
+      "position": [
+        3872.0,
+        -128.0,
+        960.0
+      ],
+      "rotation": 1.5707963267949,
+      "scale": 1.0
+    },
+    {
+      "component": "sand_flat",
+      "id": "quarry_0_sand_flat_006",
+      "position": [
+        3616.0,
+        -128.0,
+        704.0
+      ],
+      "rotation": 1.5707963267949,
+      "scale": 1.0
+    },
+    {
+      "component": "sand_flat",
+      "id": "quarry_0_sand_flat_008",
+      "position": [
+        3872.0,
+        -128.0,
+        704.0
+      ],
+      "rotation": 1.5707963267949,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_end",
+      "id": "quarry_1_cliff_end_015",
+      "position": [
+        3584.0,
+        0.0,
+        1856.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_end",
+      "id": "quarry_1_cliff_end_016",
+      "position": [
+        3584.0,
+        0.0,
+        2240.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_end",
+      "id": "quarry_1_cliff_end_027",
+      "position": [
+        1184.0,
+        -128.0,
+        2368.0
+      ],
+      "rotation": 7.85398163397448,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_end",
+      "id": "quarry_1_cliff_end_028",
+      "position": [
+        1184.0,
+        -128.0,
+        2752.0
+      ],
+      "rotation": 7.85398163397448,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_inner",
+      "id": "quarry_1_cliff_inner_035",
+      "position": [
+        1184.0,
+        -128.0,
+        2240.0
+      ],
+      "rotation": 7.85398163397448,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_inner",
+      "id": "quarry_1_cliff_inner_036",
+      "position": [
+        1184.0,
+        -128.0,
+        2752.0
+      ],
+      "rotation": 6.28318530717959,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_inner",
+      "id": "quarry_1_cliff_inner_037",
+      "position": [
+        672.0,
+        -128.0,
+        2240.0
+      ],
+      "rotation": 9.42477796076938,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_inner",
+      "id": "quarry_1_cliff_inner_038",
+      "position": [
+        672.0,
+        -128.0,
+        2752.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_outer",
+      "id": "quarry_1_cliff_outer_023",
+      "position": [
+        3584.0,
+        0.0,
+        1792.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_outer",
+      "id": "quarry_1_cliff_outer_024",
+      "position": [
+        3584.0,
+        0.0,
+        2432.0
+      ],
+      "rotation": 9.42477796076938,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_outer",
+      "id": "quarry_1_cliff_outer_025",
+      "position": [
+        2944.0,
+        0.0,
+        1792.0
+      ],
+      "rotation": 6.28318530717959,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_outer",
+      "id": "quarry_1_cliff_outer_026",
+      "position": [
+        2944.0,
+        0.0,
+        2432.0
+      ],
+      "rotation": 7.85398163397448,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_1_cliff_straight_017",
+      "position": [
+        3264.0,
+        0.0,
+        1792.0
+      ],
+      "rotation": 6.28318530717959,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_1_cliff_straight_018",
+      "position": [
+        3520.0,
+        0.0,
+        2432.0
+      ],
+      "rotation": 9.42477796076938,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_1_cliff_straight_019",
+      "position": [
+        2944.0,
+        0.0,
+        2112.0
+      ],
+      "rotation": 7.85398163397448,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_1_cliff_straight_020",
+      "position": [
+        3008.0,
+        0.0,
+        1792.0
+      ],
+      "rotation": 6.28318530717959,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_1_cliff_straight_021",
+      "position": [
+        3264.0,
+        0.0,
+        2432.0
+      ],
+      "rotation": 9.42477796076938,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_1_cliff_straight_022",
+      "position": [
+        2944.0,
+        0.0,
+        2368.0
+      ],
+      "rotation": 7.85398163397448,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_1_cliff_straight_029",
+      "position": [
+        1184.0,
+        -128.0,
+        2240.0
+      ],
+      "rotation": 9.42477796076938,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_1_cliff_straight_030",
+      "position": [
+        928.0,
+        -128.0,
+        2752.0
+      ],
+      "rotation": 6.28318530717959,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_1_cliff_straight_031",
+      "position": [
+        672.0,
+        -128.0,
+        2240.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_1_cliff_straight_032",
+      "position": [
+        928.0,
+        -128.0,
+        2240.0
+      ],
+      "rotation": 9.42477796076938,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_1_cliff_straight_033",
+      "position": [
+        672.0,
+        -128.0,
+        2752.0
+      ],
+      "rotation": 6.28318530717959,
+      "scale": 1.0
+    },
+    {
+      "component": "cliff_straight",
+      "id": "quarry_1_cliff_straight_034",
+      "position": [
+        672.0,
+        -128.0,
+        2496.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "plateau_top",
+      "id": "quarry_1_plateau_top_001",
+      "position": [
+        3520.0,
+        128.0,
+        1856.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "plateau_top",
+      "id": "quarry_1_plateau_top_003",
+      "position": [
+        3264.0,
+        128.0,
+        1856.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "plateau_top",
+      "id": "quarry_1_plateau_top_005",
+      "position": [
+        3520.0,
+        128.0,
+        2112.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "plateau_top",
+      "id": "quarry_1_plateau_top_007",
+      "position": [
+        3264.0,
+        128.0,
+        2112.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "ramp_crest",
+      "id": "quarry_1_ramp_crest_011",
+      "position": [
+        3552.0,
+        112.0,
+        1984.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "ramp_crest",
+      "id": "quarry_1_ramp_crest_014",
+      "position": [
+        1408.0,
+        -16.0,
+        2624.0
+      ],
+      "rotation": 7.85398163397448,
+      "scale": 1.0
+    },
+    {
+      "component": "ramp_run",
+      "id": "quarry_1_ramp_run_010",
+      "position": [
+        3744.0,
+        16.0,
+        1984.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "ramp_run",
+      "id": "quarry_1_ramp_run_013",
+      "position": [
+        1216.0,
+        -112.0,
+        2624.0
+      ],
+      "rotation": 7.85398163397448,
+      "scale": 1.0
+    },
+    {
+      "component": "ramp_toe",
+      "id": "quarry_1_ramp_toe_009",
+      "position": [
+        3776.0,
+        0.0,
+        1984.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "ramp_toe",
+      "id": "quarry_1_ramp_toe_012",
+      "position": [
+        1184.0,
+        -128.0,
+        2624.0
+      ],
+      "rotation": 7.85398163397448,
+      "scale": 1.0
+    },
+    {
+      "component": "sand_flat",
+      "id": "quarry_1_sand_flat_002",
+      "position": [
+        1184.0,
+        -128.0,
+        2240.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "sand_flat",
+      "id": "quarry_1_sand_flat_004",
+      "position": [
+        928.0,
+        -128.0,
+        2240.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "sand_flat",
+      "id": "quarry_1_sand_flat_006",
+      "position": [
+        1184.0,
+        -128.0,
+        2496.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "sand_flat",
+      "id": "quarry_1_sand_flat_008",
+      "position": [
+        928.0,
+        -128.0,
+        2496.0
+      ],
+      "rotation": 4.71238898038469,
+      "scale": 1.0
+    },
+    {
+      "component": "rock_large",
+      "id": "rock_2208_0_-96",
+      "position": [
+        2208.0,
+        0,
+        448.0
+      ],
+      "rotation": 0,
+      "scale": 1
+    },
+    {
+      "component": "rock_large",
+      "id": "rock_2208_0_32",
+      "position": [
+        2208.0,
+        0,
+        576.0
+      ],
+      "rotation": 0,
+      "scale": 1
+    },
+    {
+      "component": "rock_large",
+      "id": "rock_224_0_-96",
+      "position": [
+        224.0,
+        0,
+        1280.0
+      ],
+      "rotation": 0,
+      "scale": 1
+    },
+    {
+      "component": "rock_large",
+      "id": "rock_224_0_32",
+      "position": [
+        224.0,
+        0,
+        1408.0
+      ],
+      "rotation": 0,
+      "scale": 1
+    },
+    {
+      "component": "rock_large",
+      "id": "rock_2592_1_-96",
+      "position": [
+        2592.0,
+        0,
+        2560.0
+      ],
+      "rotation": 0,
+      "scale": 1
+    },
+    {
+      "component": "rock_large",
+      "id": "rock_2592_1_32",
+      "position": [
+        2592.0,
+        0,
+        2688.0
+      ],
+      "rotation": 0,
+      "scale": 1
+    },
+    {
+      "component": "rock_large",
+      "id": "rock_4576_1_-96",
+      "position": [
+        4576.0,
+        0,
+        1728.0
+      ],
+      "rotation": 0,
+      "scale": 1
+    },
+    {
+      "component": "rock_large",
+      "id": "rock_4576_1_32",
+      "position": [
+        4576.0,
+        0,
+        1856.0
+      ],
+      "rotation": 0,
+      "scale": 1
+    }
+  ],
+  "seed": 29471,
+  "version": 2
+}

@@ -260,7 +260,7 @@ func refresh() -> void:
     visible = host.active
     if not host.active:
         return
-    faction.text = "蓝方指挥终端" if host.local_slot == 1 else ("红方指挥终端" if host.local_slot == 2 else "观战终端")
+    faction.text = (["蓝", "红", "绿", "紫"][host.local_slot - 1] + "方指挥终端") if host.local_slot in [1, 2, 3, 4] else "观战终端"
     host.resource_label.text = "◆  矿石  %d" % int(host.sim.money.get(host.local_slot, 0))
     clock_label.text = "%02d:%02d" % [host.sim.frame / (Sim.TICK * 60), (host.sim.frame / Sim.TICK) % 60]
     var entity: Dictionary = {}
@@ -308,9 +308,11 @@ func refresh() -> void:
         health_text.text = "%d / %d" % [entity.hp, stats.hp]
         if building:
             host.selection_label.text = "施工中 · %.1f 秒" % (float(entity.remaining) / Sim.TICK) if entity.remaining > 0 else "已部署"
-            if current_kind == "barracks" and entity.remaining <= 0:
+            if current_kind in Sim.BarracksFlight.FLYING_TYPES and entity.remaining <= 0:
                 host.selection_label.text = FLIGHT.get(Sim.BarracksFlight.state(entity), "状态更新中")
                 detail.text = str(entity.flight.error)
+                if current_kind == "base" and detail.text.is_empty():
+                    detail.text = "L 起飞迁移 · 部署后提供建造范围" if Sim.BarracksFlight.state(entity) == "grounded" else "右键飞行 · S 停止 · D 重新部署"
             if current_kind in ["barracks", "refinery"] and detail.text.is_empty():
                 detail.text = "右键地面设置集结点" if Sim.BarracksFlight.state(entity) == "grounded" else "右键飞行 · D 选择降落位置"
             if host.selected_buildings.size() > 1:

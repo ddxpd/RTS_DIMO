@@ -1,6 +1,6 @@
 {
-  "triangles": 29786,
-  "meshes": 18,
+  "triangles": 28728,
+  "meshes": 17,
   "bounds_min": [
     -1.7609999179840088,
     -1.5410000085830688,
@@ -9,7 +9,7 @@
   "bounds_max": [
     1.7609999179840088,
     2.082120180130005,
-    2.0845000743865967
+    1.8618268966674805
   ],
   "axes": "source Z up +Y front; GLB Y up -Z front",
   "cargo_stages": [
@@ -18,6 +18,7 @@
     20,
     40
   ],
+  "cargo_style": "open low-rail pallet",
   "parts": [
     "harvester",
     "HoverBody",
@@ -33,7 +34,6 @@
     "CargoHigh",
     "CargoLow",
     "CargoMid",
-    "CargoWindows",
     "HullAssembly",
     "Thruster_L",
     "Fan_L",

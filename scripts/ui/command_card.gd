@@ -24,17 +24,17 @@ const TITLES := {
     "rally": "设置集结点", "clear_rally": "清除集结点",
     "mobile_infantry": "训练机动兵", "stop": "停止", "move": "移动", "attack": "攻击", "gather": "采矿",
     "soldier": "训练士兵", "harvester": "生产矿车", "cancel": "取消生产", "barracks": "建造兵营",
-    "refinery": "卸载站", "bunker": "建造地堡", "base": "指挥基地", "takeoff": "升空", "deploy": "降落部署"
+    "refinery": "冶炼场", "bunker": "建造地堡", "base": "指挥基地", "takeoff": "升空", "deploy": "降落部署"
 }
 const HELP := {
-    "rally": "左键指定位置，也可直接右键地面；卸载站可指向晶矿。",
+    "rally": "左键指定位置，也可直接右键地面；冶炼场可指向晶矿。",
     "clear_rally": "恢复默认生产行为，不改变已出生单位的命令。",
     "mobile_infantry": "将机动兵加入生产队列。", "stop": "停止选中的单位或飞行兵营。",
     "move": "点击后左键选择目的地；也可直接右键地面。", "attack": "进入攻击模式，再左键选择敌人或地面。",
     "gather": "点击后左键选择矿点；也可直接右键矿点。", "soldier": "将士兵加入生产队列。",
-    "harvester": "将采集作业机加入卸载站生产队列。", "cancel": "取消最后一个生产任务并返还费用。",
-    "barracks": "选择位置部署兵营。", "refinery": "选择位置部署矿石卸载站。", "bunker": "选择位置部署地堡。",
-    "base": "选择位置部署指挥基地。", "takeoff": "兵营需施工完成且生产队列为空。", "deploy": "选择无阻挡的兵营降落位置。"
+    "harvester": "将采集作业机加入冶炼场生产队列。", "cancel": "取消最后一个生产任务并返还费用。",
+    "barracks": "选择位置部署兵营。", "refinery": "选择位置部署矿石冶炼场。", "bunker": "选择位置部署地堡。",
+    "base": "选择位置部署指挥基地。", "takeoff": "基地或兵营需施工完成且生产队列为空。", "deploy": "选择全部占地格可用的降落位置；基地10×6格，兵营4×3格。"
 }
 
 var action_id := ""

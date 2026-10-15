@@ -1,4 +1,5 @@
 extends RefCounted
+const Rules = preload("res://scripts/definitions/gameplay_rules.gd")
 ## Presentation only: simulation remains a ground unit with the existing capacity/rules.
 
 var visual: Node3D
@@ -31,17 +32,7 @@ func _init(owner_visual: Node3D) -> void:
         cargo_layers.append(visual.model.find_child(name, true, false))
     for entry: Dictionary in visual._materials:
         var material: StandardMaterial3D = entry.material
-        if material.resource_name == "HH_CargoGlass":
-            material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-            material.albedo_color = Color(0.22, 0.52, 0.78, 0.38)
-            material.cull_mode = BaseMaterial3D.CULL_BACK
-            material.roughness = 0.09
-            material.clearcoat_enabled = true
-            material.clearcoat = 0.8
-            material.metallic = 0.0
-            material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
-            entry.base_color = material.albedo_color
-        elif material.resource_name == "HH_ThrusterBlue":
+        if material.resource_name == "HH_ThrusterBlue":
             material.emission_enabled = true
             material.emission = Color(0.015, 0.5, 1.0)
             material.emission_energy_multiplier = 2.6
@@ -57,12 +48,12 @@ func _init(owner_visual: Node3D) -> void:
     sample({"cargo": 0, "work": 0}, 0.0, null)
 
 
-static func stage_for(cargo: int) -> int:
+static func stage_for(cargo: int, capacity: int = Rules.CAPACITY) -> int:
     if cargo <= 0:
         return 0
-    if cargo < 20:
+    if cargo < capacity / 3.0:
         return 1
-    return 2 if cargo < 40 else 3
+    return 2 if cargo < capacity * 2.0 / 3.0 else 3
 
 
 func set_cargo(amount: int) -> void:
@@ -87,7 +78,7 @@ func sample(unit: Dictionary, delta: float, terrain) -> void:
     clock += clampf(delta, 0.0, 0.1)
     var moving: bool = visual.animation_state == "move"
     var mining: bool = visual.animation_state == "mine"
-    var phase := float(unit.get("work", 0)) / 20.0 * TAU
+    var phase := float(unit.get("work", 0)) / Rules.MINING_INTERVAL * TAU
     var response := 1.0 if delta <= 0.0 else 1.0 - exp(-delta * 10.0)
     var target_extension := 0.53 + 0.08 * sin(phase) if mining else 0.16
     extension = lerpf(extension, target_extension, response)
@@ -104,7 +95,7 @@ func sample(unit: Dictionary, delta: float, terrain) -> void:
         var ground_key := [visual.global_transform, terrain_key]
         if ground_key != _ground_key:
             _ground_key = ground_key
-            var span := 30.0
+            var span: float = 1.7 * visual._model_scale
             var front: float = _height_at(terrain, 0, -span)
             var rear: float = _height_at(terrain, 0, span)
             var left: float = _height_at(terrain, -span, 0)
@@ -120,7 +111,8 @@ func sample(unit: Dictionary, delta: float, terrain) -> void:
         for probe: Vector3 in [Vector3(-1.15, 0.43, 0.03), Vector3(1.15, 0.43, 0.03), Vector3(0, 0.39, 1.1), Vector3(0, 0.45, -1.1)]:
             var rotated: Vector3 = body.basis * probe * visual._model_scale
             var ground := _height_at(terrain, rotated.x, rotated.z)
-            lift = maxf(lift, (ground - visual.position.y + 3.0 - rotated.y) / visual._model_scale)
+            var clearance: float = 0.17 * visual._model_scale
+            lift = maxf(lift, (ground - visual.position.y + clearance - rotated.y) / visual._model_scale)
     body.position.y = lift + 0.018 * (1.0 + sin(clock * 2.3))
 
 

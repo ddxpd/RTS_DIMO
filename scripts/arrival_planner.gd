@@ -34,13 +34,18 @@ static func plan(sim, ids: Array, anchor: Vector2, region: int = -1) -> Dictiona
         return {"error": "点击位置没有可到达的平台，请点击平台内部。"}
     var candidates: Array[Vector2] = sim.terrain.arrival_candidates(anchor, region)
     var occupied := {}
+    var non_vehicles := {}
     for id: int in sim.units:
         var other: Dictionary = sim.units[id]
         if other.hp <= 0 or ids.has(id):
             continue
         _occupy(occupied, other.pos, sim.UNIT_TYPES[other.type].radius)
+        if other.type != "harvester":
+            _occupy(non_vehicles, other.pos, sim.UNIT_TYPES[other.type].radius)
         if other.has("arrival") and not other.arrival.waiting:
             _occupy(occupied, other.target, sim.UNIT_TYPES[other.type].radius)
+            if other.type != "harvester":
+                _occupy(non_vehicles, other.target, sim.UNIT_TYPES[other.type].radius)
     var result := {}
     var reachable := {}
     var goal_cache := {}
@@ -53,6 +58,8 @@ static func plan(sim, ids: Array, anchor: Vector2, region: int = -1) -> Dictiona
     for id: int in allocation_ids:
         var u: Dictionary = sim.units[id]
         var radius: float = sim.UNIT_TYPES[u.type].radius
+        var obstacles: Dictionary = non_vehicles if u.type == "harvester" else occupied
+        var profile := str(u.type) + str(radius)
         var connectivity := _ensure_connectivity(sim, radius)
         var source_region: int = sim.terrain.arrival_region_at(u.pos)
         var start := goal_cell(sim, u.pos, -1, radius)
@@ -61,7 +68,7 @@ static func plan(sim, ids: Array, anchor: Vector2, region: int = -1) -> Dictiona
         var fallback := Vector2(INF, INF)
         var selected := Vector2(INF, INF)
         for p: Vector2 in candidates:
-            if fallback.is_finite() and not _space_free(occupied, p, radius):
+            if fallback.is_finite() and not _space_free(obstacles, p, radius):
                 continue
             var slot_key := Vector3(p.x, p.y, radius)
             if not goal_cache.has(slot_key):
@@ -76,20 +83,22 @@ static func plan(sim, ids: Array, anchor: Vector2, region: int = -1) -> Dictiona
                 continue
             if not fallback.is_finite():
                 fallback = p
-            if full_radii.has(radius):
+            if full_radii.has(profile):
                 break
-            if _space_free(occupied, p, radius):
+            if _space_free(obstacles, p, radius):
                 selected = p
                 break
         if not fallback.is_finite():
             return {"error": "目标平台不可达，原有命令保持不变。"}
         var waiting := not selected.is_finite()
         if waiting:
-            full_radii[radius] = true
+            full_radii[profile] = true
         result[id] = {"target": fallback if waiting else selected,
             "arrival": {"anchor": anchor, "region": region, "waiting": waiting, "arrived": false}}
         if not waiting:
             _occupy(occupied, selected, radius)
+            if u.type != "harvester":
+                _occupy(non_vehicles, selected, radius)
     _match_slots(sim, ids, result)
     return {"orders": result}
 
@@ -189,13 +198,11 @@ static func displace_free(sim, u: Dictionary, point: Vector2) -> bool:
 
 
 static func reserved_for_other(sim, u: Dictionary, point: Vector2) -> bool:
-    if sim.MiningSystem.intangible(u):
-        return false
     if not u.has("arrival") or not u.arrival.waiting or int(u.attack_id) >= 0:
         return false
     var radius: float = sim.UNIT_TYPES[u.type].radius
     for other: Dictionary in sim.units.values():
-        if other == u or other.hp <= 0 or sim.MiningSystem.intangible(other) or other.owner != u.owner or not other.has("arrival") or other.arrival.waiting:
+        if other == u or other.hp <= 0 or sim.MiningSystem.ignore_pair(u, other) or other.owner != u.owner or not other.has("arrival") or other.arrival.waiting:
             continue
         var gap: float = radius + sim.UNIT_TYPES[other.type].radius + 4.0
         if point.distance_squared_to(other.target) < gap * gap:

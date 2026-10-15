@@ -16,7 +16,7 @@ static func _bunker_target(sim: Simulation, b: Dictionary) -> Dictionary:
     var best_distance: float = Simulation.BUILD_TYPES.bunker.range
     for id: int in sim.units:
         var u: Dictionary = sim.units[id]
-        if u.owner == b.owner or u.hp <= 0 or not sim.can_target(b, u) or not sim.can_see(int(b.owner), u.pos):
+        if sim.allied(u.owner, b.owner) or u.hp <= 0 or not sim.can_target(b, u) or not sim.can_see(int(b.owner), u.pos):
             continue
         var distance: float = (b.pos as Vector2).distance_to(u.pos)
         if distance <= best_distance and sim.terrain.line_of_sight(b.pos, u.pos, Simulation.EYE_HEIGHTS.bunker, Simulation.EYE_HEIGHTS[u.type]):
@@ -33,7 +33,7 @@ static func _closest_enemy(sim: Simulation, u: Dictionary) -> Array:
         for id: int in collection:
             var e: Dictionary = collection[id]
             var d: float = (u.pos as Vector2).distance_to(e.pos)
-            if e.owner != u.owner and d < distance and e.hp > 0 and sim.can_target(u, e) and sim.can_see(u.owner, e.pos) and sim.terrain.line_of_sight(u.pos, e.pos, Simulation.EYE_HEIGHTS[u.type], Simulation.EYE_HEIGHTS.get(e.type, 40.0)):
+            if not sim.allied(e.owner, u.owner) and d < distance and e.hp > 0 and sim.can_target(u, e) and sim.can_see(u.owner, e.pos) and sim.terrain.line_of_sight(u.pos, e.pos, Simulation.EYE_HEIGHTS[u.type], Simulation.EYE_HEIGHTS.get(e.type, 40.0)):
                 distance = d
                 result = [kind, id]
     return result

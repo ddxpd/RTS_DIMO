@@ -81,7 +81,7 @@ func sample(event: Dictionary, target: Node3D, shooter: Node3D, terrain, age: fl
             offset = toward * distance + toward.orthogonal() * jitter * 3.0
             height *= 0.28 if info.target_type == "base" else 0.5
         else:
-            var body_depth := 12.0 if info.target_type == "soldier" else (10.0 if info.target_type == "mobile_infantry" else 29.0)
+            var body_depth := 12.0 if info.target_type == "soldier" else (10.0 if info.target_type == "mobile_infantry" else 1.65 * Visual.Catalog.HARVESTER_MODEL_SCALE)
             if info.target_type == "mobile_infantry":
                 body_depth *= Visual.MOBILE_INFANTRY_SIZE_FACTOR
             offset = toward * body_depth

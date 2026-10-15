@@ -5,17 +5,17 @@ const Terrain = preload("res://scripts/maps/map_terrain.gd")
 
 static func update_visibility(sim: Simulation) -> void:
     var terrain: Terrain = sim.terrain
-    if sim.is_test_map():
-        for owner in [1, 2]:
+    if sim.training:
+        for owner in [1, 2, 3, 4]:
             sim.visible[owner].fill(1)
             sim.explored[owner].fill(1)
         return
-    for owner in [1, 2]:
+    for owner in [1, 2, 3, 4]:
         var cells: PackedByteArray = sim.visible[owner]
         cells.fill(0)
         for collection: Dictionary in [sim.units, sim.buildings]:
             for entity: Dictionary in collection.values():
-                if entity.owner != owner or entity.hp <= 0:
+                if not sim.allied(entity.owner, owner) or entity.hp <= 0:
                     continue
                 var center: Vector2 = entity.pos
                 for index in terrain.visible_cells(center, Simulation.EYE_HEIGHTS.get(entity.type, 40.0)):

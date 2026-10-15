@@ -32,6 +32,8 @@ func run() -> void:
     if game.map_preview.texture != null:
         check(game.map_preview.texture.resource_path == "res://assets/maps/desert_quarry_preview.png", "Desert preview uses a distributable resource")
     game.play_solo()
+    game.key_bindings.settings_path = "res://.godot/presentation-keybindings.cfg"
+    game.key_bindings.bindings = game.key_bindings.defaults.duplicate()
     preload("res://tests/fixtures/army_setup.gd").seed(game.sim)
     # Input assertions use a fixed camera; headless mouse (0,0) must not edge-pan
     # during the two frames used to exercise lost-release recovery.
@@ -190,8 +192,8 @@ func run() -> void:
     var one_unit: Array[int] = [3]
     game.selected_units   = one_unit
     var attack_key := InputEventKey.new()
-    attack_key.keycode          = game.attack_keycode
-    attack_key.physical_keycode = game.attack_keycode
+    attack_key.keycode          = game.key_bindings.bindings.attack
+    attack_key.physical_keycode = game.key_bindings.bindings.attack
     attack_key.pressed          = true
     root.push_input(attack_key, true)
     check(game.attack_mode, "Attack key enables attack mode exactly once")
@@ -210,18 +212,18 @@ func run() -> void:
     game._attack_click(Vector2(600, 160))
     game._attack_click(Vector2(600, 160))
     check(game.sim.units[3].order == "attack_move", "Attack mode ground click creates attack-move")
-    game._begin_rebind()
+    game.settings_panel.begin_recording("attack")
     var cancel_rebind := InputEventKey.new()
     cancel_rebind.keycode = KEY_ESCAPE
     cancel_rebind.pressed = true
     root.push_input(cancel_rebind, true)
-    check(not game.rebinding_attack and not game.menu_visible, "Escape cancels attack-key rebinding without opening the menu")
-    game._begin_rebind()
+    check(game.settings_panel.recording.is_empty() and not game.menu_visible, "Escape cancels attack-key rebinding without opening the menu")
+    game.settings_panel.begin_recording("attack")
     var key_event := InputEventKey.new()
     key_event.pressed = true
     key_event.keycode = KEY_Q
     game._unhandled_input(key_event)
-    check(game.attack_keycode == KEY_Q and not game.rebinding_attack, "Attack key can be rebound")
+    check(game.key_bindings.bindings.attack == KEY_Q and game.settings_panel.recording.is_empty(), "Attack key can be rebound")
     if screenshot and DisplayServer.get_name() != "headless":
         await process_frame
         root.get_texture().get_image().save_png("res://.godot/verification/gameplay.png")

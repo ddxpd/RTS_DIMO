@@ -27,7 +27,7 @@ static func snap_build(sim: Simulation, pos: Vector2) -> Vector2:
 
 
 static func build_error(sim: Simulation, owner: int, kind: String, position: Vector2) -> String:
-    if not Simulation.BUILD_TYPES.has(kind) or owner not in [1, 2]:
+    if not Simulation.BUILD_TYPES.has(kind) or owner not in (sim.players if not sim.match_config.is_empty() else [1, 2, 3, 4]):
         return "Invalid building"
     var pos: Vector2 = sim.snap_building(kind, position)
     var rects := sim.placement_rects(kind, pos)
@@ -75,38 +75,46 @@ static func _gather(sim: Simulation, u: Dictionary) -> void:
 
 static func _spawn_position(sim: Simulation, b: Dictionary, kind: String = "mobile_infantry") -> Vector2:
     var radius: float = Simulation.UNIT_TYPES[kind].radius
+    var catalog = Simulation.EntityCatalog
+    var size: Vector2 = Simulation.BUILD_TYPES[b.type].size
     if b.type == "refinery":
-        for offset: Vector2 in [Vector2(-240, 96), Vector2(240, 96), Vector2(-112, 224), Vector2(112, 224)]:
-            var point: Vector2 = b.pos + offset
-            if not sim.position_free(point, radius) or absf(sim.terrain.height_at(point) - sim.terrain.height_at(b.pos)) > 0.1:
-                continue
-            var clear := true
-            for other: Dictionary in sim.units.values():
-                if (other.pos as Vector2).distance_to(point) < radius + Simulation.UNIT_TYPES[other.type].radius + 4:
-                    clear = false
-            if clear:
+        if not catalog.dock_fit(radius, size):
+            push_error("Production unit does not fit unloading lanes")
+            return Vector2.ZERO
+        for slot in range(catalog.REFINERY_DOCK_RECTS.size()):
+            var point: Vector2 = b.pos + catalog.dock_point(slot, true, radius, size)
+            if Simulation.DepotDocking.lane_available(sim, b, slot) and spawn_clear(sim, b, point, radius, kind):
                 return point
         return Vector2.ZERO
     if b.type == "barracks":
-        for offset: float in [0.0, -24.0, 24.0, -48.0, 48.0]:
-            var front: Vector2 = b.pos + Vector2(12.36 + offset, -76)
-            var clear: bool = sim.position_free(front, radius) and absf(sim.terrain.height_at(front) - sim.terrain.height_at(b.pos)) < 0.1
-            for unit: Dictionary in sim.units.values():
-                if (unit.pos as Vector2).distance_to(front) < radius + Simulation.UNIT_TYPES[unit.type].radius + 4:
-                    clear = false
-            if clear:
+        for lane in [0, -1, 1, -2, 2]:
+            var x: float = size.x * catalog.BARRACKS_DOOR_X_FRACTION + lane * (radius * 2 + catalog.BODY_GAP)
+            if absf(x) + radius > size.x * 0.5:
+                continue
+            var front: Vector2 = b.pos + Vector2(x, -size.y * 0.5 - radius - catalog.BODY_GAP)
+            if spawn_clear(sim, b, front, radius, kind):
                 return front
         return Vector2.ZERO
-    for ring in range(3, 8):
+    # Fallback uses the building boundary rather than a fixed world-space ring.
+    for ring in range(5):
         for i in range(16):
-            var p: Vector2 = b.pos + Vector2.from_angle(float(i) / 16 * TAU) * ring * 24
-            var clear: bool = sim.position_free(p, radius) and absf(sim.terrain.height_at(p) - sim.terrain.height_at(b.pos)) < 1.0
-            for u: Dictionary in sim.units.values():
-                if (u.pos as Vector2).distance_to(p) < radius + Simulation.UNIT_TYPES[u.type].radius + 4:
-                    clear = false
-            if clear:
+            var direction := Vector2.from_angle(float(i) / 16 * TAU)
+            var distance := 1.0 / maxf(absf(direction.x) / (size.x * 0.5), absf(direction.y) / (size.y * 0.5))
+            var p: Vector2 = b.pos + direction * (distance + radius + catalog.BODY_GAP + ring * (radius * 2 + catalog.BODY_GAP))
+            if spawn_clear(sim, b, p, radius, kind):
                 return p
     return Vector2.ZERO
+
+
+static func spawn_clear(sim: Simulation, building: Dictionary, point: Vector2, radius: float, kind: String = "mobile_infantry") -> bool:
+    if not sim.position_free(point, radius) or absf(sim.terrain.height_at(point) - sim.terrain.height_at(building.pos)) > 0.1:
+        return false
+    for unit: Dictionary in sim.units.values():
+        if Simulation.MiningSystem.ignore_pair({"type": kind}, unit):
+            continue
+        if unit.hp > 0 and (unit.pos as Vector2).distance_to(point) < radius + Simulation.UNIT_TYPES[unit.type].radius + Simulation.EntityCatalog.BODY_GAP:
+            return false
+    return true
 
 
 static func command(sim: Simulation, owner: int, c: Dictionary) -> String:
@@ -172,8 +180,26 @@ static func advance_production(sim: Simulation, b: Dictionary) -> void:
             b.queue.pop_front()
 
 
+static func construction_health(max_hp: int, total: int, remaining: int) -> int:
+    if total <= 0:
+        return max_hp
+    # Cumulative integer entitlement avoids per-tick rounding loss.
+    @warning_ignore("integer_division")
+    var initial: int = (max_hp + 9) / 10
+    var elapsed := clampi(total - remaining, 0, total)
+    @warning_ignore("integer_division")
+    return initial + (max_hp - initial) * elapsed / total
+
+
 static func advance_construction(_sim: Simulation, b: Dictionary) -> void:
-    b.remaining -= 1
+    if b.hp <= 0 or b.remaining <= 0:
+        return
+    var stats: Dictionary = Simulation.BUILD_TYPES[b.type]
+    var before := construction_health(int(stats.hp), int(stats.time), int(b.remaining))
+    b.remaining = maxi(0, int(b.remaining) - 1)
+    var after := construction_health(int(stats.hp), int(stats.time), int(b.remaining))
+    # Add only this tick's construction contribution; never heal past damage.
+    b.hp = mini(int(stats.hp), int(b.hp) + after - before)
 
 
 static func refund_destroyed_building(sim: Simulation, b: Dictionary) -> void:

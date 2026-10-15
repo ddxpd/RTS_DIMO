@@ -102,12 +102,15 @@ func run() -> void:
     game._sync_map_world()
     var ore_id: int = game.sim.ores.keys()[0]
     var point: Vector2 = game.sim.ores[ore_id].pos
-    var uid: int = game.sim.add_unit(1, "harvester", point + Vector2(0, 44))
+    var uid: int = game.sim.add_unit(1, "harvester", point + Vector2(0, game.sim.MiningSystem.WORK_DISTANCE))
     var unit: Dictionary = game.sim.units[uid]
     unit.order = "gather"
     unit.ore = ore_id
     unit.cargo = 30
     unit.work = 5
+    game.sim.MiningSystem.request(game.sim, unit, ore_id)
+    unit.mining.phase = "work"
+    unit.mining.target = unit.pos
     game._sync_visuals()
     var visual: EntityVisual = game.unit_visuals[uid].visual
     visual.set_heading(Vector2(0, -1), true)

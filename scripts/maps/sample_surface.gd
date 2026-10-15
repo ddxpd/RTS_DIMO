@@ -1,6 +1,6 @@
 extends RefCounted
 ## One cached triangulated surface drives drawing, picking, clearance and grounding.
-## The original maps do not use this sampler.
+## Component-backed battle maps and the standalone sample share this sampler.
 
 const STEP := 8.0
 const REVISION := 3
@@ -16,11 +16,13 @@ var heights := PackedFloat32Array()
 var surface_flags := PackedByteArray()
 var flat_clearance := PackedFloat32Array()
 var roads: Array[Dictionary] = []
+var road_segments: Dictionary = {}
 
 
 func configure(data: Dictionary) -> void:
     definition = data
     roads.clear()
+    road_segments.clear()
     layout = null
     error = ""
     if data.has("component_layout"):
@@ -34,7 +36,7 @@ func configure(data: Dictionary) -> void:
         var area: Array = layout.data.bounds
         bounds = Rect2(area[0], area[1], area[2], area[3])
         definition.sample_bounds = bounds
-    cache_bounds = bounds.grow(128.0)
+    cache_bounds = bounds.grow(128.0).intersection(Rect2(0, 0, 4800, 3200))
     columns = int(cache_bounds.size.x / STEP) + 1
     rows = int(cache_bounds.size.y / STEP) + 1
     heights.resize(columns * rows)
@@ -51,6 +53,18 @@ func configure(data: Dictionary) -> void:
         for point: Vector2 in points:
             road_bounds = road_bounds.expand(point)
         roads.append({"points": curve.get_baked_points(), "width": road.width, "bounds": road_bounds.grow(float(road.width))})
+        var baked := curve.get_baked_points()
+        var along := 0.0
+        for i in range(baked.size() - 1):
+            var area := Rect2(baked[i], Vector2.ZERO).expand(baked[i + 1]).grow(float(road.width))
+            var segment := {"a": baked[i], "b": baked[i + 1], "along": along, "width": float(road.width)}
+            for z in range(floori(area.position.y / 256), floori(area.end.y / 256) + 1):
+                for x in range(floori(area.position.x / 256), floori(area.end.x / 256) + 1):
+                    var key := Vector2i(x, z)
+                    if not road_segments.has(key):
+                        road_segments[key] = []
+                    road_segments[key].append(segment)
+            along += baked[i].distance_to(baked[i + 1])
     for z in range(rows):
         for x in range(columns):
             var p := cache_bounds.position + Vector2(x, z) * STEP
@@ -219,31 +233,30 @@ func normal_at(p: Vector2) -> Vector3:
 func road_sample(p: Vector2) -> Vector3:
     var best := Vector3(0, 0, 0)
     var closest := INF
-    for road: Dictionary in roads:
-        if not (road.bounds as Rect2).has_point(p):
-            continue
-        var points: PackedVector2Array = road.points
-        var along := 0.0
-        for i in range(points.size() - 1):
-            var a := points[i]
-            var b := points[i + 1]
-            var near := Geometry2D.get_closest_point_to_segment(p, a, b)
-            var distance := p.distance_to(near)
-            if distance < closest:
-                closest = distance
-                var weight := 1.0 - smoothstep(float(road.width) * 0.34, float(road.width) * 0.68, distance)
-                best = Vector3(weight, (p - near).dot(Vector2(-(b-a).y, (b-a).x).normalized()), along + a.distance_to(near))
-            along += a.distance_to(b)
+    for segment: Dictionary in road_segments.get(Vector2i(floori(p.x / 256), floori(p.y / 256)), []):
+        var a: Vector2 = segment.a
+        var b: Vector2 = segment.b
+        var near := Geometry2D.get_closest_point_to_segment(p, a, b)
+        var distance := p.distance_to(near)
+        if distance < closest:
+            closest = distance
+            var weight := 1.0 - smoothstep(float(segment.width) * 0.34, float(segment.width) * 0.68, distance)
+            best = Vector3(weight, (p - near).dot(Vector2(-(b-a).y, (b-a).x).normalized()), float(segment.along) + a.distance_to(near))
     return best
 
 
 func cliff_distance(p: Vector2) -> float:
     if layout != null:
-        var distance := INF
-        for instance in layout.surfaces:
-            if instance.component.begins_with("cliff"):
-                var rect: Rect2 = instance._rect
-                distance = minf(distance, p.distance_to(p.clamp(rect.position, rect.end)))
+        # Visual effects only use the first 96 units. Bound the search to nearby
+        # spatial buckets instead of visiting every cliff for every mesh vertex.
+        var distance := 256.0
+        var cell := Vector2i(floori(p.x / 256), floori(p.y / 256))
+        for dz in range(-1, 2):
+            for dx in range(-1, 2):
+                for instance: Dictionary in layout.buckets.get(cell + Vector2i(dx, dz), []):
+                    if instance.component.begins_with("cliff"):
+                        var rect: Rect2 = instance._rect
+                        distance = minf(distance, p.distance_to(p.clamp(rect.position, rect.end)))
         return distance
     var plateau: Dictionary = definition.plateau
     var quarry: Dictionary = definition.quarry
@@ -278,7 +291,7 @@ func position_clear_precise(p: Vector2, radius: float) -> bool:
 func build_error(rect: Rect2) -> String:
     var expected := height_at(rect.get_center())
     if not bounds.encloses(rect.grow(16)):
-        return "Build inside the sample area"
+        return "Build inside the map area"
     for z in range(int(rect.position.y) - 16, int(rect.end.y) + 17, 8):
         for x in range(int(rect.position.x) - 16, int(rect.end.x) + 17, 8):
             var p := Vector2(x, z)

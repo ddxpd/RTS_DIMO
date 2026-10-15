@@ -1,7 +1,7 @@
 extends SceneTree
 ## Retained deliverables, not temporary verification screenshots.
 const Catalog = preload("res://scripts/maps/component_catalog.gd")
-const OUT := "res://assets/concept_art/desert_terrain_kit/editor_ready/"
+const OUT := "res://assets/concept_art/desert_terrain_kit/refined_components/"
 var stage: Node3D
 var camera: Camera3D
 

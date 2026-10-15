@@ -15,6 +15,10 @@ const SampleView = preload("res://scripts/maps/sample_view.gd")
 const PORT := 24560
 const MAX_CLIENTS := 4
 var sim := Simulation.new()
+var front_end: Node
+var external_transport: Node
+var startup_config: Dictionary = {}
+var initialization_error := ""
 var deploy_building := -1
 var session: GameSession
 var command_bus: CommandBus
@@ -29,6 +33,8 @@ var connected := false
 var active := false
 var local_slot := 1
 var host_ip := "127.0.0.1"
+var connection_port := PORT
+var bind_ip := "*"
 var slots: Dictionary = {}
 var handshakes: Dictionary = {}
 var rates: Dictionary = {}
@@ -93,9 +99,9 @@ var speech_unit := -1
 var speech_text := ""
 var speech_time := 0.0
 var attack_mode := false
-var rebinding_attack := false
-var attack_keycode: Key = KEY_A
-var attack_rebind_button: Button
+var key_bindings := preload("res://scripts/controllers/key_bindings.gd").new()
+var settings_panel: PanelContainer
+var settings_button: Button
 var pending_command := ""
 var control_groups: Dictionary = {}
 var last_click_time := 0.0
@@ -145,7 +151,7 @@ func _create_terrain() -> void:
     if terrain_view != null:
         terrain_view.free()
     rendered_map_id = sim.map_id
-    terrain_view = SampleView.new() if sim.is_test_map() else TerrainView.new()
+    terrain_view = SampleView.new() if sim.terrain.sample_surface != null else TerrainView.new()
     add_child(terrain_view)
     terrain_view.build(sim.terrain, fog_texture)
 
@@ -233,7 +239,10 @@ func _ready() -> void:
     network_session.name = "NetworkSession"
     network_session.configure(self)
     add_child(network_session)
-    sim.reset(false, selected_map_id)
+    if not sim.reset(false, selected_map_id, startup_config):
+        initialization_error = sim.last_snapshot_error
+        set_process(false)
+        return
     _create_fog()
     _create_terrain()
     _create_lighting()
@@ -267,13 +276,15 @@ func _ready() -> void:
     cursor_controller.name = "CursorController"
     cursor_controller.configure(self)
     add_child(cursor_controller)
-    multiplayer.peer_connected.connect(_peer_joined)
-    multiplayer.peer_disconnected.connect(_peer_left)
-    multiplayer.connected_to_server.connect(_connected_to_server)
-    multiplayer.connection_failed.connect(_connection_failed)
-    multiplayer.server_disconnected.connect(_server_left)
+    if front_end == null:
+        multiplayer.peer_connected.connect(_peer_joined)
+        multiplayer.peer_disconnected.connect(_peer_left)
+        multiplayer.connected_to_server.connect(_connected_to_server)
+        multiplayer.connection_failed.connect(_connection_failed)
+        multiplayer.server_disconnected.connect(_server_left)
     _refresh_ui()
 func _load_settings() -> void:
+    key_bindings.load_settings()
     var config := ConfigFile.new()
     if config.load("user://settings.cfg") == OK:
         camera_speed_multiplier = clampf(float(config.get_value("camera", "speed_multiplier", 1.8)), 0.5, 3.0)
@@ -345,15 +356,20 @@ func _reset_view() -> void:
     build_mode = ""
     clicks.clear()
     camera_zoom_level = 2.0
-    camera_controller.focus = Vector2(900, 700) if local_slot != 2 else Vector2(3900, 2500)
+    camera_controller.focus = sim.terrain.definition.spawns[clampi(local_slot - 1, 0, sim.terrain.definition.spawns.size() - 1)]
     if sim.is_test_map():
         camera_controller.focus = sim.terrain.definition.camera_focus
         camera_zoom_level = sim.terrain.definition.camera_zoom
     _update_camera_transform()
     menu_visible    = false
     menu.visible    = false
+    if settings_panel != null:
+        settings_panel.hide()
+        settings_panel.recording = ""
 
 func _disconnect() -> void:
+    if external_transport != null:
+        return
     if network_session != null:
         network_session.disconnect_session()
 
@@ -362,7 +378,7 @@ func _apply_snapshot_checked(state: Dictionary, context: String) -> bool:
         _disconnect.call_deferred()
         active = false
         connected = false
-        _notify("样板区不支持联机。")
+        _notify("训练场不支持联机。")
         return false
     if sim.apply_snapshot(state):
         return true
@@ -384,24 +400,26 @@ func play_solo() -> void:
     if session != null:
         session.reset_clock()
     _reset_view()
-    Input.mouse_mode = Input.MOUSE_MODE_CONFINED
+    cursor_controller.update_mouse_mode()
     if sim.is_test_map():
-        _notify("样板测试场：仅初始主基地，全图可见，无敌人和胜负。选中基地建造设施，再生产单位测试地形。")
+        _notify("训练场：仅初始主基地，全图可见。选中基地建造设施，再生产单位测试地形。")
     else:
         _notify("Select your base to build an ore depot and produce harvesters. Build a barracks to train mobile infantry.")
 
 func create_host() -> void:
     if MapCatalog.definition(selected_map_id).get("test_only", false):
-        _notify("样板区仅供单机测试，请选择正式地图创建联机。")
+        _notify("训练场仅供单机练习，请选择正式地图创建联机。")
         return
     _disconnect()
     peer = ENetMultiplayerPeer.new()
-    var error := peer.create_server(PORT, MAX_CLIENTS)
+    peer.set_bind_ip(bind_ip)
+    var error := peer.create_server(connection_port, MAX_CLIENTS)
     if error != OK:
         _notify("Host failed: " + error_string(error))
         return
+    peer.host.compress(ENetConnection.COMPRESS_FASTLZ)
     multiplayer.multiplayer_peer = peer
-    Input.mouse_mode = Input.MOUSE_MODE_CONFINED
+    cursor_controller.update_mouse_mode()
     is_host = true
     connected = true
     active = true
@@ -421,10 +439,11 @@ func join_host() -> void:
     active     = false
     local_slot = 0
     peer       = ENetMultiplayerPeer.new()
-    var error := peer.create_client(host_ip.strip_edges(), PORT)
+    var error := peer.create_client(host_ip.strip_edges(), connection_port)
     if error != OK:
         _notify("Join failed: " + error_string(error))
         return
+    peer.host.compress(ENetConnection.COMPRESS_FASTLZ)
     multiplayer.multiplayer_peer = peer
     _notify("Connecting to " + host_ip + "...")
 
@@ -486,7 +505,10 @@ func issue(order: Dictionary) -> void:
 
 # Execute a validated order locally or send it to the authoritative host.
 func _execute_order(order: Dictionary) -> void:
-    network_session.submit_order(order)
+    if external_transport != null:
+        external_transport.send("order", order)
+    else:
+        network_session.submit_order(order)
 
 @rpc("any_peer", "reliable")
 
@@ -512,6 +534,9 @@ func restart_match() -> void:
     _notify("New match.")
 
 func return_to_title() -> void:
+    if front_end != null:
+        front_end.return_home()
+        return
     if audio_controller != null:
         audio_controller.reset_state()
         audio_controller.enabled = false
@@ -549,10 +574,11 @@ func _process(delta: float) -> void:
             if Time.get_ticks_msec() - int(handshakes[id]) > 5000:
                 peer.disconnect_peer(id)
                 handshakes.erase(id)
-    if active and not menu_visible:
-        var direction := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
-        camera_controller.focus -= direction * delta * 500 * camera_speed_multiplier / camera_zoom_level
-        if not hud_controller.minimap_dragging():
+    if active and not menu_visible and (DisplayServer.get_name() == "headless" or get_window().has_focus()):
+        var typing := get_viewport().gui_get_focus_owner() is LineEdit or get_viewport().gui_get_focus_owner() is TextEdit
+        var direction := Vector2.ZERO if typing else key_bindings.camera_direction()
+        camera_controller.pan(direction, delta)
+        if not hud_controller.minimap_dragging() and not middle_dragging:
             camera_controller.update(delta)
     _limit_camera()
     _clean_selection()
@@ -669,12 +695,12 @@ func _right_click(pos: Vector2) -> void:
     if selected_units.is_empty():
         var active_id := active_building_id()
         if sim.buildings.has(active_id) and Simulation.BarracksFlight.state(sim.buildings[active_id]) != "grounded":
-            issue({"action": "barracks_move", "building": active_id, "pos": pos})
+            issue({"action": "building_move", "building": active_id, "pos": pos})
             return
         _set_rally(pos)
         return
     var air_target := airborne_building_at(_world_to_screen(pos))
-    if air_target >= 0 and sim.buildings[air_target].owner != local_slot:
+    if air_target >= 0 and not sim.allied(sim.buildings[air_target].owner, local_slot):
         _notify("Selected weapons cannot attack airborne targets.")
         return
     var order := {"action": "move", "units": selected_units.duplicate(), "pos": pos}
@@ -683,7 +709,7 @@ func _right_click(pos: Vector2) -> void:
         for id: int in collection:
             var target: Dictionary = collection[id]
             var hit: bool = (target.pos as Vector2).distance_to(pos) < 24 if kind == "unit" else sim.footprint(target).has_point(pos)
-            if target.owner != local_slot and hit:
+            if not sim.allied(target.owner, local_slot) and hit:
                 if sim.can_see(local_slot, target.pos):
                     order = {"action": "attack", "units": selected_units.duplicate(), "kind": kind, "target": id}
     for id: int in sim.ores:
@@ -736,7 +762,7 @@ func active_building_id() -> int:
 
 func _takeoff_barracks() -> void:
     if active and not menu_visible and selected_units.is_empty():
-        issue({"action": "barracks_takeoff", "building": active_building_id()})
+        issue({"action": "building_takeoff", "building": active_building_id()})
 
 
 func _begin_deploy() -> void:
@@ -744,15 +770,16 @@ func _begin_deploy() -> void:
     if not active or menu_visible or local_slot == 0 or not selected_units.is_empty() or not sim.buildings.has(id):
         return
     var building: Dictionary = sim.buildings[id]
-    if building.owner != local_slot or building.type != "barracks" or Simulation.BarracksFlight.state(building) != "airborne":
-        _notify("Select an airborne friendly barracks.")
+    if building.owner != local_slot or building.type not in Simulation.BarracksFlight.FLYING_TYPES or Simulation.BarracksFlight.state(building) != "airborne":
+        _notify("Select an airborne friendly base or barracks.")
         return
     deploy_building = id
     build_mode = ""
     pending_command = ""
     attack_mode = false
     selection_dragging = false
-    _notify("Deploy: all 12 cells must be green. Left-click confirms; RMB / Esc cancels.")
+    var cells: Vector2i = Simulation.EntityCatalog.BUILD_CELLS[building.type]
+    _notify("部署：%d×%d 格必须全部可用。左键确认，右键 / Esc 取消。" % [cells.x, cells.y])
 
 
 func _deploy_click(pos: Vector2) -> void:
@@ -760,7 +787,7 @@ func _deploy_click(pos: Vector2) -> void:
     if not site.error.is_empty():
         _notify(site.error)
         return
-    issue({"action": "barracks_deploy", "building": deploy_building, "pos": site.pos})
+    issue({"action": "building_deploy", "building": deploy_building, "pos": site.pos})
     deploy_building = -1
 
 
@@ -819,18 +846,26 @@ func _action_clicked(index: int) -> void:
 func _begin_pending(kind: String) -> void:
     if not active or menu_visible or local_slot == 0:
         return
-    if (kind == "rally" and _rally_targets().is_empty()) or (kind != "rally" and selected_units.is_empty()):
+    var flying_move := false
+    if kind == "move" and selected_units.is_empty() and sim.buildings.has(active_building_id()):
+        var building: Dictionary = sim.buildings[active_building_id()]
+        flying_move = building.owner == local_slot and Simulation.BarracksFlight.state(building) == "airborne"
+    if (kind == "rally" and _rally_targets().is_empty()) or (kind != "rally" and selected_units.is_empty() and not flying_move):
         return
     pending_command = kind
     attack_mode = false
     build_mode = ""
     deploy_building = -1
     if kind == "rally":
-        _notify("左键设置集结点；卸载站可指定晶矿。Esc / 右键取消。")
+        _notify("左键设置集结点；冶炼场可指定晶矿。Esc / 右键取消。")
         return
     _notify("Left-click a destination." if kind == "move" else "Left-click an ore patch to gather.")
 
 func _pending_click(pos: Vector2) -> void:
+    if pending_command == "move" and selected_units.is_empty():
+        issue({"action": "building_move", "building": active_building_id(), "pos": pos})
+        pending_command = ""
+        return
     if pending_command == "rally":
         _set_rally(pos)
         pending_command = ""
@@ -850,11 +885,6 @@ func _pending_click(pos: Vector2) -> void:
         _respond(selected_units[0], "Moving out!" if pending_command == "move" else "Mining operation!", pending_command != "move")
     _show_order_feedback(order, pos)
     pending_command = ""
-
-func _begin_rebind() -> void:
-    rebinding_attack = true
-    _notify("Press a key to assign the attack command. Esc cancels.")
-
 
 func _rally_targets() -> Array[int]:
     var result: Array[int] = []
@@ -922,8 +952,8 @@ func _cancel_job() -> void:
     issue({"action": "cancel_production", "building": target})
 
 func _stop() -> void:
-    if selected_units.is_empty() and sim.buildings.has(active_building_id()) and sim.buildings[active_building_id()].type == "barracks":
-        issue({"action": "barracks_stop", "building": active_building_id()})
+    if selected_units.is_empty() and sim.buildings.has(active_building_id()) and sim.buildings[active_building_id()].type in Simulation.BarracksFlight.FLYING_TYPES:
+        issue({"action": "building_stop", "building": active_building_id()})
         return
     issue({"action": "stop", "units": selected_units.duplicate()})
     if not selected_units.is_empty():
@@ -942,17 +972,25 @@ func _on_session_tick(previous_winner: int, _current_winner: int) -> void:
         network_session.broadcast_world(sim.snapshot())
 
 func _toggle_menu() -> void:
+    if settings_panel != null and settings_panel.visible:
+        settings_panel.close()
+        return
     if pending_command == "rally":
         pending_command = ""
     menu_visible       = not menu_visible
     menu.visible       = menu_visible
     selection_dragging = false
     middle_dragging    = false
+    cursor_controller.update_mouse_mode()
 
 func _close_menu() -> void:
+    if settings_panel != null:
+        settings_panel.hide()
+        settings_panel.recording = ""
     if active:
         menu_visible = false
         menu.visible = false
+        cursor_controller.update_mouse_mode()
 
 func _notify(message: String) -> void:
     feedback = message
@@ -1034,9 +1072,9 @@ func _update_map_description() -> void:
     map_description.text = data.description + ("\n临时选项 · 可自由移动、采矿和建造" if sample else "\n联机加入时使用主机地图")
     if sample_host_button != null:
         sample_host_button.disabled = sample
-        sample_host_button.tooltip_text = "样板区仅供单机测试" if sample else ""
+        sample_host_button.tooltip_text = "训练场仅供单机练习" if sample else ""
     if solo_button != null:
-        solo_button.text = "进入样板测试场" if sample else "New solo match (vs AI)"
+        solo_button.text = "进入训练场" if sample else "New solo match (vs AI)"
     var preview_path := "res://assets/maps/desert_quarry_preview.png" if selected_map_id == "desert_quarry" else ""
     preview_path = data.get("preview", preview_path)
     if not preview_path.is_empty() and ResourceLoader.exists(preview_path):

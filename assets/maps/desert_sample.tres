@@ -1,28 +1,73 @@
-[gd_resource type="Resource" load_steps=2 format=3]
+[gd_resource type="Resource" format=3 uid="uid://drcpvor3n4mjr"]
 
-[ext_resource type="Script" path="res://scripts/maps/map_definition.gd" id="1"]
+[ext_resource type="Script" uid="uid://1fpowhvc2ymq" path="res://scripts/maps/map_definition.gd" id="1"]
 
 [resource]
 script = ExtResource("1")
 data = {
-"id": "desert_sample", "version": 5, "seed": 29531,
+"camera_focus": Vector2(2356, 1728),
+"camera_zoom": 0.54,
 "component_layout": "res://assets/maps/desert_sample_layout.json",
-"title": "荒漠样板区（临时测试）",
-"description": "单机地形试验场 · 全图可见 · 无敌方 AI\n高台、岩壁、矿坑、道路与四种地表材质",
-"size": Vector2(4800, 3200), "test_only": true,
-"preview": "res://assets/maps/sample/preview.png",
-"sample_bounds": Rect2(1376, 832, 2048, 1536),
-"camera_focus": Vector2(2356, 1552), "camera_zoom": 0.64,
-"spawns": [Vector2(1584, 1152), Vector2(2276, 1252)],
-"modules": [], "obstacles": [],
-"ramps": [],
-"ramp_style": {"end_blend": 32.0, "side_blend": 16.0, "boundary_band": 32.0, "rubble_spacing": 32.0},
-"roads": [
-{"points": [Vector2(1516, 1072), Vector2(1926, 1072), Vector2(2346, 1212), Vector2(2676, 1082), Vector2(3266, 1072)], "width": 152.0},
-{"points": [Vector2(1876, 1072), Vector2(1876, 1402), Vector2(1876, 1882)], "width": 144.0},
-{"points": [Vector2(2876, 1072), Vector2(2876, 1392), Vector2(2876, 1782)], "width": 144.0}
-],
-"materials": {"tile_scale": 96.0, "macro_scale": 460.0, "detail_fade": 2200.0, "ramp_material_strength": 0.78, "ramp_boundary_strength": 0.30},
 "decoration_density": 1.0,
-"ores": []
+"description": "单机训练场 · 全图可见 · 无敌方 AI
+24×24格高地与洼地 · 六组疏密不同的晶矿",
+"id": "desert_sample",
+"materials": {
+"detail_fade": 2200.0,
+"macro_scale": 460.0,
+"ramp_boundary_strength": 0.3,
+"ramp_material_strength": 0.78,
+"tile_scale": 96.0
+},
+"modules": [],
+"obstacles": [],
+"ores": [
+{"pos": Vector2(1232, 1328), "amount": 6000},
+{"pos": Vector2(1360, 1360), "amount": 6000},
+{"pos": Vector2(1232, 1488), "amount": 6000},
+{"pos": Vector2(1488, 2160), "amount": 6000},
+{"pos": Vector2(1616, 2160), "amount": 6000},
+{"pos": Vector2(1744, 2160), "amount": 6000},
+{"pos": Vector2(1552, 2320), "amount": 6000},
+{"pos": Vector2(1680, 2320), "amount": 6000},
+{"pos": Vector2(2000, 1840), "amount": 6000},
+{"pos": Vector2(2000, 2000), "amount": 6000},
+{"pos": Vector2(2800, 2128), "amount": 6000},
+{"pos": Vector2(2960, 2128), "amount": 6000},
+{"pos": Vector2(3120, 2128), "amount": 6000},
+{"pos": Vector2(2800, 2288), "amount": 6000},
+{"pos": Vector2(2960, 2288), "amount": 6000},
+{"pos": Vector2(3120, 2288), "amount": 6000},
+{"pos": Vector2(3312, 1808), "amount": 6000},
+{"pos": Vector2(3312, 2000), "amount": 6000},
+{"pos": Vector2(2448, 912), "amount": 6000},
+{"pos": Vector2(2608, 912), "amount": 6000},
+{"pos": Vector2(2448, 1072), "amount": 6000},
+{"pos": Vector2(2608, 1072), "amount": 6000}
+],
+"preview": "res://assets/maps/sample/preview.png",
+"ramp_style": {
+"boundary_band": 32.0,
+"end_blend": 32.0,
+"rubble_spacing": 32.0,
+"side_blend": 16.0
+},
+"ramps": [],
+"roads": [{
+"points": [Vector2(1516, 1072), Vector2(1926, 1072), Vector2(2346, 1212), Vector2(2676, 1082), Vector2(3266, 1072)],
+"width": 152.0
+}, {
+"points": [Vector2(1876, 1072), Vector2(1876, 1402), Vector2(1876, 1882)],
+"width": 144.0
+}, {
+"points": [Vector2(2876, 1072), Vector2(2876, 1392), Vector2(2876, 1782)],
+"width": 144.0
+}],
+"sample_bounds": Rect2(1120, 704, 2560, 2048),
+"seed": 29531,
+"size": Vector2(4800, 3200),
+"spawns": [Vector2(1584, 1152), Vector2(2276, 1252)],
+"test_only": true,
+"title": "荒漠训练场",
+"version": 6
 }

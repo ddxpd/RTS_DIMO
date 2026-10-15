@@ -1,5 +1,14 @@
 # 项目工具 wrapper
 
+## UDP 弱网回归
+
+- `run-network.ps1` 默认仍执行完整 ENet 功能回归。`-Mode Weak -Profile all -DurationSeconds 180`运行基准、RTT50/100/200、normal、poor、limited、outage；默认每档并发种子101/202/303。`-Seed 101`用于隔离单轮，避免并发负载干扰分析。
+- normal 为100ms往返、每向±10ms抖动、1%丢包；poor为200ms、每向±20ms、3%；limited在normal上限制主机发送1Mbps、客户端256Kbps，代理队列上限500ms；outage在normal上第100秒双向断网3秒。代理只绑定127.0.0.1，不修改系统网卡或防火墙。
+- 每轮按三等份切换50/100/200总单位。记录命令确认、应用层ping、快照间隔、快照落后帧、主机tick间隔和双向包量；最终一致性通过正式快照路径比较，测试RPC不会写客户端状态。连接后额外收敛预算30秒；失败轮次保留，完整矩阵结束后以非零状态报告失败。
+- `summarize-network.ps1 -ResultDirectory .godot/validation/<运行目录>`生成精简`report.json`。若测试时长不是180秒，汇总时同时传`-DurationSeconds`。正确性/完成性与响应门槛分开；断网指标表示恢复后第一份快照到达时间，不能单独证明快照已追上主机。
+- 日志和计时JSON在`.godot/validation/`；完整主客机状态对在`.local/simulation_audits/weak_network/`，不提交、不上传。真实跨网连通性、路由器/CGNAT行为仍需两台不同网络机器验证。
+- 导出冒烟入口现在写独立`-LogFile`（默认`.godot/exported-smoke.log`），同时检查进程存活与启动错误；它只验证启动，不等于EXE对战验收。
+
 ## 本地模拟审计文件（不上传）
 
 - 完整模拟快照、失败状态转储及逐字段差异报告统一放在 `.local/simulation_audits/`，不再使用 `.godot/`。脚本首次写入时自动创建目录与 `.gdignore`，Git 忽略规则同时排除该目录。

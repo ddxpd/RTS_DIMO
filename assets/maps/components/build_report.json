@@ -1,5 +1,6 @@
 {
-  "catalog_revision": 1,
+  "art_revision": 3,
+  "catalog_revision": 2,
   "components": {
     "cliff_end": {
       "boundary_preserved": true,
@@ -7,9 +8,10 @@
         128.0,
         64.0
       ],
-      "indices": 768,
+      "indices": 11982,
       "lods": 0,
-      "vertices": 153
+      "triangles": 3994,
+      "vertices": 11223
     },
     "cliff_inner": {
       "boundary_preserved": true,
@@ -17,9 +19,10 @@
         64.0,
         64.0
       ],
-      "indices": 384,
+      "indices": 11598,
       "lods": 0,
-      "vertices": 81
+      "triangles": 3866,
+      "vertices": 11151
     },
     "cliff_outer": {
       "boundary_preserved": true,
@@ -27,9 +30,10 @@
         64.0,
         64.0
       ],
-      "indices": 384,
+      "indices": 11598,
       "lods": 0,
-      "vertices": 81
+      "triangles": 3866,
+      "vertices": 11151
     },
     "cliff_straight": {
       "boundary_preserved": true,
@@ -37,9 +41,10 @@
         256.0,
         64.0
       ],
-      "indices": 11214,
+      "indices": 12750,
       "lods": 0,
-      "vertices": 11070
+      "triangles": 4250,
+      "vertices": 11367
     },
     "detail_rubble": {
       "triangles": 36
@@ -52,6 +57,7 @@
       ],
       "indices": 6,
       "lods": 0,
+      "triangles": 2,
       "vertices": 4
     },
     "ramp_crest": {
@@ -62,6 +68,7 @@
       ],
       "indices": 24,
       "lods": 0,
+      "triangles": 8,
       "vertices": 10
     },
     "ramp_run": {
@@ -72,6 +79,7 @@
       ],
       "indices": 6,
       "lods": 0,
+      "triangles": 2,
       "vertices": 4
     },
     "ramp_toe": {
@@ -82,26 +90,29 @@
       ],
       "indices": 24,
       "lods": 0,
+      "triangles": 8,
       "vertices": 10
     },
     "rock_large": {
       "boundary_preserved": false,
       "footprint": [
         128.0,
-        112.0
+        128.0
       ],
       "indices": 2586,
-      "lods": 1,
+      "lods": 2,
+      "triangles": 862,
       "vertices": 2539
     },
     "rock_medium": {
       "boundary_preserved": false,
       "footprint": [
         64.0,
-        56.0
+        64.0
       ],
       "indices": 2586,
-      "lods": 1,
+      "lods": 2,
+      "triangles": 862,
       "vertices": 2539
     },
     "rubble_cluster": {
@@ -112,6 +123,7 @@
       ],
       "indices": 2058,
       "lods": 5,
+      "triangles": 686,
       "vertices": 559
     },
     "sand_flat": {
@@ -122,8 +134,10 @@
       ],
       "indices": 6,
       "lods": 0,
+      "triangles": 2,
       "vertices": 4
     }
   },
-  "minimum_hardware_tested": false
+  "minimum_hardware_tested": false,
+  "sources": "res://assets/models/source/terrain/"
 }

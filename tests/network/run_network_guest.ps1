@@ -20,21 +20,34 @@ if (-not ($resultDir.Equals($validationRoot, [StringComparison]::OrdinalIgnoreCa
 }
 New-Item -ItemType Directory -Force -Path $resultDir | Out-Null
 $started = @()
+function Wait-NetworkMarker {
+    param([string]$Path, [string]$Marker)
+    $until = (Get-Date).AddSeconds(60)
+    while ((Get-Date) -lt $until) {
+        $content = Get-Content -Raw -LiteralPath $Path -ErrorAction SilentlyContinue
+        if ($content -match 'SCRIPT ERROR|NETWORK_TEST.*Timeout') { throw "Network startup failed: $content" }
+        if ($content -match [regex]::Escape($Marker)) { return }
+        Start-Sleep -Milliseconds 100
+    }
+    throw "Network startup marker missing: $Marker in $Path"
+}
 try {
     $hostLog = Join-Path $resultDir 'host.log'
     $hostProcess = Start-Process -FilePath $GodotPath -ArgumentList @('--headless','--path',$projectDir,'--log-file',$hostLog,'--script','res://tests/network/network_guest.gd','--','--role=host',"--map=$MapId") -WorkingDirectory $projectDir -WindowStyle Hidden -PassThru
     $started += $hostProcess
-    Start-Sleep -Milliseconds 600
+    Wait-NetworkMarker -Path $hostLog -Marker 'NETWORK_BOOTSTRAP_READY'
     foreach ($testRole in @('mismatch','guest','guest')) {
         if ($testRole -eq 'mismatch') { $roundIndex = 0 } elseif ($roundIndex -eq 0) { $roundIndex = 1 } else { $roundIndex = 2 }
         $log = Join-Path $resultDir "guest_$roundIndex.log"
         $guestProcess = Start-Process -FilePath $GodotPath -ArgumentList @('--headless','--path',$projectDir,'--log-file',$log,'--script','res://tests/network/network_guest.gd','--',"--role=$testRole","--round=$roundIndex", "--map=$MapId") -WorkingDirectory $projectDir -WindowStyle Hidden -PassThru
         $started += $guestProcess
         if ($roundIndex -eq 1) {
-            Start-Sleep -Milliseconds 1000
+            Wait-NetworkMarker -Path $log -Marker 'NETWORK_STAGE joined round 1'
             $spectatorLogPath = Join-Path $resultDir 'spectator.log'
             $spectatorProcess = Start-Process -FilePath $GodotPath -ArgumentList @('--headless','--path',$projectDir,'--log-file',$spectatorLogPath,'--script','res://tests/network/network_guest.gd','--','--role=spectator',"--map=$MapId") -WorkingDirectory $projectDir -WindowStyle Hidden -PassThru
             $started += $spectatorProcess
+            # Asset loading is separate from the six-second connection budget.
+            Wait-NetworkMarker -Path $spectatorLogPath -Marker 'NETWORK_BOOTSTRAP_READY'
             if (-not $spectatorProcess.WaitForExit(6000)) { throw 'Spectator timed out' }
             $spectatorLog = Get-Content -Raw -LiteralPath $spectatorLogPath
             $spectatorLog = $spectatorLog -replace 'ERROR: Failed to read the root certificate store\.', ''

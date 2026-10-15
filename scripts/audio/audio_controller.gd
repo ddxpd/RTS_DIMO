@@ -91,8 +91,10 @@ func initialize(game: Node = null) -> void:
 func _new_world_player() -> AudioStreamPlayer3D:
     var player := AudioStreamPlayer3D.new()
     player.bus = BUS
-    player.unit_size = 400.0
-    player.max_distance = 2200.0
+    # Audibility is gated in the ground plane; camera altitude never fades SFX.
+    player.attenuation_model = AudioStreamPlayer3D.ATTENUATION_DISABLED
+    player.max_distance = 0.0
+    player.attenuation_filter_db = 0.0
     player.volume_db = -10.0
     add_child(player)
     return player
@@ -258,9 +260,7 @@ func update_loops() -> void:
         candidates.append({"key": "hover_u%d" % id, "kind": "hover", "pos": unit.pos})
         var ore: Dictionary = simulation.ores.get(int(unit.get("ore", -1)), {})
         if unit.order == "gather" and unit.get("mining", {}).get("phase", "") == "work" and not unit.has("dock") and not Simulation.DepotDocking.returning(simulation, unit) and not ore.is_empty() and ore.amount > 0:
-            var reach: float = Simulation.UNIT_TYPES.harvester.radius + 26.0
-            if (unit.pos as Vector2).distance_to(ore.pos) <= reach:
-                candidates.append({"key": "mining_u%d" % id, "kind": "mining", "pos": unit.pos})
+            candidates.append({"key": "mining_u%d" % id, "kind": "mining", "pos": unit.pos})
     for id: int in simulation.buildings:
         var building: Dictionary = simulation.buildings[id]
         if building.type == "barracks" and building.hp > 0 and Simulation.BarracksFlight.state(building) != "grounded" and _audible(building.pos):

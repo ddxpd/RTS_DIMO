@@ -1,14 +1,19 @@
 extends Node3D
+const Catalog = preload("res://scripts/definitions/entity_catalog.gd")
 ## Presentation only. Dock state is supplied by the authoritative simulation.
 const SCENES := [preload("res://assets/models/buildings/refinery/refinery.glb"), preload("res://assets/models/buildings/refinery/refinery_lod1.glb"), preload("res://assets/models/buildings/refinery/refinery_lod2.glb")]
 var levels: Array[Node3D] = []
-var lamps: Array[Array] = [[], []]
+var lamps: Array[Array] = []
 var current_lod := -1
 
 
 func _ready() -> void:
+    for slot in range(Catalog.REFINERY_DOCK_RECTS.size()):
+        lamps.append([])
     var assembly := Node3D.new()
     assembly.name = "refinery"
+    var horizontal := Catalog.REFINERY_SIZE / (Catalog.REFINERY_SOURCE_SIZE * Catalog.REFINERY_MODEL_SCALE)
+    assembly.scale = Vector3(horizontal.x, 1.0, horizontal.y)
     add_child(assembly)
     for index in range(3):
         var node: Node3D = SCENES[index].instantiate()
@@ -29,7 +34,7 @@ func _ready() -> void:
                     mat.metallic = 0.05
                     mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
                 if str(mesh.name).begins_with("DockLamp_"):
-                    lamps[0 if "DockLamp_L" in str(mesh.name) else 1].append(mesh)
+                    lamps[0].append(mesh)
     set_lod(0)
 
 
@@ -49,12 +54,14 @@ func set_lod(index: int) -> void:
 
 
 func update_docks(building: Dictionary, units: Dictionary, building_id: int) -> void:
-    var occupied := [false, false]
+    var occupied: Array[bool] = []
+    occupied.resize(Catalog.REFINERY_DOCK_RECTS.size())
+    occupied.fill(false)
     for u: Dictionary in units.values():
         if u.has("dock") and u.dock.station == building_id and u.dock.slot >= 0:
             occupied[u.dock.slot] = true
-    for slot in range(2):
-        var pulse: bool = building.get("dock_flash", [0, 0])[slot] > 0
+    for slot in range(Catalog.REFINERY_DOCK_RECTS.size()):
+        var pulse: bool = building.get("dock_flash", [0])[slot] > 0
         var color := Color(0.2, 1.0, 0.65) if pulse else (Color(1.0, 0.58, 0.08) if occupied[slot] else Color(0.05, 0.6, 1.0))
         for mesh: MeshInstance3D in lamps[slot]:
             var mat := mesh.get_active_material(0) as StandardMaterial3D

@@ -26,13 +26,14 @@ try {
     setValue(retiredProfile,'soldier.hp',135);rebase(retiredProfile,base);
     check(!retiredProfile.overrides['soldier.hp']&&retiredProfile.history.some(entry=>entry.draft===135),'retiring unit preserves draft edits in history');
     check(base.fields['mobile_infantry.hp'].value===100&&base.fields['refinery.size.x'].value===128,'runtime constants and Vector2 export');
-    check(base.fields['shared.capacity'].value===60&&base.fields['shared.mining_interval'].value===20&&base.fields['shared.dock_depth'].value===-116,'special rules read from current sources');
+    check(base.fields['shared.capacity'].value===60&&base.fields['shared.mining_interval'].value===20&&base.fields['shared.dock_depth'].value===raw.shared.dock_depth.value,'special rules read from current sources');
+    check(base.fields['harvester.radius'].value===32&&base.fields['shared.dock_depth'].value===-32&&!base.fields['shared.dock_depth'].editable,'compact vehicle and derived readonly docking geometry');
     const unverified=Object.values(base.fields).filter(f=>f.status!=='verified'||!(f.origin.line>0));
     check(!unverified.length,'all current fields have verified source locations '+JSON.stringify(unverified));
     check(base.fields['barracks.flight_duration'].value===80&&Math.abs(base.fields['barracks.flight_turn'].value-90)<.001,'flight constants keep units');
     const p=createProfile(base,'domain test','test');
     check(base.gridCell===32&&!!base.sources['scripts/world_grid.gd'],'grid scale exported with tracked source');
-    for(const [kind,expected] of Object.entries({base:'10 × 6 格，共 60 格',barracks:'4 × 3 格，共 12 格',refinery:'占地 4 × 4 格，共 16 格；阻挡区 12 格；卸载通道 2 处，各 1 × 2 格',bunker:'2 × 2 格，共 4 格'})) {
+    for(const [kind,expected] of Object.entries({base:'10 × 6 格，共 60 格',barracks:'4 × 3 格，共 12 格',refinery:'占地 4 × 4 格，共 16 格；阻挡区 12 格；卸载通道 1 处，各 2 × 2 格',bunker:'2 × 2 格，共 4 格'})) {
         check(footprintSummary(p,kind)===expected,kind+' footprint in grid cells');
     }
     const gridDraft=createProfile(base,'grid draft','grid');
@@ -159,7 +160,7 @@ try {
     await page.locator('[data-tab="compare"]').click();await page.locator('.compare-controls').waitFor();check(await page.locator('.compare-controls input').count()===3,'multi-profile comparison controls');
     await page.locator('#diff-only').check();check(await page.locator('tbody tr').count()>0,'comparison displays differences');
     await page.locator('#diff-only').uncheck();await page.locator('nav [data-entity="refinery"]').click();
-    check((await page.locator('#footprint-summary').innerText()).includes('占地 4 × 4 格，共 16 格；阻挡区 12 格；卸载通道 2 处，各 1 × 2 格'),'encyclopedia displays separate total, solid and traversable areas');
+    check((await page.locator('#footprint-summary').innerText()).includes('占地 4 × 4 格，共 16 格；阻挡区 12 格；卸载通道 1 处，各 2 × 2 格'),'encyclopedia displays separate total, solid and traversable areas');
     await page.waitForFunction(()=>document.querySelector('.hero img')?.complete&&document.querySelector('.hero img')?.naturalWidth>0);check(true,'actual Godot model portrait loaded');
     await page.screenshot({path:path.join(project,'assets/concept_art/balance_designer/web-detail.png'),fullPage:true});
     await page.locator('nav [data-entity="mobile_infantry"]').click();

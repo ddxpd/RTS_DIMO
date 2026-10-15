@@ -4,13 +4,20 @@ const SAMPLE_SHADER = preload("res://assets/maps/sample_surface.gdshader")
 var vertex_count := 0
 var triangle_count := 0
 var sample_build_ms := 0
+var component_fog: ShaderMaterial
 
 
-func build(data: Terrain, _fog: Texture2D) -> void:
+func build(data: Terrain, fog: Texture2D) -> void:
     var started := Time.get_ticks_msec()
     terrain = data
     ground_material = ShaderMaterial.new()
     ground_material.shader = SAMPLE_SHADER
+    ground_material.set_shader_parameter("fog_map", fog)
+    ground_material.set_shader_parameter("reveal_all", bool(data.definition.get("test_only", false)))
+    component_fog = ShaderMaterial.new()
+    component_fog.shader = preload("res://assets/maps/component_fog.gdshader")
+    component_fog.set_shader_parameter("fog_map", fog)
+    component_fog.set_shader_parameter("reveal_all", bool(data.definition.get("test_only", false)))
     for kind in ["sand", "soil", "gravel", "rock"]:
         for channel in ["color", "nr"]:
             ground_material.set_shader_parameter(kind + "_" + channel, load("res://assets/maps/sample/" + kind + "_" + channel + ".png"))
@@ -81,6 +88,8 @@ func _buffer_ground() -> void:
     # the fine mesh; the sample occupies only the central working area.
     var regions := [Rect2(0, 0, 4800, rect.position.y), Rect2(0, rect.end.y, 4800, 3200 - rect.end.y), Rect2(0, rect.position.y, rect.position.x, rect.size.y), Rect2(rect.end.x, rect.position.y, 4800 - rect.end.x, rect.size.y)]
     for region: Rect2 in regions:
+        if region.size.x <= 0 or region.size.y <= 0:
+            continue
         var surface := SurfaceTool.new()
         surface.begin(Mesh.PRIMITIVE_TRIANGLES)
         var a := Vector3(region.position.x, 0, region.position.y)
@@ -147,6 +156,7 @@ func _sample_rubble() -> void:
     instance.name = "CliffRubble"
     instance.multimesh = multi
     instance.material_override = load("res://assets/maps/components/rock.tres") if field.layout != null else rock_material
+    instance.material_overlay = component_fog
     add_child(instance)
 
 
@@ -174,7 +184,7 @@ func _component_decorations() -> void:
     var groups := {}
     var components: Array = terrain.sample_surface.layout.decorations.duplicate()
     for instance: Dictionary in terrain.sample_surface.layout.surfaces:
-        if instance.component == "cliff_straight":
+        if str(instance.component).begins_with("cliff"):
             components.append(instance)
     for instance: Dictionary in components:
         if not groups.has(instance.component):
@@ -193,4 +203,11 @@ func _component_decorations() -> void:
         var batch := MultiMeshInstance3D.new()
         batch.name = "Components_" + id
         batch.multimesh = multi
+        batch.material_overlay = component_fog
         add_child(batch)
+
+
+func set_reveal_all(value: bool) -> void:
+    super.set_reveal_all(value)
+    if component_fog != null:
+        component_fog.set_shader_parameter("reveal_all", value)

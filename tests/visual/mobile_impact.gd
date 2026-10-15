@@ -85,9 +85,15 @@ func run() -> void:
     var sync: Node3D = game.visual_sync
     check(sync.effect_visuals.size() == 7, "One impact per shot across all seven target types")
     var ids: Array = []
-    for effect: Node3D in sync.effect_visuals.values():
+    for index in range(sync.effect_visuals.size()):
+        var effect: Node3D = sync.effect_visuals.values()[index]
         check(effect is Hit and effect.visible, "Mobile shots instantiate only hit effects")
-        check(effect.global_position.y > 10.0, "Hit is above ground on target body")
+        var info: Dictionary = game.sim.effects[index].impact
+        var height: float = effect.global_position.y - game.sim.terrain.height_at(info.target_pos)
+        check(height > 0 and height < EntityVisual.MODEL_SETTINGS[info.target_type].height, "Hit is within the current target height above terrain")
+        if info.target_type == "harvester":
+            var horizontal := Vector2(effect.global_position.x, effect.global_position.z)
+            check(horizontal.distance_to(info.target_pos) <= Simulation.UNIT_TYPES.harvester.radius, "Compact harvester impact stays on the body")
         check(effect.muzzle.visible, "Muzzle flash uses actual weapon socket")
         ids.append(effect.get_instance_id())
     sync._sync_effects()

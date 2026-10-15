@@ -170,11 +170,7 @@ def build():
     faction=material('HH_FactionPaint',(.06,.25,.52),.35,.32)
     glow=material('HH_ThrusterBlue',(.03,.42,.8),.15,.22,(.015,.5,1),3.0)
     mineral=material('HH_CargoCrystal',(.008,.12,.48),.08,.16,(.008,.18,.55),.30)
-    glass=material('HH_CargoGlass',(.48,.72,.85),.05,.13)
-    p=glass.node_tree.nodes.get('Principled BSDF')
-    p.inputs['Alpha'].default_value=.14
-    p.inputs['Coat Weight'].default_value=.8
-    glass.surface_render_method='DITHERED'
+
     root=empty('harvester')
     root['asset_role']='ground_hover_mining_platform'
     root['authoring_axes']='Z up / +Y front; glTF Y up / -Z front'
@@ -211,38 +207,30 @@ def build():
         cube('RearDockInset',(.23,.018,.18),(x,-1.517,.67),black,static,.02)
         cube('RearDockRim',(.14,.024,.08),(x,-1.529,.67),steel,static,.012)
     frame=empty('CargoFrame',node=body)
+    # Open transport pallet: low armored corners, split rails, no roof or glazing.
     for x in [-.63,.63]:
         for y in [-1.37,-.23]:
-            cube('YellowCornerGuard',(.19,.20,1.12),(x,y,1.47),yellow,frame,.045)
-            cube('CornerInset',(.075,.045,.72),(x,y-.084,1.48),steel,frame,.017)
-            for z in [1.02,1.91]:
-                bolt((x,y-.1,z),frame,steel,.025,(math.pi/2,0,0))
-        for z in [.98,2.02]:
-            cube('SideFrameRail',(.105,1.15,.085),(x,-.80,z),steel,frame,.02)
-            cube('SideSafetyRail',(.13,.73,.025),(x,-.80,z+.052),yellow,frame,.012)
+            cube('YellowCornerGuard',(.17,.18,.31),(x,y,1.08),yellow,frame,.035)
+            bolt((x,y-.095,1.12),frame,steel,.025,(math.pi/2,0,0))
+        cube('SideFrameRail',(.10,1.15,.12),(x,-.80,1.12),steel,frame,.025)
+        cube('SideSafetyRail',(.12,.74,.035),(x,-.80,1.20),yellow,frame,.012)
+        for y in [-1.12,-.48]:
+            cube('PalletSideArmor',(.11,.36,.20),(x,y,1.03),white,frame,.025)
     for y in [-1.37,-.23]:
-        for z in [.98,2.02]:
-            cube('CrossFrameRail',(1.26,.105,.085),(0,y,z),white,frame,.025)
+        cube('CrossFrameRail',(1.23,.10,.18),(0,y,1.04),white,frame,.025)
     for x in [-.39,.39]:
         cube('CassetteLatch',(.20,.12,.15),(x,-1.42,.97),steel,frame,.02)
         cube('LatchYellow',(.105,.035,.08),(x,-1.49,.97),yellow,frame,.008)
-    windows=empty('CargoWindows',node=body)
-    # Outward single-sided panes prevent extra transparent interior surfaces.
-    vs=[(-.59,-1.33,1.02),(.59,-1.33,1.02),(.59,-.27,1.02),(-.59,-.27,1.02),
-        (-.59,-1.33,1.98),(.59,-1.33,1.98),(.59,-.27,1.98),(-.59,-.27,1.98)]
-    fs=[(0,4,5,1),(1,5,6,2),(2,6,7,3),(3,7,4,0),(4,7,6,5)]
-    # Reverse because listed wall winding points inward.
-    mesh=bpy.data.meshes.new('CargoGlassMesh')
-    mesh.from_pydata(vs,[],[tuple(reversed(f)) for f in fs])
-    ob=bpy.data.objects.new('CargoGlass',mesh)
-    bpy.context.collection.objects.link(ob)
-    ob.parent=windows
-    mesh.materials.append(glass)
     for level,name in enumerate(['CargoLow','CargoMid','CargoHigh']):
         layer=empty(name,node=body)
         # Overlapping packed layers avoid disconnected crystals floating in the bin.
         for row in range(4):
             for column in range(4):
+                # Higher layers taper to a loose mound rather than a cubic stack.
+                if level == 2 and (row in [0,3] or column in [0,3]):
+                    continue
+                if level == 1 and row in [0,3] and column in [0,3]:
+                    continue
                 x=-.405+column*.27+RNG.uniform(-.016,.016)
                 y=-1.20+row*.265+RNG.uniform(-.016,.016)
                 z=.98+level*.245
@@ -316,6 +304,7 @@ def build():
     report={'triangles':sum(len(p.vertices)-2 for o in meshes for p in o.data.polygons),'meshes':len(meshes),
             'bounds_min':[min(p[i] for p in points) for i in range(3)],'bounds_max':[max(p[i] for p in points) for i in range(3)],
             'axes':'source Z up +Y front; GLB Y up -Z front','cargo_stages':[0,1,20,40],
+            'cargo_style':'open low-rail pallet',
             'parts':[o.name for o in all_objects if o.type=='EMPTY'],'scope':'ground unit; visual hover only; no carry-to-bin or tipping animation'}
     assert report['meshes']<=22
     assert report['triangles']<45000

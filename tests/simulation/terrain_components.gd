@@ -76,6 +76,11 @@ func run() -> void:
             instance.rotation = float(instance.rotation) + turn * PI / 2
         check(copy.configure(rotated), "All socket connections in rotated layout " + str(turn) + ": " + copy.error)
     var bytes := 0
+    var art_report: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(Catalog.ROOT + "build_report.json"))
+    check(art_report.catalog_revision == Catalog.REVISION and art_report.art_revision == 3, "Production art report matches logical catalog")
+    for source: String in ["cliff", "rock", "rubble-a", "rubble-b", "rubble-c", "rubble-d"]:
+        var mesh: ArrayMesh = load("res://assets/models/source/terrain/" + source + ".res")
+        check(mesh != null and mesh.get_surface_count() == 1, "Standalone retained production source " + source)
     for id: String in Catalog.IDS:
         var entry := Catalog.entry(id)
         check(ResourceLoader.exists(entry.scene), "Runtime scene exists " + id)
@@ -83,9 +88,25 @@ func run() -> void:
         var node: MeshInstance3D = load(entry.scene).instantiate()
         check(node.mesh.get_surface_count() > 0 and node.scale == Vector3.ONE, "Native game units " + id)
         var aabb := node.mesh.get_aabb()
+        if id.begins_with("cliff"):
+            check(node.mesh.get_surface_count() == 2, "Sculpted cliff has continuous backing " + id)
+            var backing: StandardMaterial3D = node.mesh.surface_get_material(1)
+            check(backing != null and backing.uv1_world_triplanar and backing.albedo_texture.resource_path.ends_with("cliff_basecolor.png"), "Cliff backing uses tiled material instead of rock atlas " + id)
         for surface in range(node.mesh.get_surface_count()):
             var arrays := node.mesh.surface_get_arrays(surface)
             check(arrays[Mesh.ARRAY_NORMAL].size() == arrays[Mesh.ARRAY_VERTEX].size() and arrays[Mesh.ARRAY_TANGENT].size() == arrays[Mesh.ARRAY_VERTEX].size() * 4 and arrays[Mesh.ARRAY_TEX_UV].size() == arrays[Mesh.ARRAY_VERTEX].size(), "PBR mesh attributes " + id)
+            var finite := true
+            var sockets := true
+            for p: Vector3 in arrays[Mesh.ARRAY_VERTEX]:
+                finite = finite and p.is_finite()
+                if entry.layer == "surface":
+                    var edge: bool = minf(minf(absf(p.x), absf(p.x - entry.size.x)), minf(absf(p.z), absf(p.z - entry.size.y))) < 0.001
+                    if edge:
+                        sockets = sockets and absf(p.y - Catalog.height(id, Vector2(p.x, p.z))) < 0.1
+            check(finite and sockets, "Finite geometry and exact border height " + id)
+        check(int(art_report.components[id].triangles) < 6000, "Component triangle budget " + id)
+        if entry.layer == "decoration":
+            check(int(art_report.components[id].lods) > 0, "Rock/rubble automatic LODs " + id)
         check(aabb.size.x <= entry.size.x + 0.1 and aabb.size.z <= entry.size.y + 0.1, "Geometry fits declared footprint " + id)
         node.free()
         if entry.layer == "surface":
@@ -106,8 +127,8 @@ func run() -> void:
     check(terrain.sample_surface.layout != null, "Sample uses component authority")
     var field = terrain.sample_surface
     var conservative := true
-    for z in range(848, 2368, 32):
-        for x in range(1392, 3424, 32):
+    for z in range(int(field.bounds.position.y) + 16, int(field.bounds.end.y), 32):
+        for x in range(int(field.bounds.position.x) + 16, int(field.bounds.end.x), 32):
             for radius in [11.0, 24.0]:
                 var p := Vector2(x, z)
                 if field.position_clear(p, radius) and not field.position_clear_precise(p, radius):
@@ -115,8 +136,9 @@ func run() -> void:
     check(conservative, "Cached clearance never admits a position rejected by precise checks")
     check(terrain.build_error(Rect2(1760, 1856, 96, 128)).is_empty(), "3x4 barracks pad")
     check(not terrain.build_error(Rect2(1840, 1456, 96, 128)).is_empty(), "Whole footprint spanning toe denied")
-    check(not terrain.build_error(Rect2(1456, 1920, 96, 128)).is_empty(), "Blocking boulder denies placement")
-    check(not terrain.position_clear(Vector2(1504, 1968), 14), "Boulder blocks navigation")
+    var boulder: Rect2 = field.layout.blockers[0]
+    check(not terrain.build_error(boulder).is_empty(), "Blocking boulder denies placement")
+    check(not terrain.position_clear(boulder.get_center(), 14), "Boulder blocks navigation")
     for ramp: Dictionary in terrain.definition.ramps:
         check(is_equal_approx(ramp.start.distance_to(ramp.end), 256), "Short ramp length")
         check(terrain.segment_clear(ramp.start, ramp.end, 24), "Short ramp traversable")
@@ -126,6 +148,6 @@ func run() -> void:
             check(hit.is_finite() and absf(hit.y - terrain.height_at(p)) < 0.01, "Picking matches ramp height")
     var pit := terrain.ray_hit(Vector3(3000, 501, 1800), Vector3.DOWN)
     check(pit.is_finite() and absf(pit.y + 128) < 0.01, "Pick lowest pit at non-step-aligned ray")
-    check(terrain.load_map("desert_quarry") and terrain.sample_surface == null, "Legacy formal map isolated")
+    check(terrain.load_map("desert_quarry") and terrain.sample_surface != null and not terrain.definition.get("test_only", false), "Formal map shares components without sample-only rules")
     print("TERRAIN_COMPONENTS checks=", checks, " failures=", failures.size(), " texture_mib=", bytes / 1048576.0)
     quit(0 if failures.is_empty() else 1)

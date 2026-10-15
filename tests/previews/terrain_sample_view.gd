@@ -15,7 +15,7 @@ func check(value: bool, message: String) -> void:
         push_error(message)
 
 
-func capture(name: String, focus: Vector2, zoom: float, prefix: String = "sample-", version: String = "components-v1") -> void:
+func capture(name: String, focus: Vector2, zoom: float, prefix: String = "sample-", version: String = "components-v3") -> void:
     game.camera_controller.focus = focus
     game.camera_zoom_level = zoom
     game._update_camera_transform()
@@ -53,7 +53,7 @@ func run() -> void:
     game.selected_map_id = "desert_sample"
     root.add_child(game)
     game.set_process(false)
-    check(game.map_selector.item_count == 2, "Desert and temporary sample menu entries")
+    check(game.map_selector.item_count == 3, "Desert, training and four-player menu entries")
     check(game.sample_host_button.disabled, "Sample cannot host LAN")
     check(ResourceLoader.exists("res://assets/maps/sample/preview.png"), "Sample preview is an imported runtime asset")
     for kind in ["sand", "soil", "gravel", "rock"]:
@@ -65,7 +65,7 @@ func run() -> void:
     game.play_solo()
     game._sync_visuals()
     check(game.sim.is_test_map() and game.local_slot == 1, "Sample is controllable")
-    check(game.visual_sync.unit_visuals.is_empty() and game.visual_sync.ore_visuals.is_empty() and game.visual_sync.building_visuals.size() == 1, "Sample visuals contain only the main base")
+    check(game.visual_sync.unit_visuals.is_empty() and game.visual_sync.ore_visuals.size() == 22 and game.visual_sync.building_visuals.size() == 1, "Training renders the base and all resource groups")
     check(game.terrain_view != null and game.fog_texture != null, "Sample geometry active")
     var rubble: MultiMesh = game.terrain_view.get_node("CliffRubble").multimesh
     for index in range(rubble.instance_count):
@@ -88,8 +88,8 @@ func run() -> void:
     var view: Node3D = game.terrain_view
     game.restart_match()
     game._sync_visuals()
-    check(game.terrain_view == view and game.sim.units.is_empty() and game.sim.ores.is_empty() and game.sim.buildings.size() == 1 and game.sim.money[1] == 10000, "Restart restores base-only roster without mesh duplication")
-    check(game.visual_sync.unit_visuals.is_empty() and game.visual_sync.ore_visuals.is_empty() and game.visual_sync.building_visuals.size() == 1, "Restart removes old test units and leaves only the base model")
+    check(game.terrain_view == view and game.sim.units.is_empty() and game.sim.ores.size() == 22 and game.sim.buildings.size() == 1 and game.sim.money[1] == 10000, "Restart restores resources and base-only roster without mesh duplication")
+    check(game.visual_sync.unit_visuals.is_empty() and game.visual_sync.ore_visuals.size() == 22 and game.visual_sync.building_visuals.size() == 1, "Restart removes test units and restores base and crystal visuals")
     game.return_to_title()
     game._map_selected(0)
     check(not game.network_session._apply_snapshot_checked(game.sim.snapshot(), "test"), "Network RPC path rejects sample snapshots")
@@ -110,6 +110,12 @@ func run() -> void:
         await capture("highland", Vector2(1876,1442), 1.15, "ramp-boundary-", version)
         await capture("quarry", Vector2(2876,1432), 1.15, "ramp-boundary-", version)
         game.hud.visible = true
+    if "--training-capture" in OS.get_cmdline_args():
+        game.hud.visible = false
+        await capture("overview", Vector2(2356, 1760), 0.42, "sample-", "expanded-v6")
+        await capture("highland", Vector2(1728, 2112), 0.85, "sample-", "expanded-v6")
+        await capture("quarry", Vector2(3040, 2048), 0.85, "sample-", "expanded-v6")
+        game.hud.visible = true
     if "--capture" in OS.get_cmdline_args():
         game.hud.visible = false
         await capture("overview", Vector2(2356,1592), 0.54)
@@ -124,7 +130,7 @@ func run() -> void:
             var i: int = game.sim.units.size()
             var p := Vector2(2116 + (i % 10) * 34, 1342 + int(i / 10) * 34)
             p = game.sim.nav.get_point_position(game.sim.nearest_cell(p))
-            game.sim.add_unit(1, "harvester" if i % 4 == 0 else "soldier", p)
+            game.sim.add_unit(1, "harvester" if i % 4 == 0 else "mobile_infantry", p)
         game._sync_visuals()
         await frame_measure("200-static")
         var started := Time.get_ticks_usec()

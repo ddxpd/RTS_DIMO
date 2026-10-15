@@ -52,8 +52,8 @@ func run() -> void:
     check(game.sim.command(1, {"action": "gather", "units": [id], "target": ore_id}).is_empty(), "real gather order accepted")
     game._sync_visuals()
     var visual: EntityVisual = game.unit_visuals[id].visual
-    check(is_equal_approx(Sim.UNIT_TYPES.harvester.radius, 48.0) and is_equal_approx(Sim.UNIT_TYPES.harvester.speed, 75.0), "movement envelope covers hull; speed unchanged")
-    for name: String in ["Drill", "DrillShaft", "LeftWheel_0", "CargoHopper", "CargoGate"]:
+    check(is_equal_approx(Sim.UNIT_TYPES.harvester.radius, 32.0) and is_equal_approx(Sim.UNIT_TYPES.harvester.speed, 75.0), "two-cell movement envelope; speed unchanged")
+    for name: String in ["Drill", "DrillShaft", "LeftWheel_0", "CargoHopper", "CargoGate", "CargoWindows", "CargoGlass"]:
         check(visual.model.find_child(name, true, false) == null, "removed old part " + name)
     for pair: Array in [[0,0],[1,1],[19,1],[20,2],[39,2],[40,3],[60,3]]:
         check(Motion.stage_for(pair[0]) == pair[1], "cargo boundary " + str(pair[0]))
@@ -64,6 +64,7 @@ func run() -> void:
     unit.pos += Vector2(0, 5)
     check(game.visual_sync._unit_heading(unit, id).dot(Vector2.DOWN) > 0.99, "harvester follows actual path instead of eastward final goal")
     unit.order = "idle"
+    unit.heading = PI * 0.5
     check(game.visual_sync._unit_heading(unit, id).dot(Vector2.DOWN) > 0.99, "stopped harvester retains heading")
     game.connected = true
     game.is_host = false
@@ -87,7 +88,7 @@ func run() -> void:
         game.sim.step()
         sync(unit, visual)
         stages[visual.harvester_motion.cargo_stage] = true
-        if int(unit.cargo) > 0 and int(unit.cargo) < 60 and (unit.pos as Vector2).distance_to(point) <= Sim.UNIT_TYPES.harvester.radius + 26.0:
+        if int(unit.cargo) > 0 and int(unit.cargo) < 60 and unit.get("mining", {}).get("phase", "") == "work":
             saw_mining = true
             check(visual.animation_state == "mine", "partly loaded machine continues harvesting")
             var amount: float = visual.harvester_motion.extension
@@ -108,7 +109,7 @@ func run() -> void:
     check(int(game.sim.money[1]) - money_before == 60 and ore_before - int(ore.amount) == 60, "no changes to mineral accounting")
     check(visual.harvester_motion.extension < 0.17, "arms are stowed by delivery")
     check(extension_max - extension_min > 0.05, "sampling produces actual mechanical extension motion")
-    check(contact_distance < 36.0, "mining claw reaches inside crystal deposit footprint")
+    check(contact_distance < preload("res://scripts/definitions/gameplay_rules.gd").MINING_CONTACT_RADIUS, "mining claw reaches inside crystal deposit footprint")
     metrics.closest_claw_to_ore = contact_distance
     # Exhausting a deposit with a partly filled bin must also return to the depot.
     unit.pos = point + Vector2(0, 44)

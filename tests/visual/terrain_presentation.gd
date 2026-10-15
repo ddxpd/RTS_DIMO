@@ -29,7 +29,7 @@ func run() -> void:
     root.add_child(game)
     game.set_process(false)
     check(game.selected_map_id == "desert_quarry", "Menu defaults to desert")
-    check(game.map_selector.item_count == 2, "Menu lists desert and temporary sample")
+    check(game.map_selector.item_count == 3, "Menu lists desert, training and four-player map")
     game.play_solo()
     game.sim.ai_enabled = false
     game.local_slot = 0
@@ -39,7 +39,7 @@ func run() -> void:
     var id: int = game.sim.add_unit(1, "soldier", Vector2(1536, 1088))
     game.selected_units.assign([id])
     game._sync_visuals()
-    check(is_equal_approx(game.unit_visuals[id].visual.position.y, 96.0), "Unit stands on plateau")
+    check(is_equal_approx(game.unit_visuals[id].visual.position.y, 128.0), "Unit stands on component plateau")
     game.camera_controller.focus = Vector2(1536, 1088)
     game.camera_zoom_level = 1.0
     game._update_camera_transform()
@@ -50,9 +50,9 @@ func run() -> void:
     game._update_camera_transform()
     var floor_point := Vector2(3936, 704)
     check(game._screen_to_world(game._world_to_screen(floor_point)).distance_to(floor_point) < 1.0, "Pick quarry floor")
-    var slope_point := Vector2(1024, 1088)
+    var slope_point := Vector2(1152, 1088)
     var rotation: Vector3 = game.visual_sync._surface_rotation(slope_point)
-    var expected_normal := Vector3(-0.25, 1.0, 0).normalized()
+    var expected_normal := Vector3(-0.5, 1.0, 0).normalized()
     check((Basis.from_euler(rotation) * Vector3.UP).dot(expected_normal) > 0.999, "Markers align with ramp normal")
     var view: Node3D = game.terrain_view
     game.restart_match()

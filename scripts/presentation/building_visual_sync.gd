@@ -59,15 +59,11 @@ static func _sync_buildings(context: WorldVisualSync, delta: float = 0.0) -> voi
         var ground: float = context.host.sim.terrain.height_at(b.pos)
         var height: float = b.get("flight", {}).get("height", ground)
         var target := Vector3(b.pos.x, height, b.pos.y)
-        if b.has("flight") and delta > 0 and visual.position.distance_to(target) < 300:
-            visual.position = visual.position.lerp(target, 1.0 - exp(-18.0 * delta))
-            visual.rotation.y = lerp_angle(visual.rotation.y, float(b.flight.heading), 1.0 - exp(-18.0 * delta))
-        else:
-            visual.position = target
-            if b.has("flight"):
-                visual.rotation.y = float(b.flight.heading)
+        _sync_flight_pose(visual, b, target, delta)
         if b.type == "refinery":
             visual.model.update_docks(b, context.host.sim.units, id)
+        if b.type == "base" and b.has("flight"):
+            visual.model.apply_flight(b.flight, delta, Simulation.BarracksFlight.is_thrusting(b), context.host.sim.terrain.height_at)
         visual.set_flash(b.flash > 0)
         visual.set_construction_tint(b.remaining > 0)
         if b.remaining > 0:
@@ -91,7 +87,7 @@ static func _sync_buildings(context: WorldVisualSync, delta: float = 0.0) -> voi
                 vis.flight_elapsed = minf(float(vis.get("flight_elapsed", 0.0)) + delta, 0.2)
             visual.barracks_motion.apply(b.flight, float(vis.get("flight_elapsed", 0.0)) * Simulation.TICK)
         if visual.barracks_presentation != null:
-            visual.barracks_presentation.update(b, delta, visual.get_viewport().get_camera_3d())
+            visual.barracks_presentation.update(b, delta, visual.get_viewport().get_camera_3d(), context.host.sim.terrain.height_at)
 
         var building_selected: bool = context.host.selected_buildings.has(id) or context.host.selected_building == id
         var building_size: Vector2 = Simulation.BUILD_TYPES[b.type].size
@@ -113,18 +109,28 @@ static func _sync_buildings(context: WorldVisualSync, delta: float = 0.0) -> voi
             "building",
             visual.visible
         )
-        if b.remaining > 0:
-            if not vis.has("build_bar"):
-                var build_bar := context._make_status_bar(Simulation.BUILD_TYPES[b.type].size.x * 0.8, 5, Color("#eac75b"))
-                build_bar.position = Vector3(0, visual.get_model_height() + 20, 0)
-                visual.add_child(build_bar)
-                vis["build_bar"] = build_bar
-            context._update_status_bar(vis.build_bar, 1.0 - float(b.remaining) / Simulation.BUILD_TYPES[b.type].time)
-        if vis.has("build_bar"):
-            vis.build_bar.visible = b.remaining > 0
         seen[id] = true
     for id: int in context.building_visuals.keys():
         if not seen.has(id):
             context.health_grid_overlay.remove_entity("building_%d" % id)
             context.building_visuals[id].visual.queue_free()
             context.building_visuals.erase(id)
+
+
+static func _sync_flight_pose(visual: EntityVisual, b: Dictionary, target: Vector3, delta: float) -> void:
+    if not b.has("flight") or delta <= 0 or visual.position.distance_to(target) >= 300:
+        visual.position = target
+        if b.has("flight"):
+            visual.rotation.y = float(b.flight.heading)
+        return
+    var weight := 1.0 - exp(-18.0 * delta)
+    var next := visual.position.lerp(target, weight)
+    var motion := Vector2(next.x - visual.position.x, next.z - visual.position.z)
+    if b.type == "base" and b.flight.state == "airborne" and motion.length() > 0.001:
+        # Independent yaw smoothing used to leave the narrow nose behind the
+        # interpolated motion at turn exits. Resolve yaw from that same motion;
+        # during stationary turns the authoritative heading still eases normally.
+        visual.rotation.y = Simulation.BarracksFlight.heading_for_direction(b, motion)
+    else:
+        visual.rotation.y = lerp_angle(visual.rotation.y, float(b.flight.heading), weight)
+    visual.position = next

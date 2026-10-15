@@ -70,7 +70,13 @@ static func height(id: String, p: Vector2) -> float:
 
 static func transform(instance: Dictionary) -> Transform3D:
     var p: Array = instance.position
-    return Transform3D(Basis(Vector3.UP, float(instance.get("rotation", 0.0))).scaled(Vector3.ONE * float(instance.get("scale", 1.0))), Vector3(p[0], p[1], p[2]))
+    var angle := float(instance.get("rotation", 0.0))
+    var basis := Basis(Vector3.UP, angle)
+    if absf(angle / (PI / 2) - roundf(angle / (PI / 2))) < 0.00001:
+        # Exact quarter turns prevent tiny cracks/asymmetric height samples at
+        # mirrored seams, especially where a ramp meets a flat zero-height pad.
+        basis = Basis(basis.x.round(), basis.y.round(), basis.z.round())
+    return Transform3D(basis.scaled(Vector3.ONE * float(instance.get("scale", 1.0))), Vector3(p[0], p[1], p[2]))
 
 
 static func rect(instance: Dictionary) -> Rect2:

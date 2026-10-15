@@ -11,16 +11,11 @@ func _is_escape(event: InputEventKey) -> bool:
     return event.keycode == KEY_ESCAPE or event.physical_keycode == KEY_ESCAPE
 
 
-func _is_attack_key(event: InputEventKey) -> bool:
-    return event.keycode == host.attack_keycode or event.physical_keycode == host.attack_keycode
-
-
 func _handle_escape(event: InputEventKey) -> bool:
-    if not _is_escape(event):
+    if not _is_escape(event) and host.key_bindings.action_for(event) != "menu":
         return false
-    if host.rebinding_attack:
-        host.rebinding_attack = false
-        host._notify("Attack key rebind canceled.")
+    if host.settings_panel.visible:
+        host.settings_panel.close()
     elif host.deploy_building >= 0:
         host.deploy_building = -1
     elif not host.build_mode.is_empty() or not host.pending_command.is_empty():
@@ -37,41 +32,9 @@ func _unhandled_input(event: InputEvent) -> void:
     if event is InputEventMouseMotion:
         host.last_mouse_event_msec = Time.get_ticks_msec()
     if event is InputEventKey and event.pressed and not event.echo:
-        if _handle_escape(event):
+        if _route_key(event):
             get_viewport().set_input_as_handled()
-            return
-        if host.rebinding_attack:
-            if event.keycode in [KEY_L, KEY_D, KEY_R] or event.physical_keycode in [KEY_L, KEY_D, KEY_R]:
-                host._notify("L、D、R用于升空、部署和集结点，请选择其他攻击键。")
-                get_viewport().set_input_as_handled()
-                return
-            host.attack_keycode = event.keycode if event.keycode != KEY_NONE else event.physical_keycode
-            host.rebinding_attack = false
-            host.attack_rebind_button.text = "Rebind attack key (current: %s)" % OS.get_keycode_string(host.attack_keycode)
-            host._notify("Attack key set to %s." % OS.get_keycode_string(host.attack_keycode))
-            get_viewport().set_input_as_handled()
-            return
-        if host.pending_command == "rally" and (_is_attack_key(event) or event.keycode in [KEY_L, KEY_D, KEY_B, KEY_S]):
-            host.pending_command = ""
-        if host.active and not host.menu_visible and (event.keycode == KEY_R or event.physical_keycode == KEY_R):
-            host._begin_pending("rally")
-        elif host.active and not host.menu_visible and _is_attack_key(event):
-            host.attack_mode = not host.attack_mode
-            host._notify("Attack mode %s. Left-click a target or ground." % ("ON" if host.attack_mode else "OFF"))
-        elif host.active and not host.menu_visible and event.keycode == KEY_L:
-            host._takeoff_barracks()
-        elif host.active and not host.menu_visible and event.keycode == KEY_D:
-            host._begin_deploy()
-        elif host.active and not host.menu_visible and event.keycode == KEY_B:
-            host._begin_build("barracks")
-        elif host.active and not host.menu_visible and event.keycode == KEY_S:
-            host._stop()
-        elif host.active and not host.menu_visible and event.keycode >= KEY_1 and event.keycode <= KEY_9:
-            _control_group_key(int(event.keycode) - int(KEY_1) + 1, event.ctrl_pressed, event.shift_pressed)
-        elif host.active and not host.menu_visible and event.keycode == KEY_TAB:
-            if host.selected_buildings.size() > 1:
-                host.building_tab_index = (host.building_tab_index + 1) % host.selected_buildings.size()
-                host._notify("Building %d / %d" % [host.building_tab_index + 1, host.selected_buildings.size()])
+        return
     if not host.active or host.menu_visible:
         return
     if event is InputEventMouseButton:
@@ -126,15 +89,48 @@ func _unhandled_input(event: InputEvent) -> void:
             host._update_camera_transform()
     elif event is InputEventMouseMotion:
         if host.middle_dragging:
-            host.camera_controller.focus += Vector2(event.relative.x, event.relative.y) / host.camera_zoom_level
+            host.camera_controller.drag(event.position - event.relative, event.position)
+            host._update_camera_transform()
         if host.selection_dragging:
             host.selection_current = host._screen_to_world(event.position)
+
+func _route_key(event: InputEventKey, before_gui: bool = false) -> bool:
+    if not host.settings_panel.recording.is_empty():
+        host.settings_panel.accept_key(event)
+        return true
+    if _is_escape(event):
+        return _handle_escape(event)
+    var focus: Control = get_viewport().gui_get_focus_owner()
+    if focus is LineEdit or focus is TextEdit:
+        return false
+    var action: String = host.key_bindings.action_for(event)
+    if action == "menu":
+        return _handle_escape(event)
+    if before_gui or not host.active or host.menu_visible or action.is_empty():
+        return false
+    if action.begins_with("group_"):
+        var parts := action.split("_")
+        _control_group_key(int(parts[2]), parts[1] == "assign", parts[1] == "append")
+    elif action == "cycle_building":
+        if host.selected_buildings.size() > 1:
+            host.building_tab_index = (host.building_tab_index + 1) % host.selected_buildings.size()
+    elif action in ["zoom_in", "zoom_out"]:
+        host.camera_zoom_level = clampf(host.camera_zoom_level * (1.15 if action == "zoom_in" else 1.0 / 1.15), host._min_zoom(), 6.0)
+        host._update_camera_transform()
+    elif not action.begins_with("camera_"):
+        host.hud_controller._refresh_command_cards()
+        for button in host.action_buttons:
+            if button.action_id == action and not button.disabled:
+                host.hud_controller.invoke(action)
+                break
+    return true
+
 
 func _input(event: InputEvent) -> void:
     # _input runs before the HUD consumes events, so an host.active drag keeps
     # tracking (and can complete) even while the cursor is over HUD panels.
     if event is InputEventKey and event.pressed and not event.echo:
-        if _handle_escape(event):
+        if _route_key(event, true):
             get_viewport().set_input_as_handled()
             return
     if event is InputEventMouseMotion:

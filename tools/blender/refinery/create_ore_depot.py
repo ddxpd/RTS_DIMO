@@ -3,7 +3,7 @@ from pathlib import Path as _Path
 _blender_tools = _Path(__file__).resolve().parents[1]
 _sys.path[:0] = [str(_Path(__file__).resolve().parent), str(_blender_tools), str(_blender_tools / "shared")]
 from project_paths import model_path
-"""Independent, reproducible twin-dock ore depot. Blender Z-up, +Y front; units /20."""
+"""Reproducible L-shaped ore smelter, single 2x2 dock. Z-up, +Y front; units /20."""
 import sys, math, json
 from pathlib import Path
 import bpy
@@ -95,77 +95,79 @@ def bolt(x,y,z):
 def build_lod(lod):
     global root,level
     level=lod;root=empty('refinery' if lod==0 else 'refinery_LOD'+str(lod))
-    # 4x4 cells overall. Rear 4x2 + front central 2x2 are solid.
+    # Four by four cells, with a single two by two front-right open pad.
     root['footprint_cells'] = [4, 4]
     root['reserved_cells'] = 16
     root['solid_cells'] = 12
-    root['dock_cells'] = [1, 2]
+    root['dock_cells'] = [2, 2]
+    root['dock_count'] = 1
     box('RearFoundation',(6.4,3.2,.32),(0,-1.6,.20),2,.10)
-    box('RearHousing',(6.22,3.04,1.3),(0,-1.6,.99),2,.12)
-    box('CentralFoundation',(3.2,3.2,.32),(0,1.6,.20),2,.10)
+    box('RearHousing',(6.22,3.04,1.65),(0,-1.6,1.18),0,.12)
+    box('StorageFoundation',(3.2,3.2,.32),(1.6,1.6,.20),2,.08)
+    box('StoragePlinth',(3.08,3.10,1.10),(1.6,1.6,.89),0,.10)
     for side in [-1,1]:
         x=side*2.4
-        box('ServiceShoulder',(1.56,3.04,1.65),(x,-1.6,1.31),0,.10)
-        box('RearSafetyCap',(1.56,.20,1.45),(x,-3.07,1.29),1,.045)
-        for y in [-2.47,-.79]:
-            box('RoofPanel',(1.40,1.42,.12),(x,y,2.17),0,.045)
-            if level<2:
-                box('VentBed',(.92,.73,.045),(x,y,2.25),2,.018)
-                for k in range(5 if level==0 else 3):
-                    box('VentFin',(.84,.05,.045),(x,y-.26+k*.13,2.29),mat=M[1],bevel=.006)
-                for edge in [-1,1]:
-                    bolt(x+edge*.55,y+.55,2.27)
-        box('UtilityTower',(.50,.68,1.15),(x,-2.55,2.68),2,.06)
-        box('TowerSafety',(.52,.08,.88),(x,-2.17,2.70),1,.02)
-        cylinder('Antenna',.025,.76,(x,-2.65,3.22),M[1],8,root)
+        box('RearSafetyCap',(1.48,.20,1.58),(x,-3.07,1.18),1,.04)
         box('FactionBadge',(.84,.035,.28),(x,-3.175,1.61),0,.02)
         box('SideStatus',(.035,.62,.08),(side*3.155,-1.52,1.20),mat=M[4],bevel=.008)
-        # These two flat 1x2-cell channels are inside the square reservation.
-        box('DockFoundation',(1.6,3.2,.10),(x,1.6,.09),mat=M[1],bevel=.022)
-        for y in [.55,1.60,2.65]:
-            box('DockDeck',(1.42,.97,.025),(x,y,.152),2,.01)
-        for edge in [-1,1]:
-            box('DockSafety',(.07,3.08,.015),(x+edge*.73,1.6,.172),1,.004)
-            box('GuidanceStrip',(.032,2.70,.014),(x+edge*.60,1.6,.175),mat=M[4],bevel=.003)
-        for y in [.7,1.7,2.7]:
-            poly('DirectionArrow',[(x-.34,y+.06,.179),(x,y-.27,.179),(x+.34,y+.06,.179),(x+.34,y+.23,.179),(x,y-.08,.179),(x-.34,y+.23,.179)],[(0,1,2,3,4,5)],M[4])
-        # Yellow receiver frame is recessed in the rear solid half.
-        box('ReceiverFrame',(1.56,.24,1.78),(x,-.13,1.12),1,.065)
-        box('ReceiverRecess',(1.27,.025,1.44),(x,-.003,1.09),2,.035)
-        box('DockLamp_'+('L' if side<0 else 'R'),(.98,.02,.09),(x,-.002,1.69),mat=M[4],bevel=.009)
-        if level<2:
-            box('ReceiverSocket',(.89,.025,.46),(x,-.003,.95),mat=M[1],bevel=.035)
-            label('01' if side<0 else '02',(x,-.002,1.89),.14)
-    # Central storage projects to the front edge, separating the long lanes.
-    box('CentralPlinth',(3.18,6.20,1.35),(0,0,.98),0,.12)
-    box('IdentityPlate',(2.94,.06,.80),(0,3.13,.88),0,.035)
+        box('UtilityTower',(.50,.68,.95),(x,-2.55,2.58),2,.06)
+        box('TowerSafety',(.52,.08,.68),(x,-2.17,2.60),1,.02)
+        cylinder('Antenna',.025,.76,(x,-2.65,3.12),M[1],8,root)
+    for x in [-2.35,-.78,.78,2.35]:
+        for y in [-2.4,-.85]:
+            box('RoofPanel',(1.44,1.40,.12),(x,y,2.07),0,.035)
+            if level<2:
+                box('VentBed',(.94,.82,.04),(x,y,2.15),2,.012)
+                for k in range(6 if level==0 else 3):
+                    box('VentFin',(.88,.045,.05),(x,y-.32+k*(.128 if level==0 else .32),2.19),mat=M[1],bevel=.006)
+                for edge in [-1,1]:
+                    bolt(x+edge*.55,y+.55,2.17)
+    # Single 2x2-cell receiving platform. All guidance is flush with the deck;
+    # no fence or threshold encroaches on the vehicle's full two-cell circle.
+    x=-1.6
+    box('DockFoundation',(3.2,3.2,.10),(x,1.6,.09),mat=M[1],bevel=.018)
+    for y in [.55,1.60,2.65]:
+        box('DockDeck',(3.02,.97,.025),(x,y,.152),2,.01)
+    for edge in [-1,1]:
+        box('DockSafety',(.065,3.08,.015),(x+edge*1.53,1.6,.172),1,.003)
+        box('GuidanceStrip',(.032,2.70,.014),(x+edge*1.38,1.6,.175),mat=M[4],bevel=.003)
+    for y in [.7,1.7,2.7]:
+        poly('DirectionArrow',[(x-.5,y+.06,.179),(x,y-.32,.179),(x+.5,y+.06,.179),(x+.5,y+.23,.179),(x,y-.13,.179),(x-.5,y+.23,.179)],[(0,1,2,3,4,5)],M[4])
+    box('ReceiverFrame',(3.05,.24,1.78),(x,-.13,1.12),1,.065)
+    box('ReceiverRecess',(2.68,.025,1.43),(x,-.016,1.08),2,.035)
+    box('DockLamp_0',(1.66,.02,.09),(x,-.002,1.69),mat=M[4],bevel=.009)
     if level<2:
-        label('07',(0,3.168,.94),.48)
-        label('ORE DEPOT',(0,3.169,.56),.17)
-    box('BinSeat',(3.06,4.98,.22),(0,.16,1.76),2,.065)
-    for x in [-1.41,1.41]:
-        for y in [-2.20,2.52]:
-            box('BinCorner',(.17,.18,1.27),(x,y,2.47),1,.035)
-    for z in [1.92,3.07]:
-        for y in [-2.20,2.52]:
-            box('BinEndRim',(2.98,.12,.11),(0,y,z),mat=M[1],bevel=.018)
-        for x in [-1.44,1.44]:
-            box('BinSideRim',(.10,4.80,.11),(x,.16,z),mat=M[1],bevel=.018)
-    for x in [-1.43,1.43]:
-        box('GlassSide',(.018,4.58,1.07),(x,.16,2.49),mat=M[2],bevel=0)
-    for y in [-2.14,2.46]:
-        box('GlassEnd',(2.75,.018,1.07),(0,y,2.49),mat=M[2],bevel=0)
-    box('GlassRoof',(2.77,4.60,.018),(0,.16,3.03),mat=M[2],bevel=0)
-    for x in [-.47,.47]:
-        box('RoofFrame',(.06,4.68,.05),(x,.16,3.08),mat=M[1],bevel=.007)
-    nx,ny=(4,6) if level<2 else (3,4)
+        box('ReceiverSocket',(2.12,.025,.46),(x,-.002,.95),mat=M[1],bevel=.035)
+        label('01',(x,-.002,1.89),.14)
+    # Front-left storage and processing wing leaves the entire right pad open.
+    x=1.6
+    box('IdentityPlate',(2.85,.06,.72),(x,3.16,.90),0,.025)
+    if level<2:
+        label('07',(x,3.195,1.00),.42)
+        label('ORE SMELTER',(x,3.195,.64),.17)
+    box('BinSeat',(3.04,3.03,.20),(x,1.6,1.51),2,.045)
+    for bx in [.18,3.02]:
+        for y in [.2,3.0]:
+            box('BinCorner',(.16,.16,1.27),(bx,y,2.22),1,.03)
+    for z in [1.65,2.80]:
+        for y in [.2,3.0]:
+            box('BinEndRim',(2.98,.12,.11),(x,y,z),mat=M[1],bevel=.016)
+        for bx in [.18,3.02]:
+            box('BinSideRim',(.10,2.86,.11),(bx,1.6,z),mat=M[1],bevel=.016)
+    for bx in [.19,3.01]:
+        box('GlassSide',(.018,2.66,1.07),(bx,1.6,2.22),mat=M[2],bevel=0)
+    for y in [.26,2.94]:
+        box('GlassEnd',(2.65,.018,1.07),(x,y,2.22),mat=M[2],bevel=0)
+    box('GlassRoof',(2.67,2.67,.018),(x,1.6,2.76),mat=M[2],bevel=0)
+    box('RoofFrame',(.06,2.82,.05),(x,1.6,2.81),mat=M[1],bevel=.007)
+    n=4 if level<2 else 3
     for layer in range(2):
-        for col in range(nx):
-            for row in range(ny):
+        for col in range(n):
+            for row in range(n):
                 if layer and (col+row)%3==0:
                     continue
-                box('FixedOre',(2.55/nx-.05,4.30/ny-.05,.34),
-                    (-1.275+(col+.5)*2.55/nx,-1.99+(row+.5)*4.30/ny,2.12+layer*.36),
+                box('FixedOre',(2.50/n-.05,2.50/n-.05,.34),
+                    (x-1.25+(col+.5)*2.50/n,.35+(row+.5)*2.50/n,1.86+layer*.36),
                     mat=M[3],bevel=.025 if level==0 else 0)
     # Merge static geometry by material; keep berth indicators addressable.
     all_mesh=[o for o in root.children_recursive if o.type=='MESH']
@@ -178,7 +180,8 @@ def build_lod(lod):
         for o in objects:o.select_set(True)
         bpy.context.view_layer.objects.active=objects[0]
         bpy.ops.object.join();bpy.context.object.name=name+'_Mesh'
-    for name,loc in [('DockLeft',(-2.6,5.8,0)),('DockRight',(2.6,5.8,0)),('EntranceLeft',(-2.6,9.6,0)),('EntranceRight',(2.6,9.6,0)),('ProductionLeft',(-12,-4.8,0)),('ProductionRight',(12,-4.8,0))]:
+    # Semantic markers use the actual authored platform, never historic offsets.
+    for name,loc in [('UnloadPadCenter',(-1.6,1.6,.18)),('UnloadPadFront',(-1.6,3.2,.18))]:
         empty(name,loc,root)
     bpy.context.view_layer.update()
     meshes=[o for o in root.children_recursive if o.type=='MESH']
@@ -211,5 +214,5 @@ reports=[build_lod(i) for i in range(3)]
 for img in bpy.data.images:
     if img.source=='FILE':img.pack()
 bpy.ops.wm.save_as_mainfile(filepath=str(model_path('source/ore_depot.blend')))
-(model_path('source/ore_depot_report.json')).write_text(json.dumps({'lods':reports,'world_size':[128,128,72],'footprint_cells':[4,4],'solid_cells':12,'dock_cells':[1,2],'reserved_cells':16,'scale':20,'lane_width':32,'lane_spacing':96,'temporary_stop_spacing':104,'cargo_visual':'fixed ~60%, no economy inventory','material_categories':6},indent=2),encoding='utf-8')
+(model_path('source/ore_depot_report.json')).write_text(json.dumps({'lods':reports,'world_size':[128,128,72],'footprint_cells':[4,4],'solid_cells':12,'dock_cells':[2,2],'dock_count':1,'reserved_cells':16,'scale':20,'lane_width':64,'dock_center':[-32,-32],'runtime_docking_source':'scripts/definitions/entity_catalog.gd','cargo_visual':'fixed ~60%, no economy inventory','material_categories':6},indent=2),encoding='utf-8')
 print('ORE_DEPOT_BUILD PASS',json.dumps(reports))

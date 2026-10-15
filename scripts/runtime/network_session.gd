@@ -68,7 +68,7 @@ func peer_joined(id: int) -> void:
 func connected_to_server() -> void:
     if host == null:
         return
-    Input.mouse_mode = Input.MOUSE_MODE_CONFINED
+    host.cursor_controller.update_mouse_mode()
     _hello.rpc_id(1, Simulation.VERSION)
 
 

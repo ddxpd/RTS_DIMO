@@ -43,6 +43,7 @@ func run() -> void:
     check(is_equal_approx(motion.walk_stride, 0.80 * visual.model.scale.x) and is_equal_approx(motion.jog_stride, 1.50 * visual.model.scale.x), "Both gait strides follow actual model scale")
     check(visual.mobile_weapon != null and is_equal_approx(visual.mobile_weapon.global_basis.get_scale().x, visual.model.scale.x), "Independent gun inherits body scale exactly once")
     # A steady displacement must advance gait by distance/new stride, not old size.
+    motion.sample({"pos": Vector2(800, 1200), "cooldown": 0}, 0, 0, sim.terrain, Vector2.ZERO)
     for speed_value: float in [30.0, 100.0]:
         visual.set_position_2d(Vector2(800, 1200))
         motion.speed = speed_value

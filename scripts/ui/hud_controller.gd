@@ -24,7 +24,13 @@ func _refresh_command_cards() -> void:
         var building: Dictionary = host.sim.buildings[host.active_building_id()]
         match str(building.type):
             "base":
-                commands = {2: "barracks", 3: "refinery", 5: "bunker", 6: "base"}
+                match Simulation.BarracksFlight.state(building):
+                    "grounded":
+                        commands = {0: "takeoff", 2: "barracks", 3: "refinery", 5: "bunker", 6: "base"}
+                        if building.remaining > 0:
+                            unavailable.append_array([0, 2, 3, 5, 6])
+                    "airborne":
+                        commands = {0: "stop", 1: "move", 3: "deploy"}
             "refinery":
                 commands = {4: "cancel"}
             "barracks":
@@ -36,7 +42,7 @@ func _refresh_command_cards() -> void:
                         if building.remaining > 0 or not building.queue.is_empty():
                             unavailable.append(2)
                     "airborne":
-                        commands = {0: "stop", 3: "deploy"}
+                        commands = {0: "stop", 1: "move", 3: "deploy"}
         var products := Simulation.EntityCatalog.produced_by(str(building.type))
         if not products.is_empty() and Simulation.BarracksFlight.state(building) == "grounded":
             commands[1] = products[0]
@@ -47,17 +53,13 @@ func _refresh_command_cards() -> void:
             if host._rally_targets().is_empty():
                 unavailable.append(6)
                 unavailable.append(7)
-    var keys := {
-        "stop": "S", "move": "RMB", "attack": OS.get_keycode_string(host.attack_keycode),
-        "gather": "RMB", "barracks": "B", "takeoff": "L", "deploy": "D", "rally": "R"
-    }
     for i in range(host.action_buttons.size()):
         var command: String = commands.get(i, "")
         var selected: bool = (command == "attack" and host.attack_mode) or command == host.pending_command
         if not host.active or host.local_slot == 0:
             unavailable.append(i)
         host.action_buttons[i].present(command, commands.has(i) and i not in unavailable,
-            str(keys.get(command, "")), selected)
+            host.key_bindings.label(command) if not command.is_empty() else "", selected)
 
 
 func refresh() -> void:
@@ -69,7 +71,7 @@ func refresh() -> void:
     host.resume_button.disabled = not host.active
     host.result_label.text = ""
     if host.sim.winner > 0:
-        host.result_label.text = "平局" if host.sim.winner == 3 else ("胜利" if host.sim.winner == host.local_slot else "失败")
+        host.result_label.text = "平局" if host.sim.result.status == "draw" else ("胜利" if host.sim.result.team == host.sim.teams.get(host.local_slot) else "失败")
         host.result_label.text += "  · Esc 返回菜单"
 
 
@@ -168,7 +170,7 @@ func build() -> void:
     host.menu_buttons.size_flags_horizontal = Control.SIZE_EXPAND_FILL
     menu_scroll.add_child(host.menu_buttons)
     var heading := Label.new()
-    heading.text = "IRON FRONT\nRTS SKIRMISH"
+    heading.text = "GAIA FRONTIER\nRTS SKIRMISH"
     heading.add_theme_font_size_override("font_size", 28)
     host.menu_buttons.add_child(heading)
     var subtitle := Label.new()
@@ -176,7 +178,7 @@ func build() -> void:
     host.menu_buttons.add_child(subtitle)
     host.map_selector = OptionButton.new()
     for id in host.MapCatalog.IDS:
-        host.map_selector.add_item(host.MapCatalog.definition(id).title)
+        host.map_selector.add_item("训练场" if id == "desert_sample" else host.MapCatalog.definition(id).title)
     host.map_selector.item_selected.connect(host._map_selected)
     host.menu_buttons.add_child(host.map_selector)
     host.map_preview = TextureRect.new()
@@ -200,24 +202,8 @@ func build() -> void:
     _button(host.menu_buttons, "Join Host", host.join_host)
     _button(host.menu_buttons, "Restart match (solo / host)", host.restart_match)
     _button(host.menu_buttons, "Return to title / disconnect", host.return_to_title)
-    host.attack_rebind_button = _button(host.menu_buttons, "Rebind attack key (current: A)", host._begin_rebind)
-    var speed_row := HBoxContainer.new()
-    speed_row.add_theme_constant_override("separation", 10)
-    host.menu_buttons.add_child(speed_row)
-    var speed_caption := Label.new()
-    speed_caption.text = "Camera speed"
-    speed_row.add_child(speed_caption)
-    host.camera_speed_slider = HSlider.new()
-    host.camera_speed_slider.min_value = 0.5
-    host.camera_speed_slider.max_value = 3.0
-    host.camera_speed_slider.step = 0.1
-    host.camera_speed_slider.value = host.camera_speed_multiplier
-    host.camera_speed_slider.custom_minimum_size = Vector2(180, 32)
-    host.camera_speed_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    host.camera_speed_slider.value_changed.connect(host._camera_speed_changed)
-    speed_row.add_child(host.camera_speed_slider)
-    host.camera_speed_value_label = Label.new()
-    host.camera_speed_value_label.text = "%.1fx" % host.camera_speed_multiplier
-    host.camera_speed_value_label.custom_minimum_size = Vector2(48, 32)
-    speed_row.add_child(host.camera_speed_value_label)
+    host.settings_panel = preload("res://scripts/ui/settings_panel.gd").new()
+    root.add_child(host.settings_panel)
+    host.settings_panel.configure(host)
+    host.settings_button = _button(host.menu_buttons, "设置", host.settings_panel.open)
     _button(host.menu_buttons, "Quit", host.get_tree().quit)

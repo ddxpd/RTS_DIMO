@@ -10,6 +10,7 @@ uniform sampler2D soil_nr : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D gravel_nr : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D rock_nr : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform bool reveal_all = true;
+uniform sampler2D fog_map : filter_nearest, repeat_disable;
 uniform float tile_scale = 96.0;
 uniform float macro_scale = 460.0;
 uniform float detail_fade = 2200.0;
@@ -58,6 +59,10 @@ void fragment() {
     float stony = clamp(COLOR.g * (0.5 + medium * 0.65) + smoothstep(0.61, 0.78, macro) * 0.6, 0.0, 0.88);
     float road = clamp(COLOR.r + (medium - 0.5) * 0.16 * sin(COLOR.r * 3.14159), 0.0, 1.0);
     vec3 ground = mix(sand, gravel, stony);
+    // Broad wind ripples remain continuous across tiles and fade out at RTS distance.
+    float wind_phase = dot(p, vec2(0.075, 0.032)) + noise2(p / 52.0) * 2.8;
+    float wind_ripple = sin(wind_phase);
+    ground *= 1.0 + wind_ripple * 0.035 * detail * (1.0 - stony);
     ground = mix(ground, soil * 1.04, road * 0.84);
     vec4 ground_nr = mix(mix(sn, gn, stony), dn, road);
     // Alpha marks the authored gentle ramp; UV2 stores crest-minus-toe and
@@ -71,6 +76,9 @@ void fragment() {
     ground = mix(ground, mix(soil, gravel, 0.48) * 0.90, crest * ramp_boundary_strength);
     ground = mix(ground, mix(sand, gravel, 0.28), toe * ramp_boundary_strength);
     ground = mix(ground, mix(gravel, soil, 0.25) * 0.93, UV2.y * 0.42);
+    // Grit accumulates on shoulders without introducing visual rocks in the walkable core.
+    float grit = smoothstep(0.58, 0.78, noise2(p / 6.0));
+    ground *= 1.0 - grit * UV2.y * detail * 0.10;
     vec3 color = mix(ground, rock, rocky);
     // Long wavelength color and shorter strata retain form at RTS zoom levels.
     float strata = sin(world_position.y * 0.23 + noise2(p / 75.0) * 0.75);
@@ -83,7 +91,9 @@ void fragment() {
     float shoulder = smoothstep(0.0, 0.25, road) * (1.0 - smoothstep(0.4, 0.8, road));
     color = mix(color, sand * 1.04, shoulder * 0.28);
     if (decoration) { color = rock * COLOR.rgb; rocky = 1.0; }
-    ALBEDO = color;
+    float fog = reveal_all ? 0.0 : texture(fog_map, p / vec2(4800.0, 3200.0)).a;
+    ALBEDO = color * (1.0 - fog);
+    EMISSION = vec3(0.025, 0.024, 0.023) * fog;
     AO = decoration ? 1.0 : 1.0 - COLOR.b * 0.28;
     AO_LIGHT_AFFECT = 0.4;
     ROUGHNESS = mix(ground_nr.a, dot(vec3(rn_x.a,rn_y.a,rn_z.a), axis_weights), rocky);
@@ -91,6 +101,7 @@ void fragment() {
     // Transform small normal perturbations in world space, then into view space.
     vec2 micro = ground_nr.rg * 2.0 - 1.0;
     vec3 ground_bump = vec3(micro.x, 0.0, -micro.y);
+    ground_bump += vec3(0.075, 0.0, 0.032) * cos(wind_phase) * (1.0 - road) * (1.0 - stony);
     vec3 cliff_bump = vec3(0.0, -(rn_x.g * 2.0 - 1.0), rn_x.r * 2.0 - 1.0) * axis_weights.x;
     cliff_bump += vec3(rn_y.r * 2.0 - 1.0, 0.0, -(rn_y.g * 2.0 - 1.0)) * axis_weights.y;
     cliff_bump += vec3(rn_z.r * 2.0 - 1.0, -(rn_z.g * 2.0 - 1.0), 0.0) * axis_weights.z;

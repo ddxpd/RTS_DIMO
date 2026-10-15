@@ -2,7 +2,8 @@
 
 [ext_resource type="ArrayMesh" path="res://assets/maps/components/sand_flat.res" id="1_k8ajb"]
 
-[node name="sand_flat" type="MeshInstance3D" unique_id=34339302]
+[node name="sand_flat" type="MeshInstance3D" unique_id=193153064]
 mesh = ExtResource("1_k8ajb")
 metadata/component_id = "sand_flat"
-metadata/catalog_revision = 1
+metadata/catalog_revision = 2
+metadata/art_revision = 3

@@ -13,7 +13,7 @@ func run() -> void:
         if argument.begins_with("--map="):
             game.selected_map_id = argument.trim_prefix("--map=")
     root.add_child(game)
-    var probe := PROBE.new()
+    var probe = preload("res://tests/network/weak_network_probe.gd").new() if "--weak" in OS.get_cmdline_user_args() else PROBE.new()
     probe.name = "NetworkProbe"
     probe.game = game
     for argument: String in OS.get_cmdline_user_args():
@@ -21,7 +21,11 @@ func run() -> void:
             probe.role = argument.trim_prefix("--role=")
         elif argument.begins_with("--round="):
             probe.round_number = int(argument.trim_prefix("--round="))
+        elif argument.begins_with("--port="):
+            game.connection_port = int(argument.trim_prefix("--port="))
+    game.bind_ip = "127.0.0.1"
     if probe.role == "mismatch":
         game.multiplayer.connected_to_server.disconnect(game._connected_to_server)
     root.add_child(probe)
+    print("NETWORK_BOOTSTRAP_READY")
     probe.start()

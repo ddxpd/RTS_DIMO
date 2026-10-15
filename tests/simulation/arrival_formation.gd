@@ -20,13 +20,17 @@ func run() -> void:
     sim.units.clear()
     var top := Vector2(1876, 1882)
     var region := sim.terrain.arrival_region_at(top)
-    check(region >= 0 and region != sim.terrain.arrival_region_at(Vector2(1500, 1882)), "Distinct highland region")
+    var plateau := Rect2(top, Vector2.ZERO)
+    for surface: Dictionary in sim.terrain.sample_surface.layout.surfaces:
+        if surface.component == "plateau_top":
+            plateau = plateau.merge(surface._rect)
+    check(region >= 0 and region != sim.terrain.arrival_region_at(Vector2(plateau.position.x - Sim.CELL * 4, top.y)), "Distinct highland region")
     var squad: Array = []
     for i in range(6):
         squad.append(sim.add_unit(1, "soldier", Vector2(1800 + i * 30, 1200)))
     for direction: Vector2 in [Vector2.LEFT, Vector2.RIGHT, Vector2.DOWN, Vector2.UP]:
         var click := top
-        for d in range(320, 0, -4):
+        for d in range(int(maxf(plateau.size.x, plateau.size.y)), 0, -4):
             var p := top + direction * d
             if sim.terrain.arrival_region_at(p) == region and sim.position_free(p, 11):
                 click = p
@@ -76,7 +80,7 @@ func run() -> void:
     var old_target: Vector2 = sim.units[squad[0]].target
     for index in sim.GRID_CELLS:
         if sim.terrain.arrival_regions.labels[index] == region:
-            for radius in [16.0, 18.0, 48.0]:
+            for radius in [Sim.UNIT_TYPES.soldier.radius, Sim.UNIT_TYPES.mobile_infantry.radius, Sim.UNIT_TYPES.harvester.radius]:
                 sim.navigation_for(radius).set_point_solid(Vector2i(index % sim.GRID.x, int(index / sim.GRID.x)), true)
     sim.connectivity_by_radius.clear()
     check(not sim.command(1, {"action": "move", "units": squad, "pos": top}).is_empty(), "Unreachable platform returns feedback")

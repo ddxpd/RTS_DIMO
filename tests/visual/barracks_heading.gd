@@ -127,5 +127,162 @@ func run() -> void:
             var remaining := before.distance_to(diagonal.flight.target)
             diagonal_sim.step()
             check(absf((diagonal.pos as Vector2).distance_to(before) - minf(3.0, remaining)) < .001, "Diagonal travel never stalls for floating-point heading corrections")
+    check_base_nose()
+    check_base_visual_owner()
+    if DisplayServer.get_name() != "headless":
+        await check_rendered_base_motion()
     print("BARRACKS_HEADING checks=", checks, " failures=", failures)
     quit(0 if failures.is_empty() else 1)
+
+
+func check_base_nose() -> void:
+    var sim := Sim.new()
+    sim.reset()
+    sim.ai_enabled = false
+    sim.units.clear()
+    var id: int = sim._add_building(1, "base", Vector2(768, 512), true)
+    var b: Dictionary = sim.buildings[id]
+    check(sim.command(1, {"action": "building_takeoff", "building": id}).is_empty(), "Base takeoff accepted")
+    for tick in range(120):
+        sim.step()
+    var model := preload("res://assets/art/buildings/gaia/gaia_command_base.gd").new()
+    root.add_child(model)
+    for direction: Vector2 in [Vector2.RIGHT, Vector2.LEFT, Vector2.DOWN, Vector2.UP, Vector2(1, 1).normalized(), Vector2(-1, -1).normalized()]:
+        var start: Vector2 = b.pos
+        var previous_heading: float = b.flight.heading
+        check(sim.command(1, {"action": "building_move", "building": id, "pos": start + direction * 120}).is_empty(), "Base travel accepted")
+        var restored := Sim.new()
+        restored.reset()
+        check(restored.apply_snapshot(sim.snapshot()), "Base turn snapshot restores")
+        var translated := false
+        for tick in range(100):
+            var before: Vector2 = b.pos
+            sim.step()
+            restored.step()
+            check(restored.buildings[id].flight == b.flight and restored.buildings[id].pos == b.pos, "Base heading stays deterministic after restore")
+            var displacement: Vector2 = b.pos - before
+            var turned := absf(angle_difference(previous_heading, b.flight.heading)) > 0.001
+            check(not turned or displacement.length() < 0.001, "Base turns in place without side slip")
+            if displacement.length() > 0.001:
+                var nose := Basis(Vector3.UP, b.flight.heading) * Vector3.RIGHT
+                check(Vector2(nose.x, nose.z).dot(displacement.normalized()) > 0.999, "Actual +X narrow nose follows velocity, including reverse")
+                translated = true
+            model.apply_flight(b.flight, 0.0, Sim.BarracksFlight.is_thrusting(b))
+            if turned and not Sim.BarracksFlight.is_thrusting(b):
+                check(is_zero_approx(model.presentation.rotation.z), "Turning base uses level hover attitude")
+            previous_heading = b.flight.heading
+            if not b.flight.moving:
+                break
+        check(translated and (b.pos as Vector2).distance_to(start + direction * 120) < 0.01, "Base reaches each cardinal and diagonal destination")
+    sim.visible[1].fill(1)
+    var site: Vector2 = sim.snap_building("base", b.pos)
+    check(sim.command(1, {"action": "building_deploy", "building": id, "pos": site}).is_empty(), "Base deployment accepted after reverse")
+    for tick in range(200):
+        sim.step()
+    check(b.flight.state == "grounded" and is_zero_approx(b.flight.heading), "Base restores grid orientation before landing")
+    model.free()
+
+
+func check_base_visual_owner() -> void:
+    var visual := preload("res://assets/art/entity_visual.gd").new("base", 1)
+    root.add_child(visual)
+    visual.rotation.y = PI * 0.5
+    for frame in range(12):
+        visual._process(1.0 / 60.0)
+    check(absf(angle_difference(visual.rotation.y, PI * 0.5)) < 0.001,
+        "Base entity does not override flight-owned heading between visual updates")
+    var sync = preload("res://scripts/presentation/building_visual_sync.gd")
+    # Exercise both 20 Hz local simulation and the 5 Hz room snapshot cadence.
+    for fps: int in [30, 60, 144]:
+        for snapshot_hz: int in [5, 20]:
+            visual.position = Vector3(768, 144, 512)
+            var b := {"type": "base", "pos": Vector2(768, 512),
+                "flight": {"state": "airborne", "heading": 0.0}}
+            visual.rotation.y = 0.0
+            var target := visual.position
+            var aligned := true
+            var stationary_turn := true
+            for direction: Vector2 in [Vector2.UP, Vector2.DOWN, Vector2(1, 1).normalized(), Vector2.LEFT]:
+                # A stopped simulation pose must not translate while turning.
+                visual.position = target
+                b.flight.heading = Sim.BarracksFlight.heading_for_direction(b, direction)
+                for frame in range(fps):
+                    var before := visual.position
+                    sync._sync_flight_pose(visual, b, target, 1.0 / fps)
+                    visual._process(1.0 / fps)
+                    stationary_turn = stationary_turn and before.is_equal_approx(visual.position)
+                for frame in range(fps):
+                    if frame % maxi(1, roundi(float(fps) / snapshot_hz)) == 0:
+                        target += Vector3(direction.x, 0, direction.y) * 60.0 / snapshot_hz
+                    var before := visual.position
+                    sync._sync_flight_pose(visual, b, target, 1.0 / fps)
+                    visual._process(1.0 / fps)
+                    var motion := visual.position - before
+                    if motion.length() > 0.001:
+                        aligned = aligned and (visual.basis * Vector3.RIGHT).dot(motion.normalized()) > 0.999
+                # Arrival damping follows the same flight axis, without a late yaw reset.
+                for frame in range(fps):
+                    var before := visual.position
+                    sync._sync_flight_pose(visual, b, target, 1.0 / fps)
+                    visual._process(1.0 / fps)
+                    var motion := visual.position - before
+                    if motion.length() > 0.001:
+                        aligned = aligned and (visual.basis * Vector3.RIGHT).dot(motion.normalized()) > 0.999
+            check(aligned, "Rendered narrow nose follows motion at %d FPS / %d Hz" % [fps, snapshot_hz])
+            check(stationary_turn, "Rendered turn holds position at %d FPS / %d Hz" % [fps, snapshot_hz])
+    visual.free()
+
+
+func check_rendered_base_motion() -> void:
+    var world := Node3D.new()
+    root.add_child(world)
+    var environment := WorldEnvironment.new()
+    environment.environment = Environment.new()
+    environment.environment.background_mode = Environment.BG_COLOR
+    environment.environment.background_color = Color("#152633")
+    environment.environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+    environment.environment.ambient_light_color = Color("#b8d9ee")
+    environment.environment.ambient_light_energy = 0.7
+    world.add_child(environment)
+    var sun := DirectionalLight3D.new()
+    sun.rotation_degrees = Vector3(-55, -25, 0)
+    sun.light_energy = 1.7
+    world.add_child(sun)
+    var camera := Camera3D.new()
+    camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+    camera.size = 650
+    world.add_child(camera)
+    camera.current = true
+    var visual := preload("res://assets/art/entity_visual.gd").new("base", 1)
+    world.add_child(visual)
+    visual.model.automatic_animation = false
+    visual.position = Vector3(0, 144, 0)
+    var b := {"type": "base", "pos": Vector2.ZERO,
+        "flight": {"state": "airborne", "heading": 0.0, "ticks": 0}}
+    var sync = preload("res://scripts/presentation/building_visual_sync.gd")
+    var samples := 0
+    var max_error := 0.0
+    for direction: Vector2 in [Vector2.UP, Vector2.DOWN, Vector2(1, 1).normalized()]:
+        var moved_ticks := 0
+        for frame in range(210):
+            if frame % 3 == 0:
+                if Sim.BarracksFlight.turn_toward(b.flight, Sim.BarracksFlight.heading_for_direction(b, direction), 20):
+                    b.pos += direction * 3.0
+                    moved_ticks += 1
+            var before := visual.position
+            sync._sync_flight_pose(visual, b, Vector3(b.pos.x, 144, b.pos.y), 1.0 / 60.0)
+            visual.model.apply_flight(b.flight, 1.0 / 60.0, moved_ticks > 0)
+            camera.position = visual.position + Vector3(380, 390, 500)
+            camera.look_at(visual.position + Vector3(0, 45, 0))
+            await process_frame
+            await RenderingServer.frame_post_draw
+            var motion := visual.position - before
+            if motion.length() > 0.001:
+                samples += 1
+                max_error = maxf(max_error, acos(clampf((visual.global_basis * Vector3.RIGHT).dot(motion.normalized()), -1.0, 1.0)))
+            if moved_ticks == 20:
+                root.get_texture().get_image().save_png("res://.godot/base-flight-%d.png" % samples)
+                break
+    check(samples > 100 and max_error < 0.01, "Real rendered frames preserve narrow-end forward alignment")
+    print("BASE_RENDER_MOTION samples=", samples, " max_error_degrees=", rad_to_deg(max_error))
+    world.free()

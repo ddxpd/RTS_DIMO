@@ -33,8 +33,8 @@ func run() -> void:
     check(s.command(1, {"action": "gather", "units": [blue_miner], "target": 1}) == "", "Harvester accepts ore order")
     # Leave a full-radius approach in front of the compact station, below the base.
     var blue_refinery: int = s._add_building(1, "refinery", Vector2(384, 736), true)
-    for slot in range(2):
-        check(s.position_free(Sim.DepotDocking.entrance(s.buildings[blue_refinery], slot), 48), "Blue depot fixture leaves full-radius entrance clearance")
+    for slot in range(Sim.EntityCatalog.REFINERY_DOCK_RECTS.size()):
+        check(s.position_free(Sim.DepotDocking.entrance(s.buildings[blue_refinery], slot), Sim.UNIT_TYPES.harvester.radius), "Blue depot fixture leaves full-radius entrance clearance")
     var red := Sim.new()
     red.reset()
     var red_refinery: int = red._add_building(2, "refinery", Vector2(4416, 2496), true)

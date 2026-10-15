@@ -90,11 +90,11 @@ export function buildBaseline(raw) {
     ],
     [
         "dock_retry",
-        "泊位拥堵重试",
+        "卸矿受阻重试",
         "卸矿",
         "秒",
         1,
-        "达到阈值后尝试重新安排泊位。"
+        "被地形、建筑或其他兵种阻挡时，达到阈值后尝试其他可达冶炼场；作业车之间不排队。"
     ],
     [
         "dock_offset",
@@ -102,7 +102,7 @@ export function buildBaseline(raw) {
         "卸矿",
         "逻辑单位",
         1,
-        "左右对称偏移；未来同步必须同时调整入口、模型通道与碰撞几何。"
+        "由冶炼场宽度与通道布局推导，只读。"
     ],
     [
         "dock_depth",
@@ -110,7 +110,7 @@ export function buildBaseline(raw) {
         "卸矿",
         "逻辑单位",
         -1000000,
-        "相对于卸载站中心的逻辑 Y 轴偏移。"
+        "由冶炼场卸载区中心推导，只读。"
     ],
     [
         "dock_entrance",
@@ -118,7 +118,7 @@ export function buildBaseline(raw) {
         "卸矿",
         "逻辑单位",
         -1000000,
-        "相对于卸载站中心的逻辑 Y 轴偏移。"
+        "由平台前沿、作业车半径与安全间距推导，只读。"
     ],
     [
         "vision",
@@ -133,6 +133,7 @@ export function buildBaseline(raw) {
         const path='scripts/definitions/gameplay_rules.gd', origin=location(path,`const ${key.toUpperCase()} :=`);
         const item=raw.shared?.[key], verified=item && ['number','integer'].includes(item.type) && Number.isFinite(item.value) && origin.line!==null;
         add('shared',key,verified?item.value:null,item?.type||'integer',[label,group,unit,min],origin,verified?'verified':'unverified',note);
+        if (['dock_offset','dock_depth','dock_entrance'].includes(key)) fields['shared.'+key].editable=false;
     }
     return {schema:1,exportedAt:raw.exportedAt,protocol:raw.protocol,tick:raw.tick,gridCell:raw.gridCell,entities,fields,sources:Object.fromEntries(Object.entries(raw.sources).map(([p,s])=>[p,s.sha256]))};
 }

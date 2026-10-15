@@ -7,6 +7,10 @@
 albedo_texture = ExtResource("1_i7ca3")
 roughness = 0.93
 normal_enabled = true
-normal_scale = 0.18
+normal_scale = 0.32
 normal_texture = ExtResource("2_vby8f")
+uv1_scale = Vector3(0.008928572, 0.008928572, 0.008928572)
+uv1_triplanar = true
+uv1_triplanar_sharpness = 5.0
+uv1_world_triplanar = true
 texture_filter = 5

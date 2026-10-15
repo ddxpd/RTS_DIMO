@@ -4,6 +4,7 @@ const Sim = preload("res://scripts/simulation.gd")
 const BASELINE := "res://tests/fixtures/simulation_systems_v11_baseline.json"
 const SAMPLE_BASELINE := "res://tests/fixtures/sample_base_only_trace.json"
 const GRID_BASELINE := "res://tests/fixtures/simulation_systems_v14_depot4.json"
+const QUARRY_BASELINE := "res://tests/fixtures/simulation_systems_v15_quarry_components.json"
 const PREVIOUS_GRID := "res://tests/fixtures/simulation_systems_v14_compact_depot.json"
 const ARCHIVE := "res://tests/fixtures/simulation_systems_baseline.json"
 const ARCHIVE_SHA := "44314a7b43d74c796e574b936696fdf5dafededdc2791c3fc3ddfac68c1509a8"
@@ -21,6 +22,7 @@ var sample_expected: Array = []
 var audit_states: Array = []
 var audit_before := false
 var capture_grid := false
+var capture_quarry := false
 var grid_audit: Array = []
 
 
@@ -44,10 +46,28 @@ func record(sim, scenario: String, tick: int) -> void:
     var snapshot: Dictionary = sim.snapshot()
     # Keep the v11 hash projection so v13 changes can be audited against archived
     # behavior. Grid semantics have a new immutable baseline; rally has direct tests.
+    # v16 adds metadata and inactive owner tables; retain the archived two-owner projection.
+    for field in ["config", "players", "teams", "eliminated", "result", "training"]:
+        snapshot.erase(field)
+    for field in ["money", "visible", "explored"]:
+        snapshot[field].erase(3)
+        snapshot[field].erase(4)
+    if snapshot.winner == 5:
+        snapshot.winner = 3
     snapshot.version = "rts-desert-only-11"
+    # v19 adds authoritative vehicle heading; movement itself remains in the trace.
+    for unit: Dictionary in snapshot.units.values():
+        unit.erase("heading")
     for building: Dictionary in snapshot.buildings.values():
         building.erase("rally_mode")
         building.erase("rally_ore")
+        # v15 adds base flight state; the archived scenarios never relocate a base.
+        # Relocation and destruction metadata are verified by dedicated tests.
+        if building.type == "base":
+            check(building.flight.state == "grounded", "Legacy trace never relocates a base")
+            building.erase("flight")
+    for effect: Dictionary in snapshot.effects:
+        effect.erase("destruction")
     var state := [snapshot, sim.next_id, sim.ai_enabled, commands]
     if audit_before or capture_grid:
         audit_states.append({"scenario": scenario, "tick": tick, "state": state.duplicate(true)})
@@ -87,10 +107,11 @@ func open_audit_output(filename: String) -> FileAccess:
 
 func run() -> void:
     audit_before = "--audit-before" in OS.get_cmdline_args() or "--audit-grid-before" in OS.get_cmdline_args() or "--audit-mobile-size-before" in OS.get_cmdline_args() or "--audit-roster-before" in OS.get_cmdline_args() or "--audit-base-only-before" in OS.get_cmdline_args()
-    capture_grid = "--capture-depot4" in OS.get_cmdline_args()
+    capture_quarry = "--capture-quarry-components" in OS.get_cmdline_args()
+    capture_grid = "--capture-depot4" in OS.get_cmdline_args() or capture_quarry
     if capture_grid:
-        check(not FileAccess.file_exists(GRID_BASELINE), "Refusing to overwrite 4x4 depot baseline")
-        var audit_file := FileAccess.open(AUDIT_DIR + "base-only-before.bin", FileAccess.READ)
+        check(not FileAccess.file_exists(QUARRY_BASELINE if capture_quarry else GRID_BASELINE), "Refusing to overwrite frozen baseline")
+        var audit_file := FileAccess.open(AUDIT_DIR + ("current-before.bin" if capture_quarry else "base-only-before.bin"), FileAccess.READ)
         check(audit_file != null, "Pre-change audit states are required")
         if audit_file != null:
             grid_audit = audit_file.get_var()
@@ -114,7 +135,7 @@ func run() -> void:
         check(FileAccess.file_exists(BASELINE), "Frozen behavior baseline is required")
         if failures.is_empty():
             var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(BASELINE))
-            check(data.archive_sha256 == ARCHIVE_SHA and data.protocol == "rts-desert-only-11" and Sim.VERSION == "rts-desert-only-14", "Frozen v11 provenance and explicit v14 mining adapter")
+            check(data.archive_sha256 == ARCHIVE_SHA and data.protocol == "rts-desert-only-11" and Sim.VERSION == "gaia-frontier-19", "Frozen v11 provenance; v19 shared-pad transport has dedicated coverage")
             expected = data.trace
             if not capture_grid:
                 check(FileAccess.file_exists(GRID_BASELINE), "Frozen 4x4 depot baseline exists")
@@ -122,8 +143,13 @@ func run() -> void:
                     var grid_data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(GRID_BASELINE))
                     check(grid_data.get("mobile_radius", -1) == Sim.UNIT_TYPES.mobile_infantry.radius, "Mobile size baseline matches approved radius")
                     check(grid_data.get("active_units", []) == Sim.ACTIVE_UNIT_TYPES, "Baseline matches active roster")
-                    check(grid_data.previous_grid_sha256 == FileAccess.get_sha256(PREVIOUS_GRID) and grid_data.protocol == Sim.VERSION and grid_data.previous_sha256 == FileAccess.get_sha256(BASELINE) and grid_data.sample_sha256 == FileAccess.get_sha256(SAMPLE_BASELINE), "Grid baseline preserves previous provenance")
+                    check(grid_data.previous_grid_sha256 == FileAccess.get_sha256(PREVIOUS_GRID) and grid_data.protocol == "rts-desert-only-14" and grid_data.previous_sha256 == FileAccess.get_sha256(BASELINE) and grid_data.sample_sha256 == FileAccess.get_sha256(SAMPLE_BASELINE), "Grid baseline preserves previous provenance")
                     expected = grid_data.trace
+                    if FileAccess.file_exists(QUARRY_BASELINE):
+                        var quarry_data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(QUARRY_BASELINE))
+                        check(quarry_data.previous_sha256 == FileAccess.get_sha256(GRID_BASELINE), "Quarry baseline preserves depot provenance")
+                        check(quarry_data.protocol == "rts-desert-only-15", "Quarry baseline matches protocol")
+                        expected = quarry_data.trace
             # JSON represents all numbers as floats; normalize the trace index only.
             for entry: Dictionary in expected:
                 entry.tick = int(entry.tick)
@@ -151,11 +177,14 @@ func run() -> void:
                     if before.state[0].get(field) != after.state[0][field]:
                         section.changed_fields[field] = int(section.changed_fields.get(field, 0)) + 1
             report[after.scenario] = section
-        var report_file := open_audit_output("depot4-baseline-audit.json")
+        var report_file := open_audit_output("quarry-components-audit.json" if capture_quarry else "depot4-baseline-audit.json")
         if report_file != null:
             report_file.store_string(JSON.stringify(report, "  "))
-        var grid_file := FileAccess.open(GRID_BASELINE, FileAccess.WRITE)
-        grid_file.store_string(JSON.stringify({"protocol": Sim.VERSION, "mobile_radius": Sim.UNIT_TYPES.mobile_infantry.radius, "active_units": Sim.ACTIVE_UNIT_TYPES, "base_only_start": true, "hash_projection": "v11 snapshot fields", "previous_grid_sha256": FileAccess.get_sha256(PREVIOUS_GRID), "previous_sha256": FileAccess.get_sha256(BASELINE), "sample_sha256": FileAccess.get_sha256(SAMPLE_BASELINE), "reason": "Approved 4x4 ore depot: 12 solid cells and two internal 1x2 traversable lanes; full 16-cell construction reservation. Harvester size unchanged, temporary exterior unload stops. Previous compact depot trace retained.", "audit": report, "trace": trace}, "  ") + "\n")
+        var grid_file := FileAccess.open(QUARRY_BASELINE if capture_quarry else GRID_BASELINE, FileAccess.WRITE)
+        if capture_quarry:
+            grid_file.store_string(JSON.stringify({"protocol": Sim.VERSION, "previous_sha256": FileAccess.get_sha256(GRID_BASELINE), "reason": "Approved formal quarry component layout v3, 128-unit terrain; old frozen traces retained.", "audit": report, "trace": trace}, "  ") + "\n")
+        else:
+            grid_file.store_string(JSON.stringify({"protocol": Sim.VERSION, "mobile_radius": Sim.UNIT_TYPES.mobile_infantry.radius, "active_units": Sim.ACTIVE_UNIT_TYPES, "base_only_start": true, "hash_projection": "v11 snapshot fields", "previous_grid_sha256": FileAccess.get_sha256(PREVIOUS_GRID), "previous_sha256": FileAccess.get_sha256(BASELINE), "sample_sha256": FileAccess.get_sha256(SAMPLE_BASELINE), "reason": "Approved 4x4 ore depot: 12 solid cells and two internal 1x2 traversable lanes; full 16-cell construction reservation. Harvester size unchanged, temporary exterior unload stops. Previous compact depot trace retained.", "audit": report, "trace": trace}, "  ") + "\n")
     if capture_sample and failures.is_empty():
         var sample_file := FileAccess.open(SAMPLE_BASELINE, FileAccess.WRITE)
         sample_file.store_string(JSON.stringify({"protocol": Sim.VERSION, "reason": "User requested base-only sample v4: no initial units, production buildings or ore. Only reset ticks 30-59 change; all other frozen v11 entries still compared.", "trace": sample_trace}, "  ") + "\n")
@@ -223,8 +252,14 @@ func mixed_scenario() -> void:
     var miner: int = sim.add_unit(1, "harvester", Vector2(1040, 1792))
     var fighter: int = sim.add_unit(1, "mobile_infantry", Vector2(1400, 2112))
     var enemy: int = sim.add_unit(2, "soldier", Vector2(1720, 2240))
-    var blocker: int = sim.add_unit(1, "harvester", Vector2(1612.36, 1824))
-    sim.units[blocker].auto = false
+    var blockers: Array[int] = []
+    for slot in range(5):
+        var exit: Vector2 = sim._spawn_position(sim.buildings[factory], "mobile_infantry")
+        if exit == Vector2.ZERO:
+            break
+        var blocker: int = sim.add_unit(1, "harvester", exit)
+        sim.units[blocker].auto = false
+        blockers.append(blocker)
     sim.rebuild_navigation()
     sim.update_visibility()
     issue(sim, 1, {"action": "gather", "units": [miner], "target": 1})
@@ -242,7 +277,7 @@ func mixed_scenario() -> void:
         if tick == 55:
             check(sim.buildings[factory].queue.size() == 1 and sim.buildings[factory].queue[0].remaining == 0, "Production waits at blocked exit")
         if tick == 60:
-            issue(sim, 1, {"action": "move", "units": [blocker], "pos": Vector2(1800, 1700)})
+            issue(sim, 1, {"action": "move", "units": blockers, "pos": Vector2(1800, 1700)})
         if tick == 100:
             issue(sim, 1, {"action": "stop", "units": [fighter]})
         if tick == 125:
@@ -291,7 +326,7 @@ func reset_scenario() -> void:
             check(sim.units.is_empty() and sim.buildings.size() == 2, "Formal reset has only two bases")
         if tick == 30:
             sim.reset(false, "desert_sample")
-            check(sim.units.is_empty() and sim.ores.is_empty() and sim.buildings.size() == 1 and sim.buildings[1].type == "base", "Sample switch keeps only the main base")
+            check(sim.units.is_empty() and sim.ores.size() == sim.terrain.definition.ores.size() and sim.buildings.size() == 1 and sim.buildings[1].type == "base", "Training switch restores authored resources and only the main base")
         if tick == 60:
             sim.reset()
         if tick == 90:

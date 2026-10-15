@@ -92,7 +92,7 @@ func _draw_entry(screen_position: Vector2, entry: Dictionary) -> void:
     var border_rect := Rect2(origin - Vector2.ONE, Vector2(total_width + 2.0, cell_height + 2.0))
     draw_rect(border_rect, Color("#101815"))
 
-    var fill_color: Color = TEAM_COLORS.get(int(entry.owner), Color("#9da7a1"))
+    var fill_color: Color = preload("res://scripts/runtime/match_config.gd").color(int(entry.owner))
     var fractions: Array[float] = entry.cell_fractions
     for cell_index in range(cell_count):
         var cell_position := origin + Vector2(float(cell_index) * (cell_width + CELL_GAP), 0)

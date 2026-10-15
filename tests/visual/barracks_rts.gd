@@ -159,7 +159,7 @@ func run() -> void:
     var visual := EntityVisual.new("barracks", 1)
     world.add_child(visual)
     var presentation: RefCounted = visual.barracks_presentation
-    var fixture := {"remaining": 0, "queue": [], "hp": Simulation.BUILD_TYPES.barracks.hp, "flight": {"state": "grounded", "ticks": 0}}
+    var fixture := {"type": "barracks", "remaining": 0, "queue": [], "hp": Simulation.BUILD_TYPES.barracks.hp, "flight": {"state": "grounded", "ticks": 0}}
     check(Presentation.choose_lod(150, 0, false) == 0, "Near hysteresis holds")
     check(Presentation.choose_lod(170, 1, false) == 1, "Medium hysteresis holds")
     check(Presentation.choose_lod(70, 1, false) == 2, "Far threshold")
@@ -187,7 +187,7 @@ func run() -> void:
             check(not hull.mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR].is_empty(), "Far mesh contains baked colors")
             check(hull.get_active_material(0).vertex_color_use_as_albedo, "Far renderer uses baked colors")
             check_far_weather(hull, presentation.materials.RTS_Body.albedo_texture.get_image())
-        check(visual.model.find_children("*", "AnimationPlayer", true, false).size() == 2, "Only mechanical and wind players")
+        check(visual.model.find_children("*", "AnimationPlayer", true, false).size() == 1, "Only mechanical player remains after flag removal")
         await capture("lod%d-blue" % level)
     presentation.set_lod(0)
     presentation.update(fixture, 0.01, camera)
@@ -230,6 +230,8 @@ func run() -> void:
     camera.look_at(Vector3(0, 90, 0))
     visual.barracks_motion.apply(fixture.flight)
     presentation.update(fixture, 0.1, camera)
+    check(presentation.engine.emission_energy_multiplier > 0, "Airborne engines begin smooth ignition")
+    presentation.update(fixture, 0.3, camera)
     check(presentation.engine.emission_energy_multiplier > 1, "Airborne engines lit")
     await capture("airborne-blue")
     fixture.pos = Vector2.ZERO
@@ -244,26 +246,26 @@ func run() -> void:
         camera.position = visual.position + rear * 220 + Vector3(95, 140, 0)
         camera.look_at(visual.position + Vector3(0, 35, 0))
         presentation.update(fixture, .1, camera)
-        check(presentation.rear_jets.all(func(jet: MeshInstance3D) -> bool: return jet.is_visible_in_tree()), "Moving rear jets enabled")
+        check(presentation.rear_jets.all(func(jet: Node3D) -> bool: return jet.is_visible_in_tree()), "Moving rear jets enabled")
         check(visual.get_visual_forward().dot(Vector3(direction.x, 0, direction.y)) > .999, "Front door follows travel direction")
-        for jet: MeshInstance3D in presentation.rear_jets:
-            check(jet.global_basis.y.normalized().dot(rear) > .999, "Exhaust points opposite travel")
+        for jet: Node3D in presentation.rear_jets:
+            check((-jet.global_basis.y).normalized().dot(rear) > .999, "Exhaust points opposite travel")
         await capture("direction-%d" % roundi(rad_to_deg(heading)))
     for level in range(3):
         presentation.set_lod(level)
         await capture("rear-engines-lod%d" % level)
     fixture.flight.heading += .4
     presentation.update(fixture, .1, camera)
-    check(presentation.rear_jets.all(func(jet: MeshInstance3D) -> bool: return not jet.visible), "Turning disables rear exhaust")
+    check(presentation.rear_jets.all(func(jet: Node3D) -> bool: return jet.target_strength == 0.0 and not jet.tail.emitting), "Turning cuts thrust and starts fading")
     fixture.flight.heading -= .4
     fixture.flight.moving = false
-    presentation.update(fixture, .1, camera)
-    check(presentation.rear_jets.all(func(jet: MeshInstance3D) -> bool: return not jet.visible), "Hover disables rear exhaust")
+    presentation.update(fixture, .6, camera)
+    check(presentation.rear_jets.all(func(jet: Node3D) -> bool: return not jet.visible), "Hover finishes fading rear exhaust")
     await capture("rear-engines-hover")
     fixture.flight.moving = true
     visual.visible = false
     presentation.update(fixture, .1, camera)
-    check(presentation.rear_jets.all(func(jet: MeshInstance3D) -> bool: return not jet.visible), "Hidden propulsion stops")
+    check(presentation.rear_jets.all(func(jet: Node3D) -> bool: return not jet.visible), "Hidden propulsion stops")
     visual.visible = true
     fixture.flight = {"state": "airborne", "ticks": 0}
     visual.rotation.y = 0

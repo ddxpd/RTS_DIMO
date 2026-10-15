@@ -2,7 +2,8 @@
 
 [ext_resource type="ArrayMesh" path="res://assets/maps/components/cliff_outer.res" id="1_rm720"]
 
-[node name="cliff_outer" type="MeshInstance3D" unique_id=1706012362]
+[node name="cliff_outer" type="MeshInstance3D" unique_id=131318386]
 mesh = ExtResource("1_rm720")
 metadata/component_id = "cliff_outer"
-metadata/catalog_revision = 1
+metadata/catalog_revision = 2
+metadata/art_revision = 3

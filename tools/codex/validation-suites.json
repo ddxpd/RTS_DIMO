@@ -2,6 +2,181 @@
   "schema": 1,
   "suites": [
     {
+      "name": "harvester_shared_transport",
+      "script": "res://tests/simulation/harvester_shared_transport.gd",
+      "areas": ["Simulation", "Network"],
+      "mode": "headless",
+      "full": true,
+      "timeout": 120,
+      "marker": "HARVESTER_SHARED_TRANSPORT"
+    },
+    {
+      "name": "compact_depot",
+      "script": "res://tests/simulation/compact_depot.gd",
+      "areas": ["Simulation", "Visual"],
+      "mode": "headless",
+      "full": true,
+      "timeout": 120,
+      "marker": "COMPACT_DEPOT"
+    },
+    {
+      "name": "air_volumes",
+      "script": "res://tests/simulation/air_volumes.gd",
+      "areas": ["Simulation", "Visual"],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "AIR_VOLUMES"
+    },
+    {
+      "name": "lift_clearance",
+      "script": "res://tests/simulation/lift_clearance.gd",
+      "areas": ["Simulation", "Visual"],
+      "mode": "headless",
+      "full": true,
+      "timeout": 120,
+      "marker": "LIFT_CLEARANCE"
+    },
+    {
+      "name": "construction_health",
+      "script": "res://tests/visual/construction_health.gd",
+      "areas": ["Simulation", "Visual"],
+      "mode": "headless",
+      "full": true,
+      "timeout": 120,
+      "marker": "CONSTRUCTION_HEALTH"
+    },
+    {
+      "name": "mobile_motion",
+      "script": "res://tests/visual/mobile_motion.gd",
+      "areas": ["Visual"],
+      "mode": "headless",
+      "full": true,
+      "timeout": 120,
+      "marker": "MOBILE_MOTION"
+    },
+    {
+      "name": "mobile_motion_review",
+      "script": "res://tests/previews/mobile_motion_review.gd",
+      "areas": ["Visual"],
+      "mode": "rendered",
+      "full": false,
+      "timeout": 120,
+      "marker": "MOBILE_MOTION_REVIEW"
+    },
+    {
+      "name": "terrain_flight_preview",
+      "script": "res://tests/previews/terrain_flight_preview.gd",
+      "areas": ["Visual"],
+      "mode": "rendered",
+      "full": false,
+      "timeout": 180,
+      "marker": "TERRAIN_FLIGHT_PREVIEW"
+    },
+    {
+      "name": "terrain_flight",
+      "script": "res://tests/simulation/terrain_flight.gd",
+      "areas": ["Simulation", "Visual", "Network"],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "TERRAIN_FLIGHT"
+    },
+    {
+      "name": "thruster_effects",
+      "script": "res://tests/visual/thruster_effects.gd",
+      "areas": ["Visual"],
+      "mode": "headless",
+      "full": true,
+      "timeout": 90,
+      "marker": "THRUSTER_EFFECTS"
+    },
+    {
+      "name": "frontier",
+      "script": "res://tests/ui/frontier.gd",
+      "areas": [
+        "Presentation",
+        "Features",
+        "Simulation"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 120,
+      "marker": "FRONTIER_TEST"
+    },
+    {
+      "name": "frontier_rooms",
+      "script": "res://tests/network/frontier_rooms.gd",
+      "areas": [
+        "Network"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 120,
+      "marker": "FRONTIER_ROOMS"
+    },
+    {
+      "name": "frontier_rooms_weak",
+      "script": "res://tests/network/frontier_rooms_weak.gd",
+      "areas": [
+        "Network"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 120,
+      "marker": "FRONTIER_ROOMS"
+    },
+    {
+      "name": "frontier_local",
+      "script": "res://tests/ui/frontier_local.gd",
+      "areas": [
+        "Network",
+        "Features"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 90,
+      "marker": "FRONTIER_LOCAL"
+    },
+    {
+      "name": "settings",
+      "script": "res://tests/ui/settings.gd",
+      "areas": [
+        "Camera",
+        "Presentation",
+        "ActionBar",
+        "Features"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 120,
+      "marker": "SETTINGS_TEST"
+    },
+    {
+      "name": "building_lifecycle_preview",
+      "script": "res://tests/previews/building_lifecycle_preview.gd",
+      "areas": [
+        "Visual"
+      ],
+      "mode": "rendered",
+      "full": false,
+      "timeout": 90,
+      "marker": "BUILDING_LIFECYCLE_PREVIEW"
+    },
+    {
+      "name": "building_lifecycle",
+      "script": "res://tests/visual/building_lifecycle.gd",
+      "areas": [
+        "Simulation",
+        "Visual",
+        "Network"
+      ],
+      "mode": "headless",
+      "full": true,
+      "timeout": 180,
+      "marker": "BUILDING_LIFECYCLE"
+    },
+    {
       "name": "simulation_systems",
       "script": "res://tests/simulation/simulation_systems.gd",
       "areas": [
@@ -641,6 +816,30 @@
       "reason": "Dedicated fixture or optional asset review; invoke explicitly."
     },
     {
+      "name": "weak_network_probe",
+      "script": "res://tests/network/weak_network_probe.gd",
+      "areas": [],
+      "mode": "network",
+      "full": false,
+      "reason": "Packet impairment matrix; run-network.ps1 -Mode Weak."
+    },
+    {
+      "name": "udp_impairment_proxy",
+      "script": "res://tests/network/udp_impairment_proxy.gd",
+      "areas": [],
+      "mode": "network",
+      "full": false,
+      "reason": "Managed loopback UDP proxy for the weak-network matrix."
+    },
+    {
+      "name": "run_weak_network",
+      "script": "res://tests/network/run_weak_network.ps1",
+      "areas": [],
+      "mode": "network",
+      "full": false,
+      "reason": "Invoked through the fixed run-network.ps1 wrapper."
+    },
+    {
       "name": "ore_depot_preview",
       "script": "res://tests/previews/ore_depot_preview.gd",
       "areas": [],
@@ -727,6 +926,14 @@
       "mode": "tooling",
       "full": false,
       "reason": "Dedicated fixture or optional asset review; invoke explicitly."
+    },
+    {
+      "name": "frontier_room_link",
+      "script": "res://tests/network/room_link.gd",
+      "areas": [],
+      "mode": "helper",
+      "full": false,
+      "reason": "UDP delay and packet loss fixture for frontier_rooms_weak."
     }
   ]
 }

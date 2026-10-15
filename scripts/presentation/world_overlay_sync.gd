@@ -123,7 +123,8 @@ static func _sync_deploy_preview(context: WorldVisualSync, position_override: Va
     var position: Vector2 = position_override if position_override is Vector2 else context.host._screen_to_world(context.get_viewport().get_mouse_position())
     var site: Dictionary = context.host.sim.deployment_site(context.host.local_slot, context.host.deploy_building, position)
     context.deployment_preview_error = site.error
-    _show_build_site(context, "barracks", site.pos, site.rect, site.error, site.cells, context.host.deploy_building)
+    var kind: String = context.host.sim.buildings[context.host.deploy_building].type
+    _show_build_site(context, kind, site.pos, site.rect, site.error, site.cells, context.host.deploy_building)
 
 
 static func _sync_fog(context: WorldVisualSync) -> void:
@@ -131,7 +132,7 @@ static func _sync_fog(context: WorldVisualSync) -> void:
     if key == context.last_fog_key:
         return
     context.last_fog_key = key
-    if context.host.local_slot in [1, 2]:
+    if context.host.local_slot in [1, 2, 3, 4]:
         for y in range(Simulation.GRID.y):
             for x in range(Simulation.GRID.x):
                 var index := y * Simulation.GRID.x + x

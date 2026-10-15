@@ -2,7 +2,8 @@
 
 [ext_resource type="ArrayMesh" path="res://assets/maps/components/rock_large.res" id="1_1d7q5"]
 
-[node name="rock_large" type="MeshInstance3D" unique_id=947469356]
+[node name="rock_large" type="MeshInstance3D" unique_id=1693944011]
 mesh = ExtResource("1_1d7q5")
 metadata/component_id = "rock_large"
-metadata/catalog_revision = 1
+metadata/catalog_revision = 2
+metadata/art_revision = 3

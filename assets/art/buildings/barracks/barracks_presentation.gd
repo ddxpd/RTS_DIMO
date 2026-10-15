@@ -1,5 +1,6 @@
 extends RefCounted
 const Simulation = preload("res://scripts/simulation.gd")
+const Thruster = preload("res://assets/art/effects/thruster_plume.gd")
 
 # Mesh resources are shared. Only the original rig is ever put in the scene tree.
 const LOD_SCENES := [preload("res://assets/models/buildings/barracks/barracks_lod1.glb"), preload("res://assets/models/buildings/barracks/barracks_lod2.glb")]
@@ -23,7 +24,8 @@ var smoke: CPUParticles3D
 var sparks: CPUParticles3D
 var soot: MeshInstance3D
 var effect_root: Node3D
-var rear_jets: Array[MeshInstance3D] = []
+var rear_jets: Array[Node3D] = []
+var lift_jets: Array[Node3D] = []
 
 
 func _init(owner_visual: Node3D) -> void:
@@ -78,7 +80,7 @@ func set_lod(next: int) -> void:
         var node_name := str(mesh.name)
         # Hydraulic rods are subpixel at this size; the control nodes remain.
         var hidden := lod == 2 and (node_name.begins_with("Gear") or node_name.begins_with("RampRod") or node_name.begins_with("RampCylinder"))
-        mesh.visible = not hidden
+        mesh.visible = not hidden and not node_name.begins_with("Jet")
         var replacement: Mesh = levels[lod].get(node_name, levels[0][node_name])
         for surface in range(mesh.mesh.get_surface_count()):
             mesh.set_surface_override_material(surface, null)
@@ -127,7 +129,7 @@ func _sync_far_materials() -> void:
         far.emission_energy_multiplier = near.emission_energy_multiplier
 
 
-func update(building: Dictionary, delta: float, camera: Camera3D) -> void:
+func update(building: Dictionary, delta: float, camera: Camera3D, ground_sampler: Callable = Callable()) -> void:
     phase = fposmod(phase + delta, 60.0)
     if lod == 2:
         _sync_far_materials()
@@ -144,10 +146,12 @@ func update(building: Dictionary, delta: float, camera: Camera3D) -> void:
     var shown: bool = on_screen and visual.is_visible_in_tree()
     effect_root.visible = shown and not visual.construction_tint
     var thrusting: bool = Simulation.BarracksFlight.is_thrusting(building)
-    for jet: MeshInstance3D in rear_jets:
-        jet.visible = shown and not visual.construction_tint and thrusting
-        if jet.visible:
-            jet.scale.y = 1.0 + 0.06 * sin(phase * 35.0)
+    var enabled: bool = shown and not visual.construction_tint
+    for jet in rear_jets:
+        jet.advance(delta, 0.9 if thrusting else 0.0, lod, enabled)
+    var lift_power := Thruster.lift_power(flight_state, float(flight.get("ticks", 0)) / 80.0, thrusting)
+    for jet in lift_jets:
+        jet.advance(delta, lift_power, lod, enabled, ground_sampler)
     var queue: Array = building.get("queue", [])
     status = "ready" if queue.is_empty() else ("blocked" if int(queue[0].get("remaining", 1)) == 0 else "training")
     if int(building.get("remaining", 0)) > 0 or flight_state != "grounded":
@@ -166,7 +170,7 @@ func update(building: Dictionary, delta: float, camera: Camera3D) -> void:
     lamp.emission_energy_multiplier = power
     if engine != null:
         engine.emission_enabled = true
-        engine.emission_energy_multiplier = 2.0 if flight_state != "grounded" else 0.0
+        engine.emission_energy_multiplier = lift_jets[0].strength * 2.5
     var ratio := float(building.get("hp", 1)) / float(Simulation.BUILD_TYPES.barracks.hp)
     var damaged: bool = shown and not visual.construction_tint
     smoke.emitting = damaged and ratio < 0.5
@@ -186,6 +190,17 @@ func _create_effects() -> void:
     effect_root.name = "BarracksStatus"
     visual.add_child(effect_root)
     _create_rear_jets()
+    # Keep the authored rig/animation tracks, replacing only their solid flames.
+    for suffix: String in ["LFront", "LRear", "RFront", "RRear"]:
+        var anchor: Node3D = visual.model.find_child("Jet" + suffix, true, false)
+        if anchor == null:
+            continue
+        anchor.visible = false
+        var jet := Thruster.new(6.6, 57.0, true, lift_jets.size() * 2.37 + 0.8)
+        jet.name = "LiftFlow" + suffix
+        effect_root.add_child(jet)
+        jet.position = visual.to_local(anchor.global_position)
+        lift_jets.append(jet)
     if lamp == null:
         lamp = StandardMaterial3D.new()
     lamp.emission_enabled = true
@@ -214,30 +229,12 @@ func _create_effects() -> void:
 
 
 func _create_rear_jets() -> void:
-    var flame := StandardMaterial3D.new()
-    flame.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-    flame.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-    flame.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
-    flame.albedo_color = Color(0.15, 0.55, 1.0, 0.7)
-    flame.emission_enabled = true
-    flame.emission = Color(0.1, 0.5, 1.0)
-    flame.emission_energy_multiplier = 1.5
-    var mesh := CylinderMesh.new()
-    mesh.top_radius = 0.15
-    mesh.bottom_radius = 4.8
-    mesh.height = 18.0
-    mesh.radial_segments = 10
-    mesh.rings = 1
-    mesh.material = flame
     for side: float in [-1.0, 1.0]:
-        var jet := MeshInstance3D.new()
+        var jet := Thruster.new(7.2, 72.0, false, side * 2.37)
         jet.name = "RearJetLeft" if side < 0 else "RearJetRight"
-        jet.mesh = mesh
         # Nozzle exit at Blender (side * 2.7, -3.93, 2.65), scale 12.
-        jet.position = Vector3(side * 32.4, 31.8, 47.16 + 9.0)
-        jet.rotation.x = PI / 2.0
-        jet.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-        jet.visible = false
+        jet.position = Vector3(side * 32.4, 31.8, 47.16)
+        jet.rotation.x = -PI / 2.0
         effect_root.add_child(jet)
         rear_jets.append(jet)
 

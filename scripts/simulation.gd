@@ -9,7 +9,7 @@ const MovementSystem = preload("res://scripts/simulation_systems/movement_system
 const AiSystem = preload("res://scripts/simulation_systems/ai_system.gd")
 const VisibilitySystem = preload("res://scripts/simulation_systems/visibility_system.gd")
 # The host is the only writer. Clients display snapshots; they never simulate damage.
-const VERSION := "rts-desert-only-14"
+const VERSION := "gaia-frontier-19"
 const WorldGrid = preload("res://scripts/world_grid.gd")
 const MiningSystem = preload("res://scripts/simulation_systems/mining_system.gd")
 const SweptPaths = preload("res://scripts/maps/swept_paths.gd")
@@ -42,6 +42,13 @@ var money: Dictionary = {1: 600, 2: 600}
 var frame := 0
 var match_id := 0
 var winner := 0
+var match_config: Dictionary = {}
+var players: Array = [1, 2]
+var teams: Dictionary = {1: 1, 2: 2}
+var ai_players: Array = []
+var training := false
+var eliminated: Array = []
+var result := {"status": "playing", "team": 0}
 var next_id := 1
 var ai_enabled := false
 var effects: Array = []
@@ -59,7 +66,10 @@ var last_snapshot_error := ""
 var terrain := MapTerrain.new()
 var map_id := "desert_quarry"
 
-func reset(with_ai: bool = false, selected_map: String = "desert_quarry") -> bool:
+func reset(with_ai: bool = false, selected_map: String = "desert_quarry", config: Dictionary = {}) -> bool:
+    if not config.is_empty() and not preload("res://scripts/runtime/match_config.gd").error(config, true).is_empty():
+        last_snapshot_error = preload("res://scripts/runtime/match_config.gd").error(config, true)
+        return false
     var next_terrain := MapTerrain.new()
     if not next_terrain.load_map(selected_map):
         last_snapshot_error = next_terrain.error
@@ -71,29 +81,70 @@ func reset(with_ai: bool = false, selected_map: String = "desert_quarry") -> boo
     avoidance = preload("res://scripts/movement_avoidance.gd").new()
     buildings.clear()
     ores.clear()
-    money      = {1: 6000, 2: 6000}
+    match_config = config.duplicate(true)
+    training = bool(config.get("training", is_test_map()))
+    players = [1] if is_test_map() else [1, 2]
+    teams = {1: 1} if is_test_map() else {1: 1, 2: 2}
+    ai_players = [2] if with_ai and not training else []
+    if not config.is_empty():
+        players = []
+        teams = {}
+        ai_players = []
+        for i in range(4):
+            if config.seats[i] in ["human", "ai"]:
+                players.append(i + 1)
+                teams[i + 1] = config.teams[i] if config.mode == "2v2" else i + 1
+                if config.seats[i] == "ai":
+                    ai_players.append(i + 1)
+    eliminated.clear()
+    result = {"status": "playing", "team": 0}
+    money = {1: 0, 2: 0, 3: 0, 4: 0}
+    for owner: int in players:
+        money[owner] = int(config.get("funds", 10000 if training else 6000))
     frame      = 0
     winner     = 0
     next_id    = 1
-    ai_enabled = with_ai and not is_test_map()
+    ai_enabled = not ai_players.is_empty()
     effects.clear()
-    for owner in [1, 2]:
+    for owner in [1, 2, 3, 4]:
         var cells := PackedByteArray()
         cells.resize(GRID_CELLS)
         cells.fill(0)
         visible[owner] = cells.duplicate()
         explored[owner] = cells.duplicate()
     obstacles.assign(terrain.definition.get("obstacles", []))
-    for owner in ([1] if is_test_map() else [1, 2]):
-        var spawn: Vector2 = terrain.definition.spawns[owner - 1]
+    for owner in players:
+        var spawn: Vector2 = terrain.definition.spawns[mini(owner - 1, terrain.definition.spawns.size() - 1)]
+        if not config.is_empty():
+            spawn = _configured_spawn(spawn)
+            if not spawn.is_finite():
+                last_snapshot_error = "No clear, aligned base site for player %d." % owner
+                return false
         _add_building(owner, "base", spawn, true)
-    if is_test_map():
-        money = {1: 10000, 2: 0}
     for index in range(terrain.definition.ores.size()):
         ores[index + 1] = terrain.definition.ores[index].duplicate(true)
     rebuild_navigation()
     update_visibility()
     return true
+
+func _configured_spawn(origin: Vector2) -> Vector2:
+    var size: Vector2 = BUILD_TYPES.base.size
+    for radius in range(20):
+        for z in range(-radius, radius + 1):
+            for x in range(-radius, radius + 1):
+                if radius > 0 and absi(x) != radius and absi(z) != radius:
+                    continue
+                var position := snap_building("base", origin + Vector2(x, z) * CELL)
+                var area := Rect2(position - size / 2, size)
+                if not terrain.build_error(area).is_empty():
+                    continue
+                var overlaps := false
+                for building: Dictionary in buildings.values():
+                    if footprint(building).grow(CELL * 2).intersects(area):
+                        overlaps = true
+                if not overlaps:
+                    return position
+    return Vector2(INF, INF)
 
 func is_test_map() -> bool:
     return bool(terrain.definition.get("test_only", false))
@@ -119,17 +170,22 @@ func add_unit(owner: int, kind: String, pos: Vector2) -> int:
     var stats: Dictionary = UNIT_TYPES[kind]
     units[id] = {"owner": owner, "type": kind, "pos": pos, "hp": stats.hp, "order": "idle", "target": Vector2.ZERO,
         "attack_kind": "", "attack_id": -1, "ore": -1, "cargo": 0, "cooldown": 0, "work": 0, "path": [], "repath": 0, "flash": 0, "auto": true, "stuck": 0}
+    if kind == "harvester":
+        units[id].heading = -PI * 0.5
     return id
 
 func _add_building(owner: int, kind: String, pos: Vector2, complete: bool) -> int:
     pos = snap_building(kind, pos)
     var id := allocate()
     var stats: Dictionary = BUILD_TYPES[kind]
-    buildings[id] = {"owner": owner, "type": kind, "pos": pos, "hp": stats.hp,
+    var initial_hp := int(stats.hp) if complete else EconomySystem.construction_health(int(stats.hp), int(stats.time), int(stats.time))
+    buildings[id] = {"owner": owner, "type": kind, "pos": pos, "hp": initial_hp,
         "remaining": 0 if complete else stats.time, "queue": [], "flash": 0, "rally": Vector2.ZERO, "rally_mode": "none", "rally_ore": -1, "cooldown": 0}
     if kind == "refinery":
-        buildings[id].dock_flash = [0, 0]
-    if kind == "barracks":
+        buildings[id].dock_flash = []
+        buildings[id].dock_flash.resize(EntityCatalog.REFINERY_DOCK_RECTS.size())
+        buildings[id].dock_flash.fill(0)
+    if kind in BarracksFlight.FLYING_TYPES:
         BarracksFlight.initialize(buildings[id], terrain.height_at(pos))
     return id
 
@@ -196,10 +252,10 @@ func build_error(owner: int, kind: String, position: Vector2) -> String:
 func command(owner: int, c: Dictionary) -> String:
     if winner != 0:
         return "Match has ended"
-    if owner not in [1, 2]:
+    if owner not in (players if not match_config.is_empty() else [1, 2, 3, 4]) or owner in eliminated:
         return "Spectators cannot issue orders"
     var action: String = str(c.get("action", ""))
-    if action in ["barracks_takeoff", "barracks_move", "barracks_stop", "barracks_deploy"]:
+    if action in ["barracks_takeoff", "barracks_move", "barracks_stop", "barracks_deploy", "building_takeoff", "building_move", "building_stop", "building_deploy"]:
         return BarracksFlight.command(self, owner, c)
     if action in ["build", "produce", "cancel_production", "set_rally"]:
         return EconomySystem.command(self, owner, c)
@@ -213,7 +269,7 @@ func command(owner: int, c: Dictionary) -> String:
     if action == "attack":
         var collection: Dictionary = units if c.get("kind") == "unit" else buildings
         var target_id: int = int(c.get("target", -1))
-        if not collection.has(target_id) or (collection[target_id].owner == owner and not bool(c.get("force", false))):
+        if not collection.has(target_id) or (allied(int(collection[target_id].owner), owner) and (int(collection[target_id].owner) != owner or not bool(c.get("force", false)))):
             return "Invalid enemy"
     if action == "gather" and not ores.has(int(c.get("target", -1))):
         return "Invalid ore field"
@@ -264,10 +320,7 @@ func command(owner: int, c: Dictionary) -> String:
             u.attack_id = int(c.target)
         elif action == "gather":
             u.ore = int(c.target)
-            if u.has("mining") and u.mining.phase == "exit":
-                u.mining.origin = ores[u.ore].pos
-            else:
-                MiningSystem.request(self, u, int(u.ore))
+            MiningSystem.request(self, u, int(u.ore))
         accepted += 1
     return "" if accepted > 0 else "No compatible friendly units selected"
 
@@ -329,8 +382,10 @@ func step() -> void:
         _ai_step()
     for id: int in buildings.keys():
         var b: Dictionary = buildings[id]
+        if b.hp <= 0:
+            continue
         b.flash = maxi(0, int(b.flash) - 1)
-        if b.type == "barracks":
+        if b.type in BarracksFlight.FLYING_TYPES:
             BarracksFlight.advance(self, id, b)
             if BarracksFlight.state(b) != "grounded":
                 continue
@@ -352,9 +407,7 @@ func step() -> void:
         u.flash = maxi(0, int(u.flash) - 1)
         u.cooldown = maxi(0, int(u.cooldown) - 1)
         var pos_before: Vector2 = u.pos
-        if u.has("mining") and u.mining.phase == "exit":
-            MiningSystem.advance(self, u)
-        elif u.order == "move":
+        if u.order == "move":
             MovementSystem.advance_move(self, u)
         elif u.order == "attack_move":
             CombatSystem.advance_attack_move(self, u)
@@ -382,6 +435,10 @@ func step() -> void:
                     death_event.life = 36
                 effects.append(death_event)
                 if kind == "building":
+                    if dead.type in ["base", "barracks", "refinery"]:
+                        death_event["destruction"] = {"id": id, "type": dead.type,
+                            "height": float(dead.get("flight", {}).get("height", terrain.height_at(dead.pos))),
+                            "heading": float(dead.get("flight", {}).get("heading", 0.0))}
                     removed_building = true
                     EconomySystem.refund_destroyed_building(self, dead)
                 collection.erase(id)
@@ -393,20 +450,41 @@ func step() -> void:
         rebuild_navigation()
     if frame % 4 == 0:
         update_visibility()
-    if is_test_map():
-        winner = 0
+    check_result()
+
+func allied(a: int, b: int) -> bool:
+    return a == b or (teams.has(a) and teams.has(b) and teams[a] == teams[b])
+
+func surrender(owner: int) -> void:
+    if owner not in players or owner in eliminated:
         return
-    # Victory: a player is eliminated only when every friendly building is gone.
-    var has_building := {1: false, 2: false}
-    for b: Dictionary in buildings.values():
-        if b.owner in [1, 2]:
-            has_building[b.owner] = true
-    if not has_building[1] and not has_building[2]:
-        winner = 3
-    elif not has_building[1]:
-        winner = 2
-    elif not has_building[2]:
-        winner = 1
+    eliminated.append(owner)
+    for collection: Dictionary in [units, buildings]:
+        for id: int in collection.keys():
+            if collection[id].owner == owner:
+                collection.erase(id)
+    rebuild_navigation()
+    check_result()
+
+func check_result() -> void:
+    if training:
+        return
+    var living := {}
+    for owner: int in players:
+        var alive := false
+        for building: Dictionary in buildings.values():
+            if building.owner == owner and building.hp > 0:
+                alive = true
+                break
+        if not alive and owner not in eliminated:
+            eliminated.append(owner)
+        if alive and owner not in eliminated:
+            living[teams[owner]] = true
+    if living.size() <= 1:
+        var team: int = living.keys()[0] if living.size() == 1 else 0
+        result = {"status": "won" if team > 0 else "draw", "team": team}
+        winner = team if team > 0 else 5
+
 
 func _spawn_position(b: Dictionary, kind: String = "mobile_infantry") -> Vector2:
     return EconomySystem._spawn_position(self, b, kind)
@@ -431,7 +509,12 @@ func _separate_pair(a: Dictionary, b: Dictionary) -> void:
 
 
 func _ai_step() -> void:
-    AiSystem._ai_step(self)
+    if match_config.is_empty() and ai_players.is_empty():
+        AiSystem._ai_step(self, 2)
+        return
+    for owner: int in ai_players:
+        if owner not in eliminated:
+            AiSystem._ai_step(self, owner)
 
 
 # Nearest enemy unit inside AI territory (near any friendly building).
@@ -445,7 +528,7 @@ func _ai_attack_target() -> int:
 
 
 func snapshot() -> Dictionary:
-    return {"version": VERSION, "map_id": map_id, "map_version": terrain.definition.version, "map_checksum": terrain.checksum, "match": match_id, "frame": frame, "units": units.duplicate(true), "buildings": buildings.duplicate(true),
+    return {"config": match_config.duplicate(true), "players": players.duplicate(), "teams": teams.duplicate(), "eliminated": eliminated.duplicate(), "result": result.duplicate(), "training": training, "version": VERSION, "map_id": map_id, "map_version": terrain.definition.version, "map_checksum": terrain.checksum, "match": match_id, "frame": frame, "units": units.duplicate(true), "buildings": buildings.duplicate(true),
         "ores": ores.duplicate(true), "money": money.duplicate(true), "winner": winner, "effects": effects.duplicate(true),
         "visible": visible.duplicate(true), "explored": explored.duplicate(true)}
 
@@ -469,6 +552,12 @@ func apply_snapshot(state: Dictionary) -> bool:
         terrain = next_terrain
         map_id = state.map_id
         obstacles.assign(terrain.definition.get("obstacles", []))
+    match_config = state.config.duplicate(true)
+    players = state.players.duplicate()
+    teams = state.teams.duplicate()
+    eliminated = state.eliminated.duplicate()
+    result = state.result.duplicate()
+    training = state.training
     match_id  = state.match
     frame     = state.frame
     units     = state.units.duplicate(true)

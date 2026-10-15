@@ -180,7 +180,8 @@ func run() -> void:
     check(game.pending_command == "", "Recalling a building group cancels pending rally")
     key(KEY_R)
     key(KEY_A)
-    check(game.pending_command == "", "Attack shortcut replaces pending rally")
+    check(game.pending_command == "rally" and not game.attack_mode, "Unavailable building attack cannot interrupt rally placement")
+    key(KEY_ESCAPE)
     game.attack_mode = false
     sim.visible[1].fill(0)
     game.hud_controller.view.rally_overlay.refresh()
@@ -224,10 +225,10 @@ func run() -> void:
     check(sim.buildings[barracks].rally_mode == "none", "Clear button resets rally")
     game.hud_controller.view.rally_overlay.refresh()
     check(game.hud_controller.view.rally_overlay.entries.is_empty(), "Clearing removes persistent marker")
-    var attack_key: int = game.attack_keycode
-    game._begin_rebind()
+    var attack_key: int = game.key_bindings.bindings.attack
+    game.settings_panel.begin_recording("attack")
     key(KEY_R)
-    check(game.rebinding_attack and game.attack_keycode == attack_key, "R is reserved from attack rebinding")
+    check(not game.settings_panel.recording.is_empty() and game.key_bindings.bindings.attack == attack_key, "R is reserved from attack rebinding")
     key(KEY_ESCAPE)
     key(KEY_R)
     sim.buildings.erase(barracks)

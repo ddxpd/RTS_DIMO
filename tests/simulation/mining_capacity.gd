@@ -35,7 +35,7 @@ func run() -> void:
     for i in range(5):
         var u: Dictionary = sim.units[ids[i]]
         u.pos = u.mining.target
-    var soldier_id := sim.add_unit(1, "soldier", sim.units[ids[0]].pos)
+    var soldier_id := sim.add_unit(1, "soldier", sim.units[ids[0]].pos + Vector2(0, 150))
     sim.units[soldier_id].auto = false
     var soldier_pos: Vector2 = sim.units[soldier_id].pos
     for tick in range(21):
@@ -43,8 +43,8 @@ func run() -> void:
     check(waiting.cargo == 0, "Waiting never mines")
     for i in range(5):
         check(sim.units[ids[i]].cargo >= 10, "Five overlapping workers all harvest")
-        check(Mining.intangible(sim.units[ids[i]]), "Active workers ignore all unit bodies")
-    check(sim.units[soldier_id].pos == soldier_pos, "Worker does not push overlapping soldier")
+        check(Mining.ignore_pair(sim.units[ids[i]], sim.units[ids[0]]), "Active workers ignore other harvesters")
+    check(sim.units[soldier_id].pos == soldier_pos, "Distant soldier remains stationary")
     var snapshot: Dictionary = sim.snapshot()
     var mirror := Sim.new()
     check(mirror.apply_snapshot(snapshot), "Mining state snapshot accepted: " + mirror.last_snapshot_error)
@@ -63,10 +63,10 @@ func run() -> void:
     check(not mirror.apply_snapshot(forged), "Off-grid building snapshot rejected")
     sim.units[ids[0]].cargo = 60
     sim.step()
-    check(sim.units[ids[0]].mining.phase == "exit" and Mining.intangible(sim.units[ids[0]]), "Full cargo releases slot without restoring overlapping collision")
+    check(sim.units[ids[0]].mining.phase == "return", "Full cargo releases slot directly into return")
     check(Mining.reserved(waiting), "Waiting vehicle immediately promoted")
     sim.command(1, {"action": "stop", "units": [ids[1]]})
-    check(not Mining.reserved(sim.units[ids[1]]) and sim.units[ids[1]].mining.phase == "exit", "Stop releases reservation with safe exit")
+    check(not sim.units[ids[1]].has("mining"), "Stop releases reservation immediately")
     for distance in [29, 30, 31]:
         sim = fresh()
         sim.ores[2] = {"pos": sim.ores[1].pos + Vector2(distance * Sim.CELL, 0), "amount": 100000}
@@ -101,8 +101,13 @@ func run() -> void:
     sim = fresh()
     ids = miners(sim, 6)
     sim.ores[2] = {"pos": Vector2(2256, 752), "amount": 100000}
+    # Explicitly block the fixture instead of depending on the old map boundary.
+    sim.obstacles.append(Rect2(sim.ores[2].pos - Vector2.ONE * 96, Vector2.ONE * 192))
+    sim.rebuild_navigation()
     sim.step()
     check(sim.units[ids[5]].mining.phase == "wait", "Unreachable nearby ore rejected")
+    sim.obstacles.clear()
+    sim.rebuild_navigation()
     sim.ores[2].pos = Vector2(2576, 1168)
     sim.ores[2].amount = 0
     sim.units[ids[5]].mining.retry = 0
@@ -130,7 +135,7 @@ func run() -> void:
         if not moving.has("mining"):
             break
     check(not moving.has("mining") and moving.order == "idle" and moving.auto == false, "Stopped overlapping worker safely exits and remains stopped")
-    check(moving.pos != old_position and sim.position_free(moving.pos, 48), "Safe exit uses movement and preserves terrain clearance")
+    check(moving.pos == old_position and sim.position_free(moving.pos, sim.UNIT_TYPES.harvester.radius), "Stop holds position and preserves terrain clearance")
     sim = fresh()
     ids = miners(sim, 1)
     sim.step()
@@ -138,17 +143,22 @@ func run() -> void:
     moving.pos = moving.mining.target
     sim.step()
     var center: Vector2 = sim.ores[1].pos
+    # Keep every clear point inside the overlap zone. The old 288-wide room
+    # has valid corner exit points for the smaller vehicle, without crossing walls.
+    var inner := Mining.ZONE - Sim.CELL
+    var outer := inner + Sim.CELL
     sim.obstacles.assign([
-        Rect2(center + Vector2(-176, -176), Vector2(352, 32)),
-        Rect2(center + Vector2(-176, 144), Vector2(352, 32)),
-        Rect2(center + Vector2(-176, -144), Vector2(32, 288)),
-        Rect2(center + Vector2(144, -144), Vector2(32, 288))])
+        Rect2(center + Vector2(-outer, -outer), Vector2(outer * 2, Sim.CELL)),
+        Rect2(center + Vector2(-outer, inner), Vector2(outer * 2, Sim.CELL)),
+        Rect2(center + Vector2(-outer, -inner), Vector2(Sim.CELL, inner * 2)),
+        Rect2(center + Vector2(inner, -inner), Vector2(Sim.CELL, inner * 2))])
+    check((inner - Sim.UNIT_TYPES.harvester.radius) * sqrt(2.0) < Mining.ZONE, "Sealed fixture has no collision-free point outside the work zone")
     sim.rebuild_navigation()
     sim.command(1, {"action": "stop", "units": ids})
     old_position = moving.pos
     for tick in range(21):
         sim.step()
-    check(moving.pos == old_position and moving.mining.phase == "exit", "Sealed work area waits instead of crossing blockers")
+    check(moving.pos == old_position and not moving.has("mining"), "Sealed work area waits instead of crossing blockers")
     sim.obstacles.clear()
     sim.rebuild_navigation()
     for tick in range(240):

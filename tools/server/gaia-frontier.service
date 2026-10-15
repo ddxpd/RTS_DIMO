@@ -1,0 +1,15 @@
+[Unit]
+Description=GAIA FRONTIER dedicated rooms
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/gaia-frontier
+ExecStart=/opt/godot/godot --headless --path /opt/gaia-frontier -- --dedicated --bind=0.0.0.0 --port=24562
+User=gaia-frontier
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

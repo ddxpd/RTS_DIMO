@@ -15,7 +15,7 @@ const ERROR_TEXT := {
     "Blocked by a building or landing reservation": "建筑或降落预留区域阻挡",
     "Deploy in currently visible terrain": "需要在当前可见区域降落",
     "Build on a flat platform, away from slopes and cliffs": "需要平坦地面，避开坡道和悬崖",
-    "Build inside the sample area": "需要放置在样板区范围内"
+    "Build inside the sample area": "需要放置在训练场范围内"
 }
 
 var host

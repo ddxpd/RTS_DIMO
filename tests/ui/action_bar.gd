@@ -91,7 +91,7 @@ func verify_cards(game, failures: Array) -> void:
         expect(not card.tooltip_text.is_empty(), "Command has help", failures)
         expect(card.glyph.mouse_filter == Control.MOUSE_FILTER_IGNORE and card.hotkey.mouse_filter == Control.MOUSE_FILTER_IGNORE,
             "Icon and badge do not consume clicks", failures)
-    game.attack_keycode = KEY_Q
+    game.key_bindings.bindings.attack = KEY_Q
     game.action_buttons[2].emit_signal("pressed")
     game._refresh_ui()
     expect(game.action_buttons[2].active and game.action_buttons[2].hotkey.text == "Q"
@@ -142,7 +142,8 @@ func verify_cards(game, failures: Array) -> void:
         game._refresh_ui()
         expect(game.action_buttons[3].action_id == "deploy" and game.action_buttons[3].hotkey.text == "D",
             "Airborne deployment card", failures)
-        expect(game.action_buttons[1].glyph.texture == null, "Airborne clears production icon", failures)
+        expect(game.action_buttons[1].action_id == "move" and game.action_buttons[1].hotkey.text == "M"
+            and not game.action_buttons[1].disabled, "Airborne replaces production with keyboard-accessible move", failures)
         b.flight.state = "grounded"
         game._refresh_ui()
         expect(game.action_buttons[2].hotkey.text == "L" and game.action_buttons[3].glyph.texture == null,
@@ -156,7 +157,7 @@ func verify_cards(game, failures: Array) -> void:
     # Exercise real pointer dispatch, including a refresh between press and release.
     game.selected_units.assign([soldier])
     game.attack_mode = false
-    game.attack_keycode = KEY_A
+    game.key_bindings.bindings.attack = KEY_A
     game.camera_controller.focus = game.sim.units[soldier].pos
     game._update_camera_transform()
     game._sync_visuals()

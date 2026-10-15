@@ -6,15 +6,19 @@ var reports := 0
 var deadline := 0
 var failed := false
 var saw_dock_entry := false
-var saw_dock_exit := false
+var saw_dock_payment := false
+var dock_cargo: Dictionary = {}
 var saw_mobile_unit_hit := false
 var saw_mobile_building_hit := false
 
 func _observe_impacts(_frame: int) -> void:
-    for unit: Dictionary in game.sim.units.values():
+    for id: int in game.sim.units:
+        var unit: Dictionary = game.sim.units[id]
+        if dock_cargo.get(id, 0) > 0 and unit.cargo == 0:
+            saw_dock_payment = true
         if unit.has("dock"):
             saw_dock_entry = saw_dock_entry or unit.dock.phase == "enter"
-            saw_dock_exit = saw_dock_exit or unit.dock.phase == "exit"
+            dock_cargo[id] = unit.cargo
     for event: Dictionary in game.sim.effects:
         if event.has("impact") and event.impact.source_type == "mobile_infantry":
             if event.impact.target_kind == "unit" and event.impact.target_id == 5:
@@ -173,7 +177,7 @@ func guest() -> void:
     game._right_click(game.sim.ores[2].pos)
     while game.sim.money[2] < 5460:
         await get_tree().process_frame
-    if not check(saw_dock_entry and saw_dock_exit, "Authoritative dock entry and credited exit replicated"):
+    if not check(saw_dock_entry and saw_dock_payment, "Authoritative shared dock entry and cargo payment replicated"):
         return
     print("NETWORK_STAGE mined ", game.sim.money[2])
     var training_site := Vector2(4128, 2304)
@@ -241,7 +245,10 @@ func guest() -> void:
             check(false, "Takeoff timeout: " + str(game.sim.buildings[barracks].flight) + " / " + game.feedback)
             return
         await get_tree().process_frame
-    if not check(game.sim.buildings[barracks].flight.height > 100, "Airborne height replicated"):
+    var flying_barracks: Dictionary = game.sim.buildings[barracks]
+    var local_cruise: float = game.sim.BarracksFlight.cruise_height(game.sim, flying_barracks, flying_barracks.pos)
+    var safe_takeoff: float = game.sim.BarracksFlight.takeoff_height(game.sim, barracks, flying_barracks)
+    if not check(is_equal_approx(flying_barracks.flight.cruise, local_cruise) and is_equal_approx(flying_barracks.flight.height, safe_takeoff), "Local terrain-relative target and safe takeoff altitude replicated"):
         return
     var turn_origin: Vector2 = game.sim.buildings[barracks].pos
     game.issue({"action": "barracks_move", "building": barracks, "pos": turn_origin + Vector2(96, 0)})
@@ -285,6 +292,31 @@ func guest() -> void:
         await get_tree().process_frame
     if not check(game.sim.buildings[barracks].rally_ore == -1, "Clear rally replicated"):
         return
+    var base_id := -1
+    for id: int in game.sim.buildings:
+        if game.sim.buildings[id].owner == 2 and game.sim.buildings[id].type == "base":
+            base_id = id
+            break
+    if not check(base_id >= 0, "Guest owns a relocatable base"):
+        return
+    var base_origin: Vector2 = game.sim.buildings[base_id].pos
+    game.issue({"action": "building_takeoff", "building": base_id})
+    while game.sim.buildings[base_id].flight.state != "airborne":
+        await get_tree().process_frame
+    game.issue({"action": "building_move", "building": base_id, "pos": base_origin + Vector2(-64, 0)})
+    while game.sim.buildings[base_id].pos.distance_to(base_origin) < 24:
+        await get_tree().process_frame
+    game.issue({"action": "building_stop", "building": base_id})
+    while game.sim.buildings[base_id].flight.moving:
+        await get_tree().process_frame
+    if not check(game.sim.deployment_site(2, base_id, base_origin).cells.size() == 60, "Base deployment replicates 10x6 footprint"):
+        return
+    game.issue({"action": "building_deploy", "building": base_id, "pos": base_origin})
+    while game.sim.buildings[base_id].flight.state != "grounded":
+        await get_tree().process_frame
+    if not check(game.sim.buildings[base_id].pos == base_origin, "Base relocation and landing replicated"):
+        return
+    print("NETWORK_STAGE base relocation replicated")
     _setup_target.rpc_id(1)
     while (game.sim.units[5].pos as Vector2).distance_to(Vector2(1050, 768)) > 5.0:
         await get_tree().process_frame
@@ -313,6 +345,8 @@ func guest() -> void:
     if not check(saw_mobile_building_hit, "Lethal building impact replicated after target removal"):
         return
     if not check(game.sim.winner == 2 and not game.sim.buildings.has(1), "Attack and victory replicated"):
+        return
+    if not check(game.sim.effects.any(func(event): return event.has("destruction") and event.destruction.type == "base" and event.destruction.id == 1), "Base destruction event survives victory snapshot"):
         return
     _compare.rpc_id(1, game.sim.snapshot())
 

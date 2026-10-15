@@ -41,6 +41,11 @@ func _initialize() -> void:
         "eyes": Sim.EYE_HEIGHTS, "targets": Sim.WEAPON_TARGETS,
         "dockPads": {"refinery": Sim.EntityCatalog.REFINERY_DOCK_RECTS.map(func(rect: Rect2) -> Array: return [rect.size.x, rect.size.y])},
         "internalDockPads": ["refinery"],
+        "dockGeometry": {"refinery": {
+            "berths": range(Sim.EntityCatalog.REFINERY_DOCK_RECTS.size()).map(func(slot: int) -> Vector2: return Sim.EntityCatalog.dock_point(slot, false)).map(func(point: Vector2) -> Array: return [point.x, point.y]),
+            "entrances": range(Sim.EntityCatalog.REFINERY_DOCK_RECTS.size()).map(func(slot: int) -> Vector2: return Sim.EntityCatalog.dock_point(slot, true)).map(func(point: Vector2) -> Array: return [point.x, point.y]),
+            "vehicleDiameterCells": Sim.UNIT_TYPES.harvester.radius * 2 / Sim.CELL,
+            "clearance": Sim.EntityCatalog.BODY_GAP}},
         "flight": {"duration": Flight.DURATION, "speed": Flight.SPEED, "turn": rad_to_deg(Flight.TURN_SPEED)},
         "shared": {"capacity": typed(Rules.CAPACITY), "mining_interval": typed(Rules.MINING_INTERVAL), "mining_amount": typed(Rules.MINING_AMOUNT), "mining_reach": typed(Rules.MINING_REACH), "build_reach": typed(Rules.BUILD_REACH), "queue_limit": typed(Rules.QUEUE_LIMIT), "dock_retry": typed(Rules.DOCK_RETRY), "dock_offset": typed(Rules.DOCK_OFFSET), "dock_depth": typed(Rules.DOCK_DEPTH), "dock_entrance": typed(Rules.DOCK_ENTRANCE), "vision": typed(Rules.VISION)},
         "catalog": {"names": Sim.EntityCatalog.NAMES, "descriptions": Sim.EntityCatalog.DESCRIPTIONS, "producers": Sim.EntityCatalog.PRODUCERS},

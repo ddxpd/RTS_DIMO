@@ -13,13 +13,14 @@ const MODEL_SCENES := {
 }
 
 const MOBILE_INFANTRY_SIZE_FACTOR := 2.0 / 3.0
+const Catalog = preload("res://scripts/definitions/entity_catalog.gd")
 const MODEL_SETTINGS := {
     "mobile_infantry": {"scale": 68.0 * MOBILE_INFANTRY_SIZE_FACTOR / 1.849, "height": 68.0 * MOBILE_INFANTRY_SIZE_FACTOR},
     "soldier": {"scale": 24.0, "height": 68.0},
-    "harvester": {"scale": 17.5, "height": 44.0},
+    "harvester": {"scale": Catalog.HARVESTER_MODEL_SCALE, "height": Catalog.HARVESTER_HEIGHT},
     "base": {"scale": 1.0, "height": 160.0},
     "barracks": {"scale": 12.0, "height": 104.0},
-    "refinery": {"scale": 20.0, "height": 72.0},
+    "refinery": {"scale": Catalog.REFINERY_MODEL_SCALE, "height": 72.0},
     "bunker": {"scale": 23.0, "height": 62.0},
     "ore": {"scale": 45.0, "height": 80.0},
 }
@@ -105,7 +106,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-    if kind == "barracks":
+    if kind in ["base", "barracks", "mobile_infantry"]:
         return
     if absf(angle_difference(rotation.y, _target_heading)) >= 0.001:
         rotation.y = lerp_angle(rotation.y, _target_heading, minf(delta * 10.0, 1.0))
@@ -290,7 +291,7 @@ func set_faction(next_owner: int) -> void:
         return
     owner_id = next_owner
     _faction_applied = true
-    var team: Color = TEAM_COLORS.get(owner_id, Color("#8d8d8d"))
+    var team: Color = preload("res://scripts/runtime/match_config.gd").color(owner_id)
     if kind == "base":
         (model as GaiaCommandBase).set_team_color(team)
         return

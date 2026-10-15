@@ -82,7 +82,7 @@ func refresh_intel() -> void:
         for item: Dictionary in collection.values():
             if item.hp <= 0 or (item.owner != owner and not host.sim.can_see(owner, item.pos)):
                 continue
-            markers.append({"pos": item.pos, "color": Color("#44aeff") if item.owner == 1 else Color("#ff735a"), "building": item.has("queue")})
+            markers.append({"pos": item.pos, "color": preload("res://scripts/runtime/match_config.gd").color(item.owner), "building": item.has("queue")})
     for ore: Dictionary in host.sim.ores.values():
         if ore.amount > 0 and host.sim.can_see(owner, ore.pos):
             markers.append({"pos": ore.pos, "color": Color("#68e7f4"), "building": false})

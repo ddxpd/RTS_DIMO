@@ -2,7 +2,8 @@
 
 [ext_resource type="ArrayMesh" path="res://assets/maps/components/ramp_crest.res" id="1_nlbn6"]
 
-[node name="ramp_crest" type="MeshInstance3D" unique_id=1573323436]
+[node name="ramp_crest" type="MeshInstance3D" unique_id=237692370]
 mesh = ExtResource("1_nlbn6")
 metadata/component_id = "ramp_crest"
-metadata/catalog_revision = 1
+metadata/catalog_revision = 2
+metadata/art_revision = 3

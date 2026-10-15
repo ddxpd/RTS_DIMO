@@ -1,0 +1,44 @@
+{
+  "cliff": {
+    "materials": "shared production textures",
+    "retained_sha256": "968981289c7f6cbc8f72399e2425b7df630e5731c18a347680368812307f928e",
+    "sha256": "e1d236ed573d26af2bbd067e590dc752b5870f31b635c56326882a5082ece25a",
+    "source": "res://assets/concept_art/desert_terrain_kit/v3/v3-cliff.glb",
+    "units": "world_units"
+  },
+  "rock": {
+    "materials": "shared production textures",
+    "retained_sha256": "6f1cb9e39352c43e99e109962ed298f9974db64babf4af8c22159f95c5c640b7",
+    "sha256": "4ebe952c5c79651663bbe38efb871dde99d38cec407e26899ed2bb4572f21a5d",
+    "source": "res://assets/concept_art/desert_terrain_kit/v3/v3-rock.glb",
+    "units": "world_units"
+  },
+  "rubble-a": {
+    "materials": "shared production textures",
+    "retained_sha256": "77c2ed09bb1ff646c3d87b5c7663add43b02cb50fdfd0c99c6b44fc970b1ef11",
+    "sha256": "50c9f4ca741312ba3b15940d773a9d3d97449ea8a488bdf04bcf2c76a03fc505",
+    "source": "res://assets/concept_art/desert_terrain_kit/v3/v3-rubble-a.glb",
+    "units": "world_units"
+  },
+  "rubble-b": {
+    "materials": "shared production textures",
+    "retained_sha256": "4d670a692230ee28cff48861013303bb129db44dc2e19a207d443f9ae95a7d01",
+    "sha256": "280933e137e68ba7514bf9e1a876b19ef0940179398088c8a2e21928196b2be6",
+    "source": "res://assets/concept_art/desert_terrain_kit/v3/v3-rubble-b.glb",
+    "units": "world_units"
+  },
+  "rubble-c": {
+    "materials": "shared production textures",
+    "retained_sha256": "a5005b5dcc733b850d5b646399bb24a83efe9dc5ac00d5c98900d8da500c8adb",
+    "sha256": "879f2bf78130deaac079e047c42ab2bfd4b6397b20f1f36c9a2bfdf6a4ff7ef3",
+    "source": "res://assets/concept_art/desert_terrain_kit/v3/v3-rubble-c.glb",
+    "units": "world_units"
+  },
+  "rubble-d": {
+    "materials": "shared production textures",
+    "retained_sha256": "405901e0c54f7d41d2476e6a45a760e12a05dffd3cbd547d8595ce7c38941442",
+    "sha256": "ad7ce2f721ce8522846fab962d5c10ac8e66295fc8d67d45501c45423db2baf8",
+    "source": "res://assets/concept_art/desert_terrain_kit/v3/v3-rubble-d.glb",
+    "units": "world_units"
+  }
+}

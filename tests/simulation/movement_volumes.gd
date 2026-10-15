@@ -28,7 +28,7 @@ func run() -> void:
     check(not sim.movement_free(Vector2(1100, 1700), Vector2(1400, 1700), 16), "swept body cannot cross wall between free endpoints")
     sim.reset()
     sim.units.clear()
-    var miner := sim.add_unit(1, "harvester", Vector2(484, 640))
+    var miner := sim.add_unit(1, "harvester", Vector2(384 + Sim.BUILD_TYPES.barracks.size.x * 0.5 + Sim.UNIT_TYPES.harvester.radius * 0.5, 640))
     check(sim.build_error(1, "barracks", Vector2(384, 640)) == "Blocked by a unit", "building placement checks body outside center")
     sim.units.erase(miner)
     var a := sim._add_building(1, "barracks", Vector2(1600, 1900), true)
@@ -37,17 +37,21 @@ func run() -> void:
         sim.buildings[id].flight.state = "airborne"
         sim.buildings[id].flight.height = 400.0
         sim.buildings[id].flight.cruise = 400.0
-    check(not Sim.BarracksFlight.air_clear(sim, a, Vector2(1790, 1900), 400), "airborne hull clearance includes turning envelope")
+    check(Sim.BarracksFlight.air_clear(sim, a, Vector2(1790, 1900), 400), "Aligned airborne hulls can share a narrow gap")
+    check(not Sim.BarracksFlight.air_clear(sim, a, Vector2(1800, 1900), 400), "Actual airborne hull overlap is blocked")
+    var original: Vector2 = sim.buildings[a].pos
+    sim.buildings[a].pos = Vector2(1790, 1900)
+    check(not Sim.BarracksFlight.turn_clear(sim, a, PI / 2), "Turning corner cannot enter neighboring hull")
+    sim.buildings[a].pos = original
     check(Sim.BarracksFlight.air_clear(sim, a, Vector2(1790, 1900), 600), "vertically separated air bodies can pass")
     check(not Sim.BarracksFlight.air_clear(sim, a, Vector2(65, 1900), 400), "rotation envelope stays inside map")
     check(sim.command(1, {"action": "barracks_move", "building": a, "pos": Vector2(2200, 1900)}).is_empty(), "first air move accepted")
     check(sim.command(1, {"action": "barracks_move", "building": b, "pos": Vector2(1320, 1900)}).is_empty(), "opposing air move accepted")
-    var closest_air := INF
     for tick in range(800):
-        Sim.BarracksFlight.advance(sim, a, sim.buildings[a])
-        Sim.BarracksFlight.advance(sim, b, sim.buildings[b])
-        closest_air = minf(closest_air, (sim.buildings[a].pos as Vector2).distance_to(sim.buildings[b].pos))
-    check(closest_air >= 164.0 - 0.01, "opposing air hulls never overlap")
+        for id in [a, b]:
+            Sim.BarracksFlight.advance(sim, id, sim.buildings[id])
+            var body: Dictionary = sim.buildings[id]
+            check(Sim.BarracksFlight.air_clear(sim, id, body.pos, body.flight.height, false), "Opposing rotated air hulls never overlap")
     check(not sim.buildings[a].flight.moving and not sim.buildings[b].flight.moving, "air traffic reaches both destinations")
     sim.reset()
     sim.units.clear()

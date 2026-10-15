@@ -25,6 +25,7 @@ var flat_clear := PackedByteArray()
 var navigation_clear := PackedByteArray()
 var visibility_cache: Dictionary = {}
 var arrival_regions: RefCounted
+var flight_cell_heights: Dictionary = {}
 
 
 func arrival_region_at(point: Vector2) -> int:
@@ -42,6 +43,7 @@ func load_map(map_id: String) -> bool:
 
 func assemble(data: Dictionary) -> bool:
     arrival_regions = null
+    flight_cell_heights.clear()
     error = ""
     sample_surface = null
     if data.is_empty() or data.get("size") != WORLD:
@@ -60,7 +62,7 @@ func assemble(data: Dictionary) -> bool:
     var digest := HashingContext.new()
     digest.start(HashingContext.HASH_SHA256)
     var revisions: Array = [Modules.REVISION, definition]
-    if definition.get("id", "") == "desert_sample":
+    if definition.has("component_layout") or definition.get("id", "") == "desert_sample":
         revisions.append(SampleSurface.REVISION)
     digest.update(var_to_bytes(revisions))
     checksum = digest.finish().hex_encode()
@@ -76,7 +78,7 @@ func assemble(data: Dictionary) -> bool:
     materials.fill(0)
     visibility_cache.clear()
     flat_clear.clear()
-    if id == "desert_sample":
+    if definition.has("component_layout") or id == "desert_sample":
         return _assemble_sample()
     var occupied: Array[Rect2] = []
     for module: Dictionary in data.modules:
@@ -155,6 +157,45 @@ func height_at(point: Vector2) -> float:
 
 func vertex_in_cell(index: int, point: Vector2) -> Vector3:
     return Vector3(point.x, heights[index] + gradients[index].dot(point - center(index)), point.y)
+
+
+func flight_cell_height(index: int) -> float:
+    # Static terrain: cache a conservative roof for each 32-unit cell. Component
+    # terrain is triangulated at 8 units; every triangle vertex is included.
+    if flight_cell_heights.has(index):
+        return float(flight_cell_heights[index])
+    var highest: float = heights[index] + (absf(gradients[index].x) + absf(gradients[index].y)) * CELL * 0.5
+    if sample_surface != null:
+        highest = -INF
+        var corner := center(index) - Vector2.ONE * CELL * 0.5
+        for z in range(5):
+            for x in range(5):
+                highest = maxf(highest, height_at(corner + Vector2(x, z) * SampleSurface.STEP))
+    flight_cell_heights[index] = highest
+    return highest
+
+
+func flight_ground(from: Vector2, to: Vector2, radius: float) -> float:
+    # Enclose the swept disc, including intersecting cells, not sparse rays.
+    var area := Rect2(from, Vector2.ZERO).expand(to).grow(radius)
+    var highest := -INF
+    var reach_squared := pow(radius + CELL * sqrt(0.5), 2)
+    for z in range(maxi(0, floori(area.position.y / CELL)), mini(DEPTH - 1, floori(area.end.y / CELL)) + 1):
+        for x in range(maxi(0, floori(area.position.x / CELL)), mini(WIDTH - 1, floori(area.end.x / CELL)) + 1):
+            var index := z * WIDTH + x
+            var point := center(index)
+            var near := Geometry2D.get_closest_point_to_segment(point, from, to)
+            if point.distance_squared_to(near) <= reach_squared:
+                highest = maxf(highest, flight_cell_height(index))
+    return height_at(from) if highest == -INF else highest
+
+
+func flight_ground_rect(rect: Rect2) -> float:
+    var highest := -INF
+    for z in range(maxi(0, floori(rect.position.y / CELL)), mini(DEPTH, ceili(rect.end.y / CELL))):
+        for x in range(maxi(0, floori(rect.position.x / CELL)), mini(WIDTH, ceili(rect.end.x / CELL))):
+            highest = maxf(highest, flight_cell_height(z * WIDTH + x))
+    return height_at(rect.get_center()) if highest == -INF else highest
 
 func position_clear(point: Vector2, radius: float) -> bool:
     if sample_surface != null:

@@ -3,6 +3,8 @@ extends SceneTree
 const Catalog = preload("res://scripts/maps/component_catalog.gd")
 const Layout = preload("res://scripts/maps/component_layout.gd")
 const OUT := "res://assets/maps/components/"
+const SOURCES := "res://assets/models/source/terrain/"
+const ART_REVISION := 3
 var instances: Array = []
 var counter := 0
 var failures: Array[String] = []
@@ -26,54 +28,56 @@ func ramp(x: float, y: float, z: float, turn: int) -> void:
 
 
 func make_layout() -> void:
-    # 512-square pads with 64-unit cliff aprons and a 256-wide entrance.
-    for x in range(2):
-        for z in range(2):
-            add("plateau_top", 1632 + x * 256, 128, 1728 + z * 256)
+    # 24x24-cell pads; retain both existing ramp approaches and extend away from them.
+    for x in range(3):
+        for z in range(3):
+            add("plateau_top", 1376 + x * 256, 128, 1728 + z * 256)
             add("sand_flat", 2656 + x * 256, -128, 1600 + z * 256)
     ramp(1760, 0, 1472, 0)
     ramp(3040, -128, 1600, 2)
     add("cliff_end", 1632, 0, 1664)
     add("cliff_end", 2016, 0, 1664)
-    for i in range(2):
-        add("cliff_straight", 1568, 0, 1984 + i * 256, 1)
+    add("cliff_straight", 1376, 0, 1664)
+    for i in range(3):
+        add("cliff_straight", 1312, 0, 1984 + i * 256, 1)
         add("cliff_straight", 2208, 0, 1728 + i * 256, 3)
-        add("cliff_straight", 1888 + i * 256, 0, 2304, 2)
-    add("cliff_outer", 1568, 0, 1664)
+        add("cliff_straight", 1632 + i * 256, 0, 2560, 2)
+    add("cliff_outer", 1312, 0, 1664)
     add("cliff_outer", 2208, 0, 1664, 3)
-    add("cliff_outer", 1568, 0, 2304, 1)
-    add("cliff_outer", 2208, 0, 2304, 2)
+    add("cliff_outer", 1312, 0, 2560, 1)
+    add("cliff_outer", 2208, 0, 2560, 2)
     add("cliff_end", 2784, -128, 1600, 2)
     add("cliff_end", 3168, -128, 1600, 2)
-    for i in range(2):
+    add("cliff_straight", 3424, -128, 1600, 2)
+    for i in range(3):
         add("cliff_straight", 2656, -128, 1600 + i * 256, 3)
-        add("cliff_straight", 3168, -128, 1856 + i * 256, 1)
-        add("cliff_straight", 2656 + i * 256, -128, 2112)
+        add("cliff_straight", 3424, -128, 1856 + i * 256, 1)
+        add("cliff_straight", 2656 + i * 256, -128, 2368)
     add("cliff_inner", 2656, -128, 1600, 2)
-    add("cliff_inner", 3168, -128, 1600, 1)
-    add("cliff_inner", 2656, -128, 2112, 3)
-    add("cliff_inner", 3168, -128, 2112)
+    add("cliff_inner", 3424, -128, 1600, 1)
+    add("cliff_inner", 2656, -128, 2368, 3)
+    add("cliff_inner", 3424, -128, 2368)
     # Deliberate blocking boulders are away from paths and building pads.
-    add("rock_large", 1504, 0, 1952, 0)
+    add("rock_large", 1248, 0, 1952, 0)
     add("rock_medium", 2336, 0, 2080, 1)
     var random := RandomNumberGenerator.new()
     random.seed = 29531
     var terrain_layout := Layout.new()
-    var data := {"version": 2, "catalog_revision": Catalog.REVISION, "seed": 29531, "bounds": [1376, 832, 2048, 1536], "instances": instances}
+    var data := {"version": 2, "catalog_revision": Catalog.REVISION, "seed": 29531, "bounds": [1120, 704, 2560, 2048], "instances": instances}
     if not terrain_layout.configure(data):
         failures.append(terrain_layout.error)
         return
     # Persist every decoration instance; batching remains a disposable cache.
     for i in range(44):
         var side := i % 4
-        var x := random.randf_range(1610, 2180)
-        var z := random.randf_range(1700, 2290)
+        var x := random.randf_range(1354, 2180)
+        var z := random.randf_range(1700, 2546)
         if side == 0:
-            x = 1588
+            x = 1332
         elif side == 1:
             x = 2188
         elif side == 2:
-            z = 2276
+            z = 2532
         else:
             continue
         add("rubble_cluster", x, terrain_layout.height_at(Vector2(x, z)) - 3, z, i % 4, random.randf_range(0.3, 0.65))
@@ -90,7 +94,7 @@ func material(kind: String) -> StandardMaterial3D:
     result.albedo_texture = load(OUT + kind + "_basecolor.png")
     result.normal_enabled = true
     result.normal_texture = load(OUT + kind + "_normal.png")
-    result.normal_scale = 0.38 if kind == "rock" else 0.18
+    result.normal_scale = 0.55 if kind == "rock" else 0.32
     result.roughness = 0.93
     if kind == "rock":
         result.roughness_texture = load(OUT + "rock_orm.png")
@@ -98,6 +102,12 @@ func material(kind: String) -> StandardMaterial3D:
         result.ao_enabled = true
         result.ao_texture = result.roughness_texture
     result.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+    if kind != "rock":
+        # All tile orientations use the same world projection at shared sockets.
+        result.uv1_triplanar = true
+        result.uv1_world_triplanar = true
+        result.uv1_scale = Vector3.ONE / (112.0 if kind == "cliff" else 96.0)
+        result.uv1_triplanar_sharpness = 5.0
     ResourceSaver.save(result, OUT + kind + ".tres")
     return result
 
@@ -113,6 +123,34 @@ func append_mesh(st: SurfaceTool, node: Node3D, parent: Transform3D) -> void:
 
 
 func source_mesh(name_value: String) -> ArrayMesh:
+    var path := SOURCES + name_value + ".res"
+    if not ResourceLoader.exists(path):
+        failures.append("Missing retained production source: " + path)
+        return ArrayMesh.new()
+    return load(path).duplicate(true) as ArrayMesh
+
+
+func capture_sources() -> void:
+    DirAccess.make_dir_recursive_absolute(SOURCES)
+    var provenance := {}
+    for name_value: String in ["cliff", "rock", "rubble-a", "rubble-b", "rubble-c", "rubble-d"]:
+        var output := SOURCES + name_value + ".res"
+        if FileAccess.file_exists(output):
+            failures.append("Refusing to replace retained source " + output)
+            continue
+        var mesh := reference_mesh(name_value)
+        if mesh.get_surface_count() == 0:
+            continue
+        if ResourceSaver.save(mesh, output) != OK:
+            failures.append("Cannot retain source " + output)
+        var original := "res://assets/concept_art/desert_terrain_kit/v3/v3-" + name_value + ".glb"
+        provenance[name_value] = {"source": original, "sha256": FileAccess.get_sha256(original), "retained_sha256": FileAccess.get_sha256(output), "units": "world_units", "materials": "shared production textures"}
+    var file := FileAccess.open(SOURCES + "provenance.json", FileAccess.WRITE)
+    if file != null:
+        file.store_string(JSON.stringify(provenance, "  ") + "\n")
+
+
+func reference_mesh(name_value: String) -> ArrayMesh:
     var doc := GLTFDocument.new()
     var state := GLTFState.new()
     var path := "res://assets/concept_art/desert_terrain_kit/v3/v3-" + name_value + ".glb"
@@ -129,11 +167,19 @@ func source_mesh(name_value: String) -> ArrayMesh:
 
 func save_scene(id: String, mesh: ArrayMesh, mat: Material) -> void:
     var importer := ImporterMesh.new()
-    importer.add_surface(Mesh.PRIMITIVE_TRIANGLES, mesh.surface_get_arrays(0), [], {}, mat)
+    for surface in range(mesh.get_surface_count()):
+        var surface_material := mesh.surface_get_material(surface)
+        importer.add_surface(Mesh.PRIMITIVE_TRIANGLES, mesh.surface_get_arrays(surface), [], {}, mat if surface_material == null else surface_material)
     if Catalog.entry(id).layer == "decoration":
         importer.generate_lods(25, 60, [])
     var result := importer.get_mesh()
-    report[id] = {"lods": importer.get_surface_lod_count(0), "vertices": result.surface_get_array_len(0), "indices": result.surface_get_array_index_len(0), "footprint": [Catalog.entry(id).size.x, Catalog.entry(id).size.y], "boundary_preserved": Catalog.entry(id).layer == "surface"}
+    var vertex_count := 0
+    var index_count := 0
+    for surface in range(result.get_surface_count()):
+        vertex_count += result.surface_get_array_len(surface)
+        index_count += result.surface_get_array_index_len(surface)
+    report[id] = {"lods": importer.get_surface_lod_count(0), "vertices": vertex_count, "indices": index_count, "footprint": [Catalog.entry(id).size.x, Catalog.entry(id).size.y], "boundary_preserved": Catalog.entry(id).layer == "surface"}
+    report[id]["triangles"] = index_count / 3
     if id == "rubble_cluster":
         # Tiny scattered stones use a baked lower LOD, not four full rocks each.
         var arrays := result.surface_get_arrays(0)
@@ -155,13 +201,14 @@ func save_scene(id: String, mesh: ArrayMesh, mat: Material) -> void:
     root.mesh = load(OUT + id + ".res")
     root.set_meta("component_id", id)
     root.set_meta("catalog_revision", Catalog.REVISION)
+    root.set_meta("art_revision", ART_REVISION)
     var scene := PackedScene.new()
     scene.pack(root)
     ResourceSaver.save(scene, OUT + id + ".tscn")
     root.free()
 
 
-func cliff_facade() -> ArrayMesh:
+func cliff_facade(id: String) -> ArrayMesh:
     var mesh := source_mesh("cliff")
     var aabb := mesh.get_aabb()
     var arrays := mesh.surface_get_arrays(0)
@@ -178,15 +225,44 @@ func cliff_facade() -> ArrayMesh:
                 hi = middle
         # Bake the art relief onto the shared cliff section, fading at sockets.
         var relief := sin(q.x * PI) * sin(q.y * PI) * (3.0 + q.z * 15.0)
-        vertices[i] = Vector3(q.x * 256.0, q.y * 128.0, (lo + hi) * 0.5 - relief)
+        var section := (lo + hi) * 0.5
+        if id in ["cliff_straight", "cliff_end"]:
+            vertices[i] = Vector3(q.x * Catalog.entry(id).size.x, q.y * 128.0, clampf(section - relief, 0.0, 64.0))
+        else:
+            # Bend the retained layered rock relief around the exact quarter-circle sockets.
+            var angle := q.x * PI * 0.5
+            var radius := clampf(64.0 - section + relief, 0.0, 64.0) if id == "cliff_outer" else clampf(section - relief, 0.0, 64.0)
+            var p := Vector2(cos(angle), sin(angle)) * radius
+            if id == "cliff_outer":
+                p = Vector2.ONE * 64.0 - p
+            vertices[i] = Vector3(p.x, q.y * 128.0, p.y)
     arrays[Mesh.ARRAY_VERTEX] = vertices
     mesh = ArrayMesh.new()
     mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
     var st := SurfaceTool.new()
-    st.create_from(mesh, 0)
+    st.begin(Mesh.PRIMITIVE_TRIANGLES)
+    # A continuous recessed backing closes gaps between the sculpted slabs.
+    # The tiny interior offset avoids fighting the authoritative ground mesh.
+    var size: Vector2 = Catalog.entry(id).size
+    for z in range(0, int(size.y), 8):
+        for x in range(0, int(size.x), 8):
+            for offset: Vector2 in [Vector2(0, 0), Vector2(8, 0), Vector2(8, 8), Vector2(0, 0), Vector2(8, 8), Vector2(0, 8)]:
+                var p := Vector2(x, z) + offset
+                var edge := minf(minf(p.x, size.x - p.x), minf(p.y, size.y - p.y))
+                st.set_uv(p / 192.0)
+                st.add_vertex(Vector3(p.x, Catalog.height(id, p) + smoothstep(0.0, 8.0, edge) * 0.18, p.y))
     st.generate_normals()
     st.generate_tangents()
-    return st.commit()
+    st.index()
+    var skin := SurfaceTool.new()
+    skin.create_from(mesh, 0)
+    skin.generate_normals()
+    skin.generate_tangents()
+    var result := skin.commit()
+    result.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, st.commit().surface_get_arrays(0))
+    # The backing uses a tiling texture, never the rock's baked UV atlas gutters.
+    result.surface_set_material(1, load(OUT + "cliff.tres"))
+    return result
 
 
 func rubble_mesh() -> ArrayMesh:
@@ -201,14 +277,29 @@ func rubble_mesh() -> ArrayMesh:
 
 
 func run() -> void:
+    if "--layout-only" in OS.get_cmdline_args():
+        make_layout()
+        print("BUILD_TRAINING_LAYOUT failures=", failures)
+        quit(0 if failures.is_empty() else 1)
+        return
+    if "--capture-sources" in OS.get_cmdline_args():
+        capture_sources()
+        print("CAPTURE_TERRAIN_SOURCES failures=", failures)
+        quit(0 if failures.is_empty() else 1)
+        return
+    for source: String in ["cliff", "rock", "rubble-a", "rubble-b", "rubble-c", "rubble-d"]:
+        if not ResourceLoader.exists(SOURCES + source + ".res"):
+            push_error("Missing production source: " + source + "; run explicit --capture-sources once when adopting reference art.")
+            quit(1)
+            return
     DirAccess.make_dir_recursive_absolute(OUT)
     var sand := material("sand")
     var rock := material("rock")
     var cliff := material("cliff")
     for id: String in Catalog.IDS:
         var item := Catalog.entry(id)
-        if id == "cliff_straight":
-            save_scene(id, cliff_facade(), rock)
+        if id.begins_with("cliff"):
+            save_scene(id, cliff_facade(id), rock)
             continue
         if item.layer == "decoration":
             var mesh := source_mesh("rock") if id.begins_with("rock_") else rubble_mesh()
@@ -220,16 +311,25 @@ func run() -> void:
             var center := Vector3(aabb.get_center().x, aabb.position.y, aabb.get_center().z)
             for i in range(vertices.size()):
                 vertices[i] = (vertices[i] - center) * factor
+                if id == "rock_medium":
+                    # A low, leaning outcrop rather than a uniformly scaled large rock.
+                    vertices[i].y *= 0.68 + 0.12 * sin(vertices[i].x * 0.055)
             arrays[Mesh.ARRAY_VERTEX] = vertices
             mesh = ArrayMesh.new()
             mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+            var rock_surface := SurfaceTool.new()
+            rock_surface.create_from(mesh, 0)
+            rock_surface.generate_normals()
+            rock_surface.generate_tangents()
+            mesh = rock_surface.commit()
             save_scene(id, mesh, rock)
             continue
         var st := SurfaceTool.new()
         st.begin(Mesh.PRIMITIVE_TRIANGLES)
         var size: Vector2 = item.size
-        var step_x := int(size.x) if not id.begins_with("cliff") else 8
-        var step_z := int(size.y) if id in ["sand_flat", "plateau_top", "ramp_run"] else 8
+        # Flat/linear tiles need no extra triangles; normals and texture detail are per pixel.
+        var step_x := int(size.x)
+        var step_z := 8 if id in ["ramp_toe", "ramp_crest"] else int(size.y)
         for z in range(0, int(size.y), step_z):
             for x in range(0, int(size.x), step_x):
                 for offset: Vector2 in [Vector2(0, 0), Vector2(step_x, 0), Vector2(step_x, step_z), Vector2(0, 0), Vector2(step_x, step_z), Vector2(0, step_z)]:
@@ -241,9 +341,11 @@ func run() -> void:
                     st.add_vertex(Vector3(p.x, Catalog.height(id, p), p.y))
         st.generate_tangents()
         st.index()
-        save_scene(id, st.commit(), cliff if id.begins_with("cliff") else sand)
-    make_layout()
+        save_scene(id, st.commit(), sand)
+    # Art rebuilds must never overwrite the user's authored map layout.
+    if "--rebuild-layout" in OS.get_cmdline_args():
+        make_layout()
     var file := FileAccess.open(OUT + "build_report.json", FileAccess.WRITE)
-    file.store_string(JSON.stringify({"catalog_revision": Catalog.REVISION, "components": report, "minimum_hardware_tested": false}, "  "))
+    file.store_string(JSON.stringify({"catalog_revision": Catalog.REVISION, "art_revision": ART_REVISION, "sources": SOURCES, "components": report, "minimum_hardware_tested": false}, "  "))
     print("BUILD_TERRAIN_COMPONENTS failures=", failures)
     quit(0 if failures.is_empty() else 1)

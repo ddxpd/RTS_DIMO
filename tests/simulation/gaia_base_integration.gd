@@ -45,7 +45,7 @@ func run() -> void:
         var base: Dictionary = sim.buildings[id]
         check(sim.footprint(base).size == Vector2(320, 192), "both starting footprints updated")
         check(game.building_visuals[id].visual.model is GaiaCommandBase, "both starting models replaced")
-        check(not base.has("flight"), "base remains a fixed ground building")
+        check(base.has("flight") and base.flight.state == "grounded", "starting base is deployed with relocation available")
         for unit: Dictionary in sim.units.values():
             check(not sim.footprint(base, Sim.UNIT_TYPES[unit.type].radius).has_point(unit.pos), "starting units outside base")
     check(Sim.BUILD_TYPES.base.hp == 800 and Sim.BUILD_TYPES.base.cost == 500 and Sim.BUILD_TYPES.base.time == 140, "base economy unchanged")
@@ -97,7 +97,8 @@ func run() -> void:
     component.automatic_animation = false
     component.seek_pose("deployed", 0)
     var rest := component.presentation.transform
-    check(visual.construction_tint and game.building_visuals[id].build_bar.visible, "construction tint and bar visible at start")
+    check(visual.construction_tint and not game.building_visuals[id].has("build_bar"), "construction tint retained without a progress bar")
+    check(sim.buildings[id].hp == 80, "construction begins at ten percent health")
     check(not sim.position_free(site, 0), "construction blocks navigation immediately")
     game.camera_controller.focus = site
     game.camera_zoom_level = 1.8
@@ -106,6 +107,7 @@ func run() -> void:
         sim.step()
     game._sync_buildings()
     check(sim.buildings[id].remaining == 70, "halfway construction remains unfinished")
+    check(sim.buildings[id].hp == 440, "halfway construction has fifty-five percent health")
     game._refresh_ui()
     check(component.presentation.transform.is_equal_approx(rest), "no construction growth or lift")
     check(visual.animation_state == "construction", "snapshot keeps construction state")
@@ -116,14 +118,15 @@ func run() -> void:
     sim.step()
     game._sync_buildings()
     check(sim.buildings[id].remaining == 0 and visual.animation_state == "idle", "completion at tick 140")
-    check(not visual.construction_tint and not game.building_visuals[id].build_bar.visible, "completion clears tint and progress bar")
+    check(not visual.construction_tint and not game.building_visuals[id].has("build_bar"), "completion clears tint without a progress bar")
+    check(sim.buildings[id].hp == 800, "undamaged construction finishes at full health")
     check(component.presentation.transform.is_equal_approx(rest), "completion does not jump or rescale")
     game._refresh_ui()
     await capture("game-completed")
     var mirror := Sim.new()
     mirror.reset()
     mirror.apply_snapshot(sim.snapshot())
-    check(mirror.footprint(mirror.buildings[id]) == sim.footprint(sim.buildings[id]), "snapshot uses same footprint without new fields")
+    check(mirror.footprint(mirror.buildings[id]) == sim.footprint(sim.buildings[id]), "snapshot preserves base footprint")
     print("GAIA_BASE_INTEGRATION ", checks, " checks; failures=", failures)
     game.queue_free()
     await process_frame

@@ -1,7 +1,15 @@
 [CmdletBinding()]
 param(
     [string]$GodotPath,
-    [string]$ResultDirectory
+    [string]$ResultDirectory,
+    [ValidateSet('Regression', 'Weak')]
+    [string]$Mode = 'Regression',
+    [ValidateSet('all', 'baseline', 'rtt50', 'rtt100', 'rtt200', 'normal', 'poor', 'limited', 'outage')]
+    [string]$Profile = 'all',
+    [ValidateRange(0, 10000)]
+    [int]$Seed = 0,
+    [ValidateRange(15, 600)]
+    [int]$DurationSeconds = 180
 )
 
 $ErrorActionPreference = 'Stop'
@@ -23,6 +31,10 @@ if (-not (Test-PathWithin -Candidate $resultPath -Root $validationRoot)) {
     throw 'Network validation output must remain under .godot\validation.'
 }
 
+if ($Mode -eq 'Weak') {
+    & (Join-Path $script:ProjectRoot 'tests\network\run_weak_network.ps1') -GodotPath $godot -ResultDirectory $resultPath -Profile $Profile -Seed $Seed -DurationSeconds $DurationSeconds
+    return
+}
 foreach ($mapId in @("desert_quarry")) {
     & $networkScript -GodotPath $godot -ResultDirectory (Join-Path $resultPath $mapId) -MapId $mapId
 }

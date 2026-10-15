@@ -6,6 +6,7 @@ const MODEL_SCALE := Vector3(320.0 / 18.0, 16.0, 192.0 / 10.0)
 const CLEARANCE := 12.0
 const LIFT := 96.0
 const TRANSITION_TIME := 6.0
+const Thruster = preload("res://assets/art/effects/thruster_plume.gd")
 const MODELS := [
     preload("res://assets/models/buildings/gaia/gaia_command_base.glb"),
     preload("res://assets/models/buildings/gaia/gaia_command_base_lod1.glb"),
@@ -32,6 +33,9 @@ var _thrust := 0.35
 var materials: Dictionary = {}
 var construction_tint := false
 var flash_enabled := false
+var authority_driven := false
+var engine_plumes: Array[Node3D] = []
+var ground_sampler := Callable()
 
 
 func _ready() -> void:
@@ -74,7 +78,26 @@ func _ready() -> void:
         lamp.shadow_enabled = false
         presentation.add_child(lamp)
         lights.append(lamp)
+    for x: float in [-100.0, 100.0]:
+        for z: float in [-54.0, 54.0]:
+            var plume := Thruster.new(15.0, 100.0, true, engine_plumes.size() * 2.37)
+            plume.name = "LiftPlume%d" % engine_plumes.size()
+            presentation.add_child(plume)
+            plume.position = Vector3(x, 0, z)
+            engine_plumes.append(plume)
     apply_pose()
+
+
+func apply_flight(flight: Dictionary, delta: float, thrusting: bool = false, terrain_height: Callable = Callable()) -> void:
+    # WorldVisualSync supplies absolute altitude. Do not add the preview lift twice.
+    authority_driven = true
+    automatic_animation = false
+    clock += maxf(delta, 0.0)
+    state = "deployed" if flight.state == "grounded" else str(flight.state)
+    state_time = float(flight.ticks) / 20.0
+    cruising = thrusting and state == "airborne"
+    ground_sampler = terrain_height
+    apply_pose(delta)
 
 
 func set_team_color(color: Color) -> void:
@@ -152,22 +175,20 @@ func apply_pose(delta: float = 0.0) -> void:
     var progress := clampf(state_time / TRANSITION_TIME, 0.0, 1.0)
     var blend := smoothstep(0.0, 1.0, progress)
     var altitude := 0.0
-    var thrust := 0.35
+    var thrust := Thruster.lift_power(state, progress, cruising)
     match state:
         "taking_off":
             altitude = LIFT * blend
-            thrust = 0.35 + 0.20 * blend + 0.35 * sin(progress * PI)
         "airborne":
             altitude = LIFT
-            thrust = 0.8 if cruising else 0.55
         "landing":
             altitude = LIFT * (1.0 - blend)
-            thrust = 0.55 - 0.20 * blend + 0.20 * sin(progress * PI)
-    presentation.position.y = CLEARANCE + altitude + 0.5 * sin(clock * TAU / 6.0)
+    presentation.position.y = CLEARANCE + (0.0 if authority_driven else altitude) + 0.5 * sin(clock * TAU / 6.0)
     # Blend the cruise attitude so stopping cannot snap a broad rigid platform.
     var target_pitch := deg_to_rad(-2.0) if cruising else 0.0
     var response := 1.0 if delta <= 0.0 else 1.0 - exp(-delta * 5.0)
-    presentation.rotation.x = lerpf(presentation.rotation.x, target_pitch, response)
+    # The +X narrow end leads; pitch about Z lowers that end.
+    presentation.rotation.z = lerpf(presentation.rotation.z, target_pitch, response)
     _thrust = lerpf(_thrust, thrust, response)
     for index in range(models.size()):
         if radar_enabled:
@@ -178,6 +199,16 @@ func apply_pose(delta: float = 0.0) -> void:
     for lamp in lights:
         lamp.light_energy = _thrust * 0.45
     update_lod()
+    var shown := is_visible_in_tree() and not construction_tint
+    var camera := get_viewport().get_camera_3d()
+    if camera != null:
+        # Include the full hull/plume envelope so edge-of-screen jets don't pop.
+        for plane: Plane in camera.get_frustum():
+            if plane.distance_to(presentation.global_position) > 220.0:
+                shown = false
+                break
+    for plume in engine_plumes:
+        plume.advance(delta, thrust, current_lod, shown, ground_sampler)
 
 
 func update_lod() -> void:

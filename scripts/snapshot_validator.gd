@@ -2,6 +2,7 @@ extends RefCounted
 const Rules = preload("res://scripts/definitions/gameplay_rules.gd")
 ## Validates without applying a snapshot; Simulation owns all authoritative state.
 var sim
+var candidate_terrain
 
 
 func _init(owner) -> void:
@@ -29,20 +30,22 @@ func validate(state: Dictionary) -> bool:
     if candidate.definition.is_empty() or state.map_version != candidate.definition.version or state.map_checksum != candidate.checksum:
         sim.last_snapshot_error = "Map content mismatch. Both players need identical maps."
         return false
+    candidate_terrain = candidate
     if typeof(state.match) != TYPE_INT or int(state.match) < 0:
         sim.last_snapshot_error = "Snapshot match id is invalid."
         return false
     if typeof(state.frame) != TYPE_INT or int(state.frame) < 0:
         sim.last_snapshot_error = "Snapshot frame is invalid."
         return false
-    if typeof(state.winner) != TYPE_INT or int(state.winner) not in [0, 1, 2, 3]:
+    if typeof(state.winner) != TYPE_INT or int(state.winner) not in [0, 1, 2, 3, 4, 5]:
         sim.last_snapshot_error = "Snapshot winner is invalid."
+        return false
+    if not _validate_match(state):
         return false
     if not _validate_snapshot_dictionary(state.units, sim.MAX_SNAPSHOT_UNITS, "units", true):
         return false
     if not _validate_snapshot_dictionary(state.buildings, sim.MAX_SNAPSHOT_BUILDINGS, "buildings", false):
         return false
-    var occupied_docks := {}
     for u: Dictionary in state.units.values():
         if not u.has("dock"):
             continue
@@ -54,12 +57,6 @@ func validate(state: Dictionary) -> bool:
         if station.type != "refinery" or station.owner != u.owner or station.remaining > 0 or d.requested > state.frame:
             sim.last_snapshot_error = "Snapshot dock station is invalid."
             return false
-        if d.slot >= 0:
-            var key := Vector2i(d.station, d.slot)
-            if occupied_docks.has(key):
-                sim.last_snapshot_error = "Snapshot has duplicate dock reservations."
-                return false
-            occupied_docks[key] = true
     if not _validate_snapshot_dictionary(state.ores, sim.MAX_SNAPSHOT_ORES, "ores", false):
         return false
     if not sim.MiningSystem.validate(sim, state):
@@ -110,10 +107,13 @@ func _validate_unit_entry(value: Variant) -> bool:
         if not unit.has(field):
             sim.last_snapshot_error = "Snapshot unit is missing %s." % field
             return false
-    if typeof(unit.owner) != TYPE_INT or int(unit.owner) not in [1, 2] or typeof(unit.type) != TYPE_STRING or not sim.UNIT_TYPES.has(unit.type):
+    if typeof(unit.owner) != TYPE_INT or int(unit.owner) not in [1, 2, 3, 4] or typeof(unit.type) != TYPE_STRING or not sim.UNIT_TYPES.has(unit.type):
         sim.last_snapshot_error = "Snapshot unit owner or type is invalid."
         return false
     var kind: String = str(unit.type)
+    if kind == "harvester" and (not unit.get("heading") is float or not is_finite(unit.heading) or absf(unit.heading) > PI):
+        sim.last_snapshot_error = "Snapshot harvester heading is invalid."
+        return false
     if not _validate_vector2(unit.pos, sim.WORLD, "unit position") or not _validate_vector2(unit.target, sim.WORLD * 2.0, "unit target"):
         return false
     var max_hp: int = int(sim.UNIT_TYPES[kind].hp)
@@ -187,7 +187,7 @@ func _validate_building_entry(value: Variant) -> bool:
         if not building.has(field):
             sim.last_snapshot_error = "Snapshot building is missing %s." % field
             return false
-    if typeof(building.owner) != TYPE_INT or int(building.owner) not in [1, 2] or typeof(building.type) != TYPE_STRING or not sim.BUILD_TYPES.has(building.type):
+    if typeof(building.owner) != TYPE_INT or int(building.owner) not in [1, 2, 3, 4] or typeof(building.type) != TYPE_STRING or not sim.BUILD_TYPES.has(building.type):
         sim.last_snapshot_error = "Snapshot building owner or type is invalid."
         return false
     var kind: String = str(building.type)
@@ -197,7 +197,7 @@ func _validate_building_entry(value: Variant) -> bool:
     if not _validate_vector2(building.pos, sim.WORLD, "building position") or not _validate_vector2(building.rally, sim.WORLD * 2.0, "building rally"):
         return false
     if kind == "refinery":
-        if not building.get("dock_flash") is Array or building.dock_flash.size() != 2:
+        if not building.get("dock_flash") is Array or building.dock_flash.size() != Simulation.EntityCatalog.REFINERY_DOCK_RECTS.size():
             sim.last_snapshot_error = "Snapshot dock lights are invalid."
             return false
         for timer: Variant in building.dock_flash:
@@ -225,8 +225,8 @@ func _validate_building_entry(value: Variant) -> bool:
     if typeof(building.flash) != TYPE_INT or int(building.flash) < 0 or int(building.flash) > 10:
         sim.last_snapshot_error = "Snapshot building flash timer is invalid."
         return false
-    if not sim.BarracksFlight.valid(building, sim.WORLD):
-        sim.last_snapshot_error = "Invalid barracks flight state."
+    if not sim.BarracksFlight.valid(building, sim.WORLD, candidate_terrain):
+        sim.last_snapshot_error = "Invalid building flight state."
         return false
     if sim.BarracksFlight.state(building) == "grounded" and building.pos != sim.snap_building(kind, building.pos):
         sim.last_snapshot_error = "Grounded building footprint is not grid aligned."
@@ -250,11 +250,11 @@ func _validate_ore_entry(value: Variant) -> bool:
 
 
 func _validate_money(value: Variant) -> bool:
-    if not (value is Dictionary) or value.size() != 2 or not value.has(1) or not value.has(2):
+    if not (value is Dictionary) or value.size() != 4 or not value.has_all([1, 2, 3, 4]):
         sim.last_snapshot_error = "Snapshot money table is invalid."
         return false
     for owner: Variant in value.keys():
-        if typeof(owner) != TYPE_INT or int(owner) not in [1, 2] or typeof(value[owner]) != TYPE_INT or int(value[owner]) < 0 or int(value[owner]) > 1000000000:
+        if typeof(owner) != TYPE_INT or int(owner) not in [1, 2, 3, 4] or typeof(value[owner]) != TYPE_INT or int(value[owner]) < 0 or int(value[owner]) > 1000000000:
             sim.last_snapshot_error = "Snapshot money entry is invalid."
             return false
     return true
@@ -270,12 +270,25 @@ func _validate_effects(value: Variant, snapshot_frame: int) -> bool:
             return false
         if typeof(effect.kind) != TYPE_STRING or effect.kind not in ["shot", "death"] or not _validate_vector2(effect.from, sim.WORLD * 2.0, "effect origin") or not _validate_vector2(effect.to, sim.WORLD * 2.0, "effect target"):
             return false
-        if typeof(effect.life) != TYPE_INT or int(effect.life) < 0 or int(effect.life) > 60 or typeof(effect.owner) != TYPE_INT or int(effect.owner) not in [1, 2] or typeof(effect.frame) != TYPE_INT or int(effect.frame) < 0 or int(effect.frame) > snapshot_frame:
+        if typeof(effect.life) != TYPE_INT or int(effect.life) < 0 or int(effect.life) > 60 or typeof(effect.owner) != TYPE_INT or int(effect.owner) not in [1, 2, 3, 4] or typeof(effect.frame) != TYPE_INT or int(effect.frame) < 0 or int(effect.frame) > snapshot_frame:
             sim.last_snapshot_error = "Snapshot effect metadata is invalid."
             return false
         if effect.has("entity_id") or effect.has("unit_type"):
             if effect.kind != "death" or typeof(effect.get("entity_id")) != TYPE_INT or int(effect.entity_id) < 0 or effect.get("unit_type") != "mobile_infantry":
                 sim.last_snapshot_error = "Snapshot unit death identity is invalid."
+                return false
+        if effect.has("destruction"):
+            var destruction: Variant = effect.destruction
+            if effect.kind != "death" or not destruction is Dictionary:
+                sim.last_snapshot_error = "Invalid building destruction event."
+                return false
+            if typeof(destruction.get("id")) != TYPE_INT or destruction.id < 0 or destruction.get("type") not in ["base", "barracks", "refinery"]:
+                sim.last_snapshot_error = "Invalid destroyed building identity."
+                return false
+            for key: String in ["height", "heading"]:
+                if not (destruction.get(key) is float or destruction.get(key) is int) or not is_finite(float(destruction[key])):
+                    return false
+            if absf(destruction.height) > 4096.0 or absf(destruction.heading) > PI:
                 return false
         if effect.has("impact"):
             var impact: Variant = effect.impact
@@ -295,11 +308,11 @@ func _validate_effects(value: Variant, snapshot_frame: int) -> bool:
 
 
 func _validate_visibility(value: Variant, label: String) -> bool:
-    if not (value is Dictionary) or value.size() != 2 or not value.has(1) or not value.has(2):
+    if not (value is Dictionary) or value.size() != 4 or not value.has_all([1, 2, 3, 4]):
         sim.last_snapshot_error = "Snapshot %s table is invalid." % label
         return false
     for owner: Variant in value.keys():
-        if typeof(owner) != TYPE_INT or int(owner) not in [1, 2] or not (value[owner] is PackedByteArray) or value[owner].size() != sim.GRID_CELLS:
+        if typeof(owner) != TYPE_INT or int(owner) not in [1, 2, 3, 4] or not (value[owner] is PackedByteArray) or value[owner].size() != sim.GRID_CELLS:
             sim.last_snapshot_error = "Snapshot %s buffer is invalid." % label
             return false
     return true
@@ -312,5 +325,24 @@ func _validate_vector2(value: Variant, bounds: Vector2, label: String) -> bool:
     var point: Vector2 = value
     if not is_finite(point.x) or not is_finite(point.y) or absf(point.x) > bounds.x or absf(point.y) > bounds.y:
         sim.last_snapshot_error = "Snapshot %s is out of bounds." % label
+        return false
+    return true
+
+
+func _validate_match(state: Dictionary) -> bool:
+    if not state.get("config") is Dictionary or not state.get("players") is Array or not state.get("teams") is Dictionary or not state.get("eliminated") is Array or not state.get("result") is Dictionary or not state.get("training") is bool:
+        sim.last_snapshot_error = "Invalid match metadata."
+        return false
+    if state.players.is_empty() or state.players.size() > 4 or state.teams.size() != state.players.size():
+        return false
+    var seen := []
+    for owner: Variant in state.players:
+        if not owner is int or owner not in [1, 2, 3, 4] or owner in seen or state.teams.get(owner) not in [1, 2, 3, 4]:
+            return false
+        seen.append(owner)
+    for owner: Variant in state.eliminated:
+        if owner not in seen:
+            return false
+    if state.result.get("status") not in ["playing", "won", "draw"] or state.result.get("team") not in [0, 1, 2, 3, 4]:
         return false
     return true

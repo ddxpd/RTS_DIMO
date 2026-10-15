@@ -2,7 +2,8 @@
 
 [ext_resource type="ArrayMesh" path="res://assets/maps/components/ramp_toe.res" id="1_n1kvg"]
 
-[node name="ramp_toe" type="MeshInstance3D" unique_id=1653826366]
+[node name="ramp_toe" type="MeshInstance3D" unique_id=180261618]
 mesh = ExtResource("1_n1kvg")
 metadata/component_id = "ramp_toe"
-metadata/catalog_revision = 1
+metadata/catalog_revision = 2
+metadata/art_revision = 3

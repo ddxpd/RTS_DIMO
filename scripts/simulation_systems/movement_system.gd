@@ -3,6 +3,7 @@ extends RefCounted
 const Terrain = preload("res://scripts/maps/map_terrain.gd")
 const Flight = preload("res://scripts/barracks_flight.gd")
 const Arrivals = preload("res://scripts/arrival_planner.gd")
+const SWEEP_STEP := preload("res://scripts/maps/sample_surface.gd").STEP * 0.5
 
 
 static func rebuild_navigation(sim: Simulation) -> void:
@@ -28,16 +29,17 @@ static func navigation_for(sim: Simulation, radius: float) -> AStarGrid2D:
     grid.update()
     for y in range(Simulation.GRID.y):
         for x in range(Simulation.GRID.x):
-            grid.set_point_solid(Vector2i(x, y), not position_free(sim, Vector2(x * Simulation.CELL + 16, y * Simulation.CELL + 16), radius))
+            grid.set_point_solid(Vector2i(x, y), not position_free(sim, (Vector2(x, y) + Vector2.ONE * 0.5) * Simulation.CELL, radius))
     sim.navigation_by_radius[radius] = grid
     return grid
 
 
 static func movement_free(sim: Simulation, from: Vector2, to: Vector2, radius: float) -> bool:
-    # Terrain and expanded static bodies are tested together at <=8-unit intervals.
+    # Half a terrain sample prevents aligned probes from skipping a narrow
+    # ramp/cliff seam that individual simulation steps would then collide with.
     if not position_free(sim, to, radius):
         return false
-    var steps := maxi(1, int(ceil(from.distance_to(to) / 8.0)))
+    var steps := maxi(1, int(ceil(from.distance_to(to) / SWEEP_STEP)))
     for index in range(1, steps):
         if not position_free(sim, from.lerp(to, float(index) / steps), radius):
             return false
@@ -105,22 +107,24 @@ static func move_towards(sim: Simulation, u: Dictionary, destination: Vector2, s
         stop_distance = 0.1
     if distance <= stop_distance:
         return
-    if (u.has("dock") and u.dock.phase in ["enter", "exit"]) or Simulation.MiningSystem.intangible(u):
+    if (u.has("dock") and u.dock.phase == "enter") or (u.type == "harvester" and u.has("mining") and u.mining.phase in ["approach", "work"]):
         # A designed berth lane can fit the body without containing a coarse
         # navigation node. Sweep the reserved lane continuously, retaining body
         # clearance and unit avoidance rather than steering toward a remote node.
         if sim.movement_free(u.pos, destination, radius):
             var speed: float = Simulation.UNIT_TYPES[u.type].speed
             var preferred: Vector2 = (destination - (u.pos as Vector2)).limit_length(speed / Simulation.TICK) * Simulation.TICK
-            u.pos = sim.avoidance.next_position(sim, u, preferred, true)
+            _advance_position(u, sim.avoidance.next_position(sim, u, preferred, true))
             return
-        if u.has("dock") and u.dock.phase in ["enter", "exit"]:
+        if u.has("dock") and u.dock.phase == "enter":
             return
     u.repath = int(u.repath) - 1
     if u.path.is_empty() or u.repath <= 0:
         var start: Vector2i = nearest_cell(sim, u.pos, radius)
         var goal: Vector2i = nearest_cell(sim, destination, radius)
-        if u.has("mining") and not u.has("dock"):
+        if u.type == "harvester":
+            # Large bodies need a swept connector to the first/last grid node
+            # during return trips too, not just while approaching the mineral.
             start = Arrivals.goal_cell(sim, u.pos, -1, radius)
             goal = Arrivals.goal_cell(sim, destination, -1, radius)
             if start.x < 0 or goal.x < 0:
@@ -152,12 +156,27 @@ static func move_towards(sim: Simulation, u: Dictionary, destination: Vector2, s
     if u.has("arrival") and not u.arrival.waiting:
         speed = minf(speed, maxf(8.0, distance * 4.0))
     var preferred: Vector2 = (waypoint - (u.pos as Vector2)).limit_length(speed / Simulation.TICK) * Simulation.TICK
-    u.pos = sim.avoidance.next_position(sim, u, preferred)
+    _advance_position(u, sim.avoidance.next_position(sim, u, preferred))
+
+
+static func turn_harvester(u: Dictionary, direction: Vector2) -> bool:
+    if direction.length_squared() < 0.0000001:
+        return true
+    var target := direction.angle()
+    u.heading = wrapf(rotate_toward(float(u.heading), target, Simulation.EntityCatalog.HARVESTER_TURN_RATE / Simulation.TICK), -PI, PI)
+    return absf(angle_difference(float(u.heading), target)) < 0.001
+
+
+static func _advance_position(u: Dictionary, next: Vector2) -> void:
+    # Rotate in place before translation; authority and clients share the turn.
+    if u.type == "harvester" and not turn_harvester(u, next - (u.pos as Vector2)):
+        return
+    u.pos = next
 
 
 static func _unit_blocks(sim: Simulation, u: Dictionary, next: Vector2) -> bool:
     for other: Dictionary in sim.units.values():
-        if other == u or other.hp <= 0:
+        if other == u or other.hp <= 0 or Simulation.MiningSystem.ignore_pair(u, other):
             continue
         var clearance: float = Simulation.UNIT_TYPES[u.type].radius + Simulation.UNIT_TYPES[other.type].radius
         if (other.pos as Vector2).distance_to(next) < clearance:

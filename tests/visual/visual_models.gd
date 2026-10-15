@@ -412,7 +412,6 @@ func run() -> void:
     game.sim.units[harvester_id].ore = ore_id
     Sim.MiningSystem.request(game.sim, game.sim.units[harvester_id], ore_id)
     game.sim.units[harvester_id].mining.phase = "work"
-    game.sim.units[harvester_id].mining.ghost = true
     game._sync_units()
     var harvester_visual: EntityVisual = game.unit_visuals[harvester_id].visual
     check(_has_animations(harvester_visual.get_animation_names(), ["idle", "move", "mine", "unload"]), "Harvester exposes state animations")
@@ -545,7 +544,7 @@ func run() -> void:
             for index in range(child.multimesh.instance_count):
                 decorations.append(child.multimesh.get_instance_transform(index))
     check(not decorations.is_empty(), "Desert has instanced rock decoration")
-    var repeated := preload("res://scripts/maps/terrain_view.gd").new()
+    var repeated := preload("res://scripts/maps/sample_view.gd").new()
     repeated.build(game.sim.terrain, game.fog_texture)
     var regenerated: Array[Transform3D] = []
     for child in repeated.get_children():
@@ -610,4 +609,4 @@ func _check_ore_depot(visual: EntityVisual) -> void:
         depot.set_lod(level)
         check(depot.levels[level].visible and not depot.levels[(level + 1) % 3].visible, "Only selected depot LOD is drawn")
     depot.set_lod(0)
-    check(depot.lamps[0].size() == 3 and depot.lamps[1].size() == 3, "Both dock indicators survive all LODs")
+    check(depot.lamps.size() == 1 and depot.lamps[0].size() == 3, "Single dock indicator survives all LODs")
