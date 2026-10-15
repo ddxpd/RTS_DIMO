@@ -1,5 +1,13 @@
 # 最近进度
 
+## 2026-10-16：Alpha已公开发布
+
+- Release：https://github.com/ddxpd/RTS_DIMO/releases/tag/v0.2.0-alpha.1，ID414026383，draft=false、prerelease=true。
+- 发布源码标签指向d230130d9b760158dfe0192e588a7b1cb85aae61；main和标签原子推送成功。45个更新LFS文件对应44个实际上传对象，约95MB。
+- EXE、便携ZIP、SHA256SUMS三个附件全部回下载验证：347839384/212028079/197字节，与本地文件及SHA256逐个一致，证据`.godot/release-download-verification.log`。
+- 首次fetch遇到GitHub空响应，重试成功；Release创建422来自PowerShell扩展字符串被JSON编码为对象，改用纯字符串读取正文后创建成功，无重复Release。
+- 发布记录作为后续文档提交同步main，不移动已发布标签；运行资源保持对应d230130。个人.codex/config.toml仍保持用户本机修改。
+
 ## 2026-10-15：Alpha发布进行中
 
 - 已确认main在本地领先一个提交ed0be5d，唯一原有工作区修改为个人.codex/config.toml。

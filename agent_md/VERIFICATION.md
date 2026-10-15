@@ -1,6 +1,9 @@
 # 验证索引
 
-## 2026-10-16：GAIA FRONTIER Alpha发布验收（进行中）
+## 2026-10-16：GAIA FRONTIER Alpha发布验收
+
+- 已公开[预发布v0.2.0-alpha.1](https://github.com/ddxpd/RTS_DIMO/releases/tag/v0.2.0-alpha.1)，发布源码d230130d9b760158dfe0192e588a7b1cb85aae61。EXE与ZIP及SHA256SUMS回下载逐个大小/SHA256一致；EXE `fe6cfc0b10b90e1762f21015e5090ceb63aada9839a86abdf2749660b3461ad5`，ZIP `25c0f7a1e54bf7675ae478666c06c1f4cab7ab94f5a9937ecddc3c1616580ae8`，证据`.godot/release-download-verification.log`。
+- `.godot/release-cleanup.log`及`.godot/release-final-process-report.log`确认本任务游戏/服务端无残留，保留已有编辑器55528、素材库47508和数值工具34692及共享MCP。
 
 - Full `.godot/validation/20261015-234848-4220/`耗时581.6秒：46阶段通过、4失败、ENet按入口规则跳过；不将此轮标为全绿。更早沙箱轮因日志/证书权限错误中断，保留日志。
 - 弱网重连夹具在固定600ms后发请求，握手可能尚未完成；改为有4秒上限的connection_ready等待及服务端席位恢复等待。`.godot/release-weak-fixed.log`通过，200单位、1483包/15丢包，原快照时效门槛不变。
